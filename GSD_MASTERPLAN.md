@@ -1,51 +1,69 @@
-# 🚀 GCP REPORT LB 핵심 지표 500 에러 정합성 복구 GSD 마스터플랜
+# 🚀 GCP REPORT 리소스(PD, 스냅샷, VPN) 집계 데이터 정합성 복구 GSD 마스터플랜
 
-본 문서는 `cloud-infra-admin`의 **GCP REPORT > LB 핵심 지표** 화면에서 밸로프(`infra-platform`) 고객사의 최근 30일 HTTP 500 에러 건수가 2배 중복 집계(1,203,702건 vs 실제 611,345건)되는 버그를 근본적으로 수정하기 위한 실행 계획서입니다.
+본 문서는 `cloud-infra-admin`의 **GCP REPORT > Persistent Disk, 스냅샷, Cloud VPN 핵심 지표** 화면에서 밸로프(`infra-platform`) 고객사의 리소스 집계 데이터 불일치(PD 47->43, 스냅샷 56->70, VPN 1->0)를 근본적으로 해결하기 위한 실행 계획서입니다.
 
 ---
 
 ## 📊 작업 의존성 로드맵 (Dependency Graph)
 
 ```
-[Phase 1: 500 에러 집계 쿼리 분석 및 정규화] (완료)
-  ├─ 1.1 집계 로직 위치 탐색 (GcpResourceFetcher & BigQueryBatchService)
-  └─ 1.2 HTTP/HTTPS 포워딩 룰 및 Cloud Monitoring TimeSeries 중복 합산 원인 규명
+[Phase 1: 자원별 집계 오차 원인 분석 및 정규화] (완료)
+  ├─ 1.1 Persistent Disk: 비활성/삭제 중(DELETING/FAILED) 디스크 필터링 부재로 4개 과다 집계 확인
+  ├─ 1.2 Snapshot: Snapshot Schedule Policy 자동 백업 및 리전/인스턴트 스냅샷 누락(14개) 확인
+  └─ 1.3 Cloud VPN: 프론트엔드 displayTot 삼항 연산자 Fallback 1 하드코딩 오류 확인
                    │
                    ▼
-[Phase 2: 백엔드 수집 엔진 리팩토링 & 중복 제거 로직 탑재] (현재 진행)
-  ├─ 2.1 GcpResourceFetcher.java의 getLbHttp500Last30DaysCount 개선
-  │    ├─ Cloud Monitoring API 호출 시 URL Map 단위 GroupBy Aggregation 적용
-  │    └─ HTTP(80) / HTTPS(443) 포워딩 룰 중복 스트림 합산 제거 및 HTTPS 우선 필터링
-  ├─ 2.2 Cloud Logging 필터 최적화 (resource.type 및 프론트엔드 룰 정규화)
-  └─ 2.3 단위 테스트 작성 및 밸로프 실제 수치(611,345건) 정합성 검증
+[Phase 2: 백엔드 수집 엔진 & 프론트엔드 UI 수정] (진행 중)
+  ├─ 2.1 GcpResourceFetcher.java & BigQueryBatchService.java 수정
+  │    ├─ getComputeDisks: READY 상태의 유효 활성 디스크만 필터링 (47 -> 43개)
+  │    └─ getComputeSnapshots: 자동 백업 정책 및 전체 스냅샷 누락 없이 포괄 수집 (56 -> 70개)
+  ├─ 2.2 GcpMonthlyReportViewPage.tsx 수정
+  │    └─ VPN displayTot 및 렌더링 로직 수정 (0개 시 1 치환 제거, 미사용/0개 정상 표기)
+  └─ 2.3 단위 테스트 스위트 (GcpResourceCountTest.java) 신설 및 100% PASS 검증
                    │
                    ▼
-[Phase 3: 빌드 검증 및 Git 형상 관리]
-  ├─ 3.1 백엔드 컴파일 및 빌드 (./gradlew bootJar) 검증
-  ├─ 3.2 fix/lb-500-error-count 브랜치 생성 및 원인/해결책 커밋
-  └─ 3.3 WORK_HISTORY.md 및 task-observer 로그 자동 기록
+[Phase 3: 프론트엔드 UI 통합 빌드 & 자동 검증]
+  ├─ 3.1 프론트엔드 및 백엔드 통합 패키징 (./gradlew clean bootJar)
+  ├─ 3.2 로컬 테스트 서버 렌더링 검증 (verify-ui / Puppeteer / Playwright)
+  └─ 3.3 밸로프 고객사 선택 시 PD 43개, 스냅샷 70개, VPN 0개 UI 표출 검증
+                   │
+                   ▼
+[Phase 4: Git 형상 관리 및 완료 보고]
+  ├─ 4.1 fix/gcp-resource-count 브랜치 생성 및 상세 커밋 (원인 및 조치 내용 명시)
+  ├─ 4.2 WORK_HISTORY.md 및 task-observer 자동 기록
+  └─ 4.3 사용자 최종 결과 보고
 ```
 
 ---
 
 ## 🛠️ 세부 작업 분할 (Task Breakdown)
 
-### Task 1: `GcpResourceFetcher.java` 500 에러 집계 엔진 리팩토링
-- **목적:** Cloud Monitoring API 쿼리 시 `Aggregation`(`groupByFields = "resource.labels.url_map_name"`, `crossSeriesReducer = REDUCE_SUM`, `perSeriesAligner = ALIGN_SUM`)을 적용하여 동일 URL Map에 매핑된 HTTP/HTTPS 포워딩 룰 간의 중복 합산 원천 차단.
+### Task 1: 백엔드 디스크 & 스냅샷 수집 엔진 리팩토링
 - **수정 대상 파일:**
   - `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java`
-- **구현 세부사항:**
-  1. Cloud Logging 필터: `resource.type="http_load_balancer"` 외에 `https_lb_rule` 및 프론트엔드 로그 대상으로 정규화.
-  2. Cloud Monitoring 필터: `loadbalancing.googleapis.com/https/request_count` 대상 URL Map 그룹별 고유 집계 메커니즘 구축.
-  3. URL Map별 TimeSeries 집계 시 HTTP 포워딩 룰과 HTTPS 포워딩 룰이 동일 로드밸런서에 중복 발행될 경우, 상위 HTTPS 대표 스트림(또는 URL Map 단위 정규화 합산)을 산출하여 2배 뻥튀기 방지.
+  - `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`
+- **구현 내용:**
+  1. **Persistent Disk (47 -> 43):**
+     - `getComputeDisks()`에서 `READY` 상태인 정상 디스크만 선별하거나, `DELETING`/`FAILED` 상태의 비정상 디스크를 제외하여 유효한 43개 디스크만 정확하게 수집.
+     - `BigQueryBatchService.java`에서 디스크 상태 판별 강화.
+  2. **Snapshot (56 -> 70):**
+     - `getComputeSnapshots()`에서 표준 스냅샷뿐만 아니라 자동 백업 스냅샷(Resource Policy / Snapshot Schedule 기반 생성분) 및 리전/인스턴트 스냅샷을 포괄적으로 수집하여 총 70개 정합성 확보.
 
-### Task 2: 단위 테스트 작성 및 정합성 검증
-- **목적:** 포워딩 룰 2개(HTTP/HTTPS)가 연결된 로드밸런서 환경에서 500 에러 건수가 611,345건으로 정확하게 산출되는지 Mock/단위 테스트 스위트로 검증.
-- **생성 파일:**
-  - `backend/src/test/java/com/example/infra/GcpLbErrorCountTest.java`
+### Task 2: 프론트엔드 Cloud VPN 렌더링 결함 수정
+- **수정 대상 파일:**
+  - `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
+- **구현 내용:**
+  1. `const displayTot = vpnTot > 0 ? vpnTot : (reportData.vpnTotal || 1);` 오류 코드를 `const displayTot = vpnTot;`로 정정.
+  2. `displayTot === 0`일 때 'Cloud VPN 총 수량 0개 (미사용)', 연결률 '0%', '0/0개 사용 중' 등으로 정상 렌더링되도록 수정.
 
-### Task 3: 프로젝트 빌드 및 Git 브랜치 형상 관리
-- **목적:** 백엔드 재빌드 및 `fix/lb-500-error-count` 브랜치에 상세 커밋 로그 작성.
+### Task 3: 단위 테스트 스위트 작성
+- **생성 대상 파일:**
+  - `backend/src/test/java/com/example/infra/GcpResourceCountTest.java`
+- **검증 내용:**
+  - 밸로프 모의 데이터에 대해 PD 43개, 스냅샷 70개, VPN 0개가 정확하게 계산되는지 단위 테스트 검증.
+
+### Task 4: 통합 빌드, UI 검증 및 형상 관리
 - **수행 작업:**
-  - `git init`, `git checkout -b fix/lb-500-error-count`
-  - 원인 분석 및 해결책 명시한 커밋 생성
+  - 전체 빌드 (`./gradlew clean bootJar`)
+  - 로컬 8080 서버 재기동 및 UI 렌더링 확인
+  - `fix/gcp-resource-count` 브랜치에 커밋

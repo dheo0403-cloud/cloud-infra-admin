@@ -1859,9 +1859,9 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 {(() => {
                                     const vpnConn = reportData.vpnSummary?.connectedTunnels || 0;
                                     const vpnDisconn = reportData.vpnSummary?.disconnectedTunnels || 0;
-                                    const vpnTot = reportData.vpnSummary?.totalTunnels || (vpnConn + vpnDisconn);
-                                    const displayTot = vpnTot > 0 ? vpnTot : (reportData.vpnTotal || 1);
-                                    const connPct = vpnTot > 0 ? Math.round((vpnConn / vpnTot) * 100) : 100;
+                                    const vpnTot = reportData.vpnSummary?.totalTunnels != null ? reportData.vpnSummary.totalTunnels : (vpnConn + vpnDisconn);
+                                    const displayTot = vpnTot;
+                                    const connPct = vpnTot > 0 ? Math.round((vpnConn / vpnTot) * 100) : 0;
 
                                     return (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1874,7 +1874,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>Cloud VPN 총 수량</span>
-                                                        <span style={{ display: 'block', fontSize: '9px', color: '#b45309', marginTop: '1px' }}>IPsec IKEv2 터널 암호화 설정</span>
+                                                        <span style={{ display: 'block', fontSize: '9px', color: '#b45309', marginTop: '1px' }}>{displayTot > 0 ? 'IPsec IKEv2 터널 암호화 설정' : '미사용 (설정된 VPN 터널 없음)'}</span>
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
@@ -1887,11 +1887,11 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                                                     <span style={{ fontSize: '10px', color: '#475569', fontWeight: 600 }}>VPN 터널 암호화 (IPsec IKEv2)</span>
                                                     <span style={{ fontSize: '10px', fontWeight: 700, color: '#0284c7' }}>
-                                                        100% ({displayTot}/{displayTot}개 사용 중)
+                                                        {displayTot > 0 ? `100% (${displayTot}/${displayTot}개 사용 중)` : '0% (0/0개 사용 중)'}
                                                     </span>
                                                 </div>
                                                 <div className="progress-bar-bg" style={{ height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                                    <div style={{ width: '100%', backgroundColor: '#0284c7', height: '100%', borderRadius: '3px' }}></div>
+                                                    <div style={{ width: displayTot > 0 ? '100%' : '0%', backgroundColor: '#0284c7', height: '100%', borderRadius: '3px' }}></div>
                                                 </div>
                                             </div>
 
@@ -1900,7 +1900,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                                                     <span style={{ fontSize: '10px', color: '#475569', fontWeight: 600 }}>Cloud VPN 터널 정상 연결률</span>
                                                     <span style={{ fontSize: '10px', fontWeight: 700, color: '#10b981' }}>
-                                                        {connPct}% ({vpnConn > 0 ? vpnConn : displayTot}/{displayTot}개 연결됨)
+                                                        {displayTot > 0 ? `${connPct}% (${vpnConn}/${displayTot}개 연결됨)` : '0% (0/0개 연결됨)'}
                                                     </span>
                                                 </div>
                                                 <div className="progress-bar-bg" style={{ height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>

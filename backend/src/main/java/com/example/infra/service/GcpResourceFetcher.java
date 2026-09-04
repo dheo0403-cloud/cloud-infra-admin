@@ -294,7 +294,16 @@ public class GcpResourceFetcher {
         try (DisksClient client = DisksClient.create(DisksSettings.newBuilder().setCredentialsProvider(FixedCredentialsProvider.create(credentials)).build())) {
             for (Map.Entry<String, DisksScopedList> entry : client.aggregatedList(projectId).iterateAll()) {
                 if (entry.getValue().getDisksList() == null) continue;
-                disks.addAll(entry.getValue().getDisksList());
+                for (Disk disk : entry.getValue().getDisksList()) {
+                    // 삭제 중(DELETING)이거나 실패(FAILED) 상태인 비정상 디스크는 집계에서 제외하고 정상 활성(READY) 디스크만 수집
+                    if (disk.hasStatus()) {
+                        String status = disk.getStatus();
+                        if ("DELETING".equalsIgnoreCase(status) || "FAILED".equalsIgnoreCase(status)) {
+                            continue;
+                        }
+                    }
+                    disks.add(disk);
+                }
             }
         } catch (Exception e) { log.error("Failed to fetch Disks for project: {}", projectId, e); }
         return disks;
@@ -303,18 +312,46 @@ public class GcpResourceFetcher {
     /**
      * Compute Engine - 영구 디스크 스냅샷 목록 조회
      * Compute Engine API를 사용하여 프로젝트 내에 저장된 디스크 스냅샷 목록을 조회합니다.
-     * 
+     * (표준 스냅샷 및 자동 백업/스케줄 정책 기반 스냅샷 포함)
+     *
      * @param credentials GCP 서비스 계정 인증 정보
      * @param projectId   GCP 프로젝트 ID
      * @return 디스크 스냅샷 리스트
      */
     public List<Snapshot> getComputeSnapshots(GoogleCredentials credentials, String projectId) {
         List<Snapshot> snapshots = new ArrayList<>();
+        java.util.Set<String> snapshotNames = new java.util.HashSet<>();
+
+        // 1. Standard Snapshots (전역 표준 스냅샷)
         try (SnapshotsClient client = SnapshotsClient.create(SnapshotsSettings.newBuilder().setCredentialsProvider(FixedCredentialsProvider.create(credentials)).build())) {
             for (Snapshot s : client.list(projectId).iterateAll()) {
-                snapshots.add(s);
+                if (s.hasName() && snapshotNames.add(s.getName())) {
+                    snapshots.add(s);
+                }
             }
         } catch (Exception e) { log.error("Failed to fetch Snapshots for project: {}", projectId, e); }
+
+        // 2. Instant Snapshots (영역/리전별 인스턴트 및 자동 백업 스냅샷 보강)
+        try (InstantSnapshotsClient instantClient = InstantSnapshotsClient.create(InstantSnapshotsSettings.newBuilder().setCredentialsProvider(FixedCredentialsProvider.create(credentials)).build())) {
+            for (Map.Entry<String, InstantSnapshotsScopedList> entry : instantClient.aggregatedList(projectId).iterateAll()) {
+                if (entry.getValue().getInstantSnapshotsList() == null) continue;
+                for (InstantSnapshot is : entry.getValue().getInstantSnapshotsList()) {
+                    if (is.hasName() && snapshotNames.add(is.getName())) {
+                        Snapshot converted = Snapshot.newBuilder()
+                                .setName(is.getName())
+                                .setSelfLink(is.getSelfLink())
+                                .setDiskSizeGb(is.getDiskSizeGb())
+                                .setStatus(is.getStatus())
+                                .setSourceDisk(is.getSourceDisk())
+                                .build();
+                        snapshots.add(converted);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("Instant Snapshots not found or unsupported for project: {}", projectId);
+        }
+
         return snapshots;
     }
 

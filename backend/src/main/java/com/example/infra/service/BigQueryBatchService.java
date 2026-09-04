@@ -472,6 +472,12 @@ public class BigQueryBatchService {
                         Map<String, Integer> diskTypeCounts = new HashMap<>();
 
                         for (com.google.cloud.compute.v1.Disk disk : disks) {
+                            if (disk.hasStatus()) {
+                                String status = disk.getStatus();
+                                if ("DELETING".equalsIgnoreCase(status) || "FAILED".equalsIgnoreCase(status)) {
+                                    continue;
+                                }
+                            }
                             diskTotal++;
                             if (disk.getUsersList() == null || disk.getUsersList().isEmpty()) {
                                 diskIdle++;

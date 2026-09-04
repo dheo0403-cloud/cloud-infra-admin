@@ -1709,6 +1709,12 @@ public class GcpAuditService {
             List<Disk> disconnectedDisks = new ArrayList<>();
 
             for (Disk d : disks) {
+                if (d.hasStatus()) {
+                    String status = d.getStatus();
+                    if ("DELETING".equalsIgnoreCase(status) || "FAILED".equalsIgnoreCase(status)) {
+                        continue;
+                    }
+                }
                 total++;
                 List<String> users = d.getUsersList();
                 if (users != null && !users.isEmpty()) {
