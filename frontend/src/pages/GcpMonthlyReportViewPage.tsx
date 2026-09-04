@@ -168,6 +168,74 @@ const GcpMonthlyReportViewPage: React.FC = () => {
     const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
 
 
+    const renderRecommendationItem = (item: string) => {
+        if (!item) return null;
+
+        let text = item.trim();
+        let priorityTag: string | null = null;
+        let targetTag: string | null = null;
+
+        // 1. [CRITICAL], [HIGH], [MEDIUM], [LOW] 우선순위 추출
+        const prioMatch = text.match(/^\[(CRITICAL|HIGH|MEDIUM|LOW)\]\s*/i);
+        if (prioMatch) {
+            priorityTag = prioMatch[1].toUpperCase();
+            text = text.substring(prioMatch[0].length).trim();
+        }
+
+        // 2. [대상: xxx] 또는 [Target: xxx] 대상 리소스명 추출
+        const targetMatch = text.match(/^\[(?:대상|Target):\s*([^\]]+)\]\s*/i);
+        if (targetMatch) {
+            targetTag = targetMatch[1].trim();
+            text = text.substring(targetMatch[0].length).trim();
+        }
+
+        const getPrioBadgeStyle = (prio: string) => {
+            if (prio === 'CRITICAL' || prio === 'HIGH') {
+                return { backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' };
+            } else if (prio === 'MEDIUM') {
+                return { backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fcd34d' };
+            } else {
+                return { backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' };
+            }
+        };
+
+        return (
+            <div style={{ display: 'inline', lineHeight: 1.5 }}>
+                {priorityTag && (
+                    <span style={{
+                        fontSize: '9px',
+                        fontWeight: 700,
+                        padding: '1px 5px',
+                        borderRadius: '3px',
+                        marginRight: '5px',
+                        display: 'inline-block',
+                        verticalAlign: 'middle',
+                        ...getPrioBadgeStyle(priorityTag)
+                    }}>
+                        {priorityTag}
+                    </span>
+                )}
+                {targetTag && (
+                    <span style={{
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        backgroundColor: '#e0e7ff',
+                        color: '#3730a3',
+                        border: '1px solid #c7d2fe',
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        marginRight: '6px',
+                        display: 'inline-block',
+                        verticalAlign: 'middle'
+                    }}>
+                        <i className="fas fa-cube mr-1" style={{ fontSize: '9px' }}></i>{targetTag}
+                    </span>
+                )}
+                <span>{text}</span>
+            </div>
+        );
+    };
+
     const handleAddWorkLogRow = () => {
         const today = new Date().toISOString().split('T')[0];
         setEditWorkLogs(prev => [...prev, { category: '기술지원', target: 'GCP', workDate: today, content: '' }]);
@@ -2200,7 +2268,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         {reportData.recommendationsSecurityList.map((item, i) => (
                                             <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px', lineHeight: 1.5 }}>
                                                 <i className="fas fa-check-circle text-red-500" style={{ marginTop: '3px', fontSize: '10px' }}></i>
-                                                <span>{item}</span>
+                                                {renderRecommendationItem(item)}
                                             </li>
                                         ))}
                                     </ul>
@@ -2218,7 +2286,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     <span style={{ backgroundColor: '#2563eb', color: '#ffffff', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>비용 최적화</span>
                                 </div>
                                 {isEditMode ? (
-                                    <textarea 
+                                    <textarea
                                         className="edit-textarea-field"
                                         style={{ width: '100%', padding: '8px', flexGrow: 1 }}
                                         rows={6}
@@ -2231,7 +2299,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         {reportData.recommendationsCostList.map((item, i) => (
                                             <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px', lineHeight: 1.5 }}>
                                                 <i className="fas fa-check-circle text-blue-600" style={{ marginTop: '3px', fontSize: '10px' }}></i>
-                                                <span>{item}</span>
+                                                {renderRecommendationItem(item)}
                                             </li>
                                         ))}
                                     </ul>
@@ -2249,7 +2317,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     <span style={{ backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>성능 / 안정성</span>
                                 </div>
                                 {isEditMode ? (
-                                    <textarea 
+                                    <textarea
                                         className="edit-textarea-field"
                                         style={{ width: '100%', padding: '8px', flexGrow: 1 }}
                                         rows={6}
@@ -2262,7 +2330,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         {reportData.recommendationsPerformanceList.map((item, i) => (
                                             <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px', lineHeight: 1.5 }}>
                                                 <i className="fas fa-check-circle text-emerald-500" style={{ marginTop: '3px', fontSize: '10px' }}></i>
-                                                <span>{item}</span>
+                                                {renderRecommendationItem(item)}
                                             </li>
                                         ))}
                                     </ul>

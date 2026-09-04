@@ -25,14 +25,127 @@ public class GcpRecommenderService {
     @lombok.Data
     @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
+    @lombok.Builder
     public static class GcpRecommendation {
         private String recommenderId;
         private String location;
         private String description;
+        private String targetResource;
+        private String priority;
     }
 
     /**
-     * GCP Active Assist Recommender REST API를 직접 호출하여 해당 분야별 추천 내용(description) 및 실제 recommenderId 파싱
+     * GCP 리소스 URI에서 순수 리소스 식별자(인스턴스명, 서비스계정 이메일, 디스크명 등) 추출
+     */
+    public static String extractResourceName(String uri) {
+        if (uri == null || uri.trim().isEmpty()) return "";
+        String clean = uri.trim().replaceAll("/+$", "");
+
+        if (clean.contains("/serviceAccounts/")) {
+            return clean.substring(clean.lastIndexOf("/serviceAccounts/") + 17);
+        }
+        if (clean.contains("/instances/")) {
+            return clean.substring(clean.lastIndexOf("/instances/") + 11);
+        }
+        if (clean.contains("/disks/")) {
+            return clean.substring(clean.lastIndexOf("/disks/") + 7);
+        }
+        if (clean.contains("/addresses/")) {
+            return clean.substring(clean.lastIndexOf("/addresses/") + 11);
+        }
+        if (clean.contains("/buckets/")) {
+            return clean.substring(clean.lastIndexOf("/buckets/") + 9);
+        }
+        if (clean.contains("/clusters/")) {
+            return clean.substring(clean.lastIndexOf("/clusters/") + 10);
+        }
+        if (clean.contains("/roles/")) {
+            return clean.substring(clean.lastIndexOf("/roles/") + 7);
+        }
+        if (clean.contains("/images/")) {
+            return clean.substring(clean.lastIndexOf("/images/") + 8);
+        }
+        if (clean.contains("/subnetworks/")) {
+            return clean.substring(clean.lastIndexOf("/subnetworks/") + 13);
+        }
+        if (clean.contains("/networks/")) {
+            return clean.substring(clean.lastIndexOf("/networks/") + 10);
+        }
+        if (clean.contains("/projects/")) {
+            int idx = clean.lastIndexOf("/projects/");
+            String after = clean.substring(idx + 10);
+            if (!after.contains("/")) return after;
+        }
+
+        int lastSlash = clean.lastIndexOf('/');
+        if (lastSlash != -1 && lastSlash < clean.length() - 1) {
+            return clean.substring(lastSlash + 1);
+        }
+        return clean;
+    }
+
+    /**
+     * 영문/한글 설명 텍스트에서 대상 리소스 식별자(인스턴스명, IP, 이메일 등) 추출 Fallback
+     */
+    public static String extractTargetFromDescription(String desc) {
+        if (desc == null || desc.isEmpty()) return "";
+
+        // 1. 이미 [대상: xxx] 태그가 포함된 경우
+        java.util.regex.Matcher mTag = java.util.regex.Pattern.compile("\\[(?:대상|Target):\\s*([^\\],]+)\\]").matcher(desc);
+        if (mTag.find()) {
+            return mTag.group(1).trim();
+        }
+
+        // 2. 따옴표 안의 리소스명/IP/계정: '10.0.0.1' 또는 'sa-name@...'
+        java.util.regex.Matcher mQuote = java.util.regex.Pattern.compile("['\"]([a-zA-Z0-9._-]+(?:@[a-zA-Z0-9._-]+)?)['\"]").matcher(desc);
+        if (mQuote.find()) {
+            return mQuote.group(1).trim();
+        }
+
+        // 3. Cloud SQL 인스턴스(inst-name)
+        java.util.regex.Matcher mSql = java.util.regex.Pattern.compile("(?:Cloud SQL 인스턴스\\s*\\(|instance:\\s*)([a-zA-Z0-9._-]+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(desc);
+        if (mSql.find()) {
+            return mSql.group(1).trim();
+        }
+
+        // 4. instance inst-name
+        java.util.regex.Matcher mVm = java.util.regex.Pattern.compile("(?:instance|인스턴스)\\s+([a-zA-Z0-9._-]+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(desc);
+        if (mVm.find()) {
+            String val = mVm.group(1).trim();
+            if (!"type".equalsIgnoreCase(val) && !"스펙".equalsIgnoreCase(val) && !"설정".equalsIgnoreCase(val)) {
+                return val;
+            }
+        }
+
+        return "";
+    }
+
+    /**
+     * 권고사항을 [우선순위] [대상: 리소스명] 메시지 형태로 표준 규격화
+     */
+    public static String formatRecommendationText(String priority, String targetResource, String koreanDesc) {
+        String prioTag = (priority != null && !priority.isEmpty()) ? priority.toUpperCase() : "MEDIUM";
+        String targetTag = (targetResource != null && !targetResource.trim().isEmpty()) ? targetResource.trim() : "";
+
+        // 이미 [대상: ...] 이나 [PRIORITY] 가 붙어있는지 확인
+        String cleanDesc = koreanDesc != null ? koreanDesc.trim() : "";
+        if (cleanDesc.startsWith("[" + prioTag + "]")) {
+            cleanDesc = cleanDesc.substring(prioTag.length() + 2).trim();
+        }
+
+        if (!targetTag.isEmpty()) {
+            if (!cleanDesc.contains("[대상:")) {
+                return String.format("[%s] [대상: %s] %s", prioTag, targetTag, cleanDesc);
+            } else {
+                return String.format("[%s] %s", prioTag, cleanDesc);
+            }
+        } else {
+            return String.format("[%s] %s", prioTag, cleanDesc);
+        }
+    }
+
+    /**
+     * GCP Active Assist Recommender REST API를 직접 호출하여 해당 분야별 추천 내용(description), 대상 리소스 및 우선순위 파싱
      */
     public List<GcpRecommendation> fetchRealGcpRecommendations(GoogleCredentials credentials, String projectId, String category) {
         List<GcpRecommendation> recommendations = new ArrayList<>();
@@ -93,13 +206,47 @@ public class GcpRecommenderService {
                                 JsonNode recsNode = root.path("recommendations");
                                 if (recsNode.isArray()) {
                                     for (JsonNode rec : recsNode) {
-                                        String desc = rec.path("description").asText();
-                                        if (desc != null && !desc.isEmpty()) {
-                                            String koreanDesc = translateRecommendationToKorean(desc);
-                                            boolean exists = recommendations.stream().anyMatch(r -> r.getDescription().equals(koreanDesc));
-                                            if (!exists) {
-                                                recommendations.add(new GcpRecommendation(recommenderId, loc, koreanDesc));
+                                        String desc = rec.path("description").asText("");
+                                        if (desc.isEmpty()) continue;
+
+                                        // 1. Priority 추출 (P1=CRITICAL, P2=HIGH, P3=MEDIUM, P4=LOW)
+                                        String rawPrio = rec.path("priority").asText("MEDIUM");
+                                        String priority = "MEDIUM";
+                                        if ("P1".equalsIgnoreCase(rawPrio) || "CRITICAL".equalsIgnoreCase(rawPrio)) {
+                                            priority = "CRITICAL";
+                                        } else if ("P2".equalsIgnoreCase(rawPrio) || "HIGH".equalsIgnoreCase(rawPrio)) {
+                                            priority = "HIGH";
+                                        } else if ("P3".equalsIgnoreCase(rawPrio) || "MEDIUM".equalsIgnoreCase(rawPrio)) {
+                                            priority = "MEDIUM";
+                                        } else if ("P4".equalsIgnoreCase(rawPrio) || "LOW".equalsIgnoreCase(rawPrio)) {
+                                            priority = "LOW";
+                                        }
+
+                                        // 2. Target Resource 추출 (targetResources 배열 -> operations[].resource -> description fallback)
+                                        String targetResource = "";
+                                        JsonNode targetResArr = rec.path("targetResources");
+                                        if (targetResArr.isArray() && targetResArr.size() > 0) {
+                                            targetResource = extractResourceName(targetResArr.get(0).asText(""));
+                                        }
+                                        if (targetResource.isEmpty()) {
+                                            JsonNode opGroups = rec.path("content").path("operationGroups");
+                                            if (opGroups.isArray() && opGroups.size() > 0) {
+                                                JsonNode ops = opGroups.get(0).path("operations");
+                                                if (ops.isArray() && ops.size() > 0) {
+                                                    targetResource = extractResourceName(ops.get(0).path("resource").asText(""));
+                                                }
                                             }
+                                        }
+                                        if (targetResource.isEmpty()) {
+                                            targetResource = extractTargetFromDescription(desc);
+                                        }
+
+                                        String koreanDesc = translateRecommendationToKorean(desc);
+                                        String formatted = formatRecommendationText(priority, targetResource, koreanDesc);
+
+                                        boolean exists = recommendations.stream().anyMatch(r -> r.getDescription().equals(formatted));
+                                        if (!exists) {
+                                            recommendations.add(new GcpRecommendation(recommenderId, loc, formatted, targetResource, priority));
                                         }
                                     }
                                 }
@@ -128,6 +275,22 @@ public class GcpRecommenderService {
                 return String.format("미사용 유휴 고정 IP '%s'을(를) 삭제하여 비용을 절감하십시오.", m.group(1));
             }
             return "미사용 유휴 고정 IP를 삭제하여 비용을 절감하십시오.";
+        }
+
+        if (desc.contains("changing machine type from") || desc.contains("Change machine type from")) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:changing|Change) machine type from\\s+([a-zA-Z0-9._-]+)\\s+to\\s+([a-zA-Z0-9._-]+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(desc);
+            if (m.find()) {
+                return String.format("머신 유형을 %s에서 %s(으)로 축소(Rightsizing)하여 비용을 절감하십시오.", m.group(1), m.group(2));
+            }
+            return "VM 인스턴스의 머신 유형을 적정 사양으로 축소(Rightsizing)하여 비용을 절감하십시오.";
+        }
+
+        if (desc.contains("Save cost by deleting idle disk") || desc.contains("Delete idle disk")) {
+            return "미사용 유휴 영구 디스크를 백업 후 삭제하여 스토리지 비용을 절감하십시오.";
+        }
+
+        if (desc.contains("Save cost by stopping idle VM") || desc.contains("Stop idle VM")) {
+            return "사용되지 않는 유휴 VM 인스턴스를 중지하여 컴퓨팅 비용을 절감하십시오.";
         }
 
         if (desc.contains("table_open_cache")) {

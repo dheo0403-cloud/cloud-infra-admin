@@ -722,9 +722,14 @@ public class MonthlyReportService {
 
                     if (desc != null && !desc.isEmpty() && map.containsKey(cat)) {
                         String koreanDesc = gcpRecommenderService.translateRecommendationToKorean(desc);
-                        String formatted = String.format("[%s] %s", prio, koreanDesc);
+                        String targetRes = GcpRecommenderService.extractTargetFromDescription(desc);
+                        if (targetRes.isEmpty()) {
+                            targetRes = GcpRecommenderService.extractTargetFromDescription(koreanDesc);
+                        }
+
+                        String formatted = GcpRecommenderService.formatRecommendationText(prio, targetRes, koreanDesc);
                         List<String> list = map.get(cat);
-                        if (!list.contains(formatted) && !list.contains(koreanDesc)) {
+                        if (!list.contains(formatted) && !list.contains(koreanDesc) && !list.contains(desc)) {
                             list.add(formatted);
                         }
                     }
