@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>cloud-infra-admin — graphify tree viewer</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      color: #333;
+    }
+    h1 {
+      margin: 20px 0 0 24px;
+      font-size: 2.2rem;
+      font-weight: bold;
+      color: #1e3a56;
+    }
+    .controls {
+      margin: 20px 0 15px 24px;
+    }
+    button {
+      margin-right: 10px;
+      padding: 8px 18px;
+      background: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s ease-in-out;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    button:active {
+      background: #004085;
+    }
+    #tree-container {
+      width: calc(100vw - 48px); /* Adjust for body margin/padding */
+      height: 85vh;
+      overflow: auto;
+      border-radius: 8px;
+      background: #fff;
+      margin-left: 24px;
+      margin-right: 24px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #ddd;
+    }
+    svg {
+      background: #fff;
+      border-radius: 8px;
+      display: block; /* Important for D3 */
+    }
+    .node circle {
+      stroke-width: 2.5px;
+    }
+    .node text { /* Base style for the <text> container */
+      font: 13px 'Segoe UI', sans-serif;
+      paint-order: stroke fill; /* Ensures text is readable over lines */
+      stroke: #fff; /* White halo */
+      stroke-width: 3px; /* Halo thickness */
+      stroke-linejoin: round;
+      stroke-opacity: 0.85; /* Halo opacity */
+    }
+    .link {
+      fill: none;
+      stroke-opacity: 0.7;
+      stroke-width: 2px;
+    }
+  </style>
+</head>
+<body>
+  <h1>cloud-infra-admin — Knowledge Graph</h1>
+  <div class="controls">
+    <button onclick="expandAll()">Expand All</button>
+    <button onclick="collapseAll()">Collapse All</button>
+    <button onclick="resetView()">Reset View</button>
+  </div>
+  <div id="tree-container">
+    <svg id="tree-svg" width="6000" height="8000"></svg>
+  </div>
+
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    const initialJsonData = {"name":"cloud-infra-admin","total_count":398,"children":[{"name":"backend","total_count":296,"children":[{"name":"gradlew","total_count":3,"children":[{"name":"die()","total_count":1,"children":[]},{"name":"gradlew script","total_count":1,"children":[]},{"name":"warn()","total_count":1,"children":[]}]},{"name":"src","total_count":291,"children":[{"name":"main","total_count":276,"children":[{"name":"java","total_count":270,"children":[{"name":"com","total_count":270,"children":[{"name":"example","total_count":270,"children":[{"name":"infra","total_count":270,"children":[{"name":"CloudInfraAdminApplication.java","total_count":2,"children":[{"name":".main()","total_count":1,"children":[]},{"name":"CloudInfraAdminApplication","total_count":1,"children":[]}]},{"name":"config","total_count":8,"children":[{"name":"BigQueryConfig.java","total_count":2,"children":[{"name":".bigQuery()","total_count":1,"children":[]},{"name":"BigQueryConfig","total_count":1,"children":[]}]},{"name":"GlobalExceptionHandler.java","total_count":4,"children":[{"name":".handleGeneralException()","total_count":1,"children":[]},{"name":".handleMethodNotSupported()","total_count":1,"children":[]},{"name":".handleNoResourceFound()","total_count":1,"children":[]},{"name":"GlobalExceptionHandler","total_count":1,"children":[]}]},{"name":"WebConfig.java","total_count":2,"children":[{"name":".addResourceHandlers()","total_count":1,"children":[]},{"name":"WebConfig","total_count":1,"children":[]}]}]},{"name":"controller","total_count":33,"children":[{"name":"AuditController.java","total_count":10,"children":[{"name":".downloadPptxReport()","total_count":1,"children":[]},{"name":".downloadPptxReportDirectly()","total_count":1,"children":[]},{"name":".downloadReport()","total_count":1,"children":[]},{"name":".generatePptxFilename()","total_count":1,"children":[]},{"name":".getAuditStatus()","total_count":1,"children":[]},{"name":".getReports()","total_count":1,"children":[]},{"name":".runAudit()","total_count":1,"children":[]},{"name":".testBq()","total_count":1,"children":[]},{"name":".triggerDailyBatch()","total_count":1,"children":[]},{"name":"AuditController","total_count":1,"children":[]}]},{"name":"InfraCustomerController.java","total_count":5,"children":[{"name":".deleteCustomer()","total_count":1,"children":[]},{"name":".getAllCustomers()","total_count":1,"children":[]},{"name":".getCustomer()","total_count":1,"children":[]},{"name":".saveCustomer()","total_count":1,"children":[]},{"name":"InfraCustomerController","total_count":1,"children":[]}]},{"name":"InfraEnvironmentController.java","total_count":4,"children":[{"name":".createEnvironment()","total_count":1,"children":[]},{"name":".deleteEnvironment()","total_count":1,"children":[]},{"name":".getEnvironments()","total_count":1,"children":[]},{"name":"InfraEnvironmentController","total_count":1,"children":[]}]},{"name":"JiraBatchController.java","total_count":5,"children":[{"name":".getCustomerIssues()","total_count":1,"children":[]},{"name":".getIssues()","total_count":1,"children":[]},{"name":".triggerSyncAll()","total_count":1,"children":[]},{"name":".triggerSyncProject()","total_count":1,"children":[]},{"name":"JiraBatchController","total_count":1,"children":[]}]},{"name":"MonthlyReportController.java","total_count":5,"children":[{"name":".generateAiSummary()","total_count":1,"children":[]},{"name":".getMonthlyReport()","total_count":1,"children":[]},{"name":".saveCustomReportText()","total_count":1,"children":[]},{"name":".triggerBatchManually()","total_count":1,"children":[]},{"name":"MonthlyReportController","total_count":1,"children":[]}]},{"name":"ReservationController.java","total_count":4,"children":[{"name":".getReservations()","total_count":1,"children":[]},{"name":".getUpcomingExpiryReservations()","total_count":1,"children":[]},{"name":".refreshReservations()","total_count":1,"children":[]},{"name":"ReservationController","total_count":1,"children":[]}]}]},{"name":"dto","total_count":4,"children":[{"name":"MonthlyReportDto.java","total_count":3,"children":[{"name":"CudCommitmentDto","total_count":1,"children":[]},{"name":"MonthlyReportDto","total_count":1,"children":[]},{"name":"WorkLogDto","total_count":1,"children":[]}]},{"name":"ReservationDto.java","total_count":1,"children":[{"name":"ReservationDto","total_count":1,"children":[]}]}]},{"name":"entity","total_count":5,"children":[{"name":"CloudProject.java","total_count":1,"children":[{"name":"CloudProject","total_count":1,"children":[]}]},{"name":"InfraAuditDetail.java","total_count":1,"children":[{"name":"InfraAuditDetail","total_count":1,"children":[]}]},{"name":"InfraAuditReport.java","total_count":1,"children":[{"name":"InfraAuditReport","total_count":1,"children":[]}]},{"name":"InfraCustomer.java","total_count":1,"children":[{"name":"InfraCustomer","total_count":1,"children":[]}]},{"name":"InfraEnvironment.java","total_count":1,"children":[{"name":"InfraEnvironment","total_count":1,"children":[]}]}]},{"name":"repository","total_count":25,"children":[{"name":"InfraAuditDetailRepository.java","total_count":5,"children":[{"name":".findByReportId()","total_count":1,"children":[]},{"name":".InfraAuditDetailRepository()","total_count":1,"children":[]},{"name":".save()","total_count":1,"children":[]},{"name":".saveAll()","total_count":1,"children":[]},{"name":"InfraAuditDetailRepository","total_count":1,"children":[]}]},{"name":"InfraAuditReportRepository.java","total_count":5,"children":[{"name":".findByEnvironmentIdOrderByAuditDateDesc()","total_count":1,"children":[]},{"name":".findById()","total_count":1,"children":[]},{"name":".InfraAuditReportRepository()","total_count":1,"children":[]},{"name":".save()","total_count":1,"children":[]},{"name":"InfraAuditReportRepository","total_count":1,"children":[]}]},{"name":"InfraCustomerRepository.java","total_count":7,"children":[{"name":".deleteById()","total_count":1,"children":[]},{"name":".findAll()","total_count":1,"children":[]},{"name":".findById()","total_count":1,"children":[]},{"name":".InfraCustomerRepository()","total_count":1,"children":[]},{"name":".parseProjectIds()","total_count":1,"children":[]},{"name":".save()","total_count":1,"children":[]},{"name":"InfraCustomerRepository","total_count":1,"children":[]}]},{"name":"InfraEnvironmentRepository.java","total_count":8,"children":[{"name":".deleteById()","total_count":1,"children":[]},{"name":".findAll()","total_count":1,"children":[]},{"name":".findAllByCustomerId()","total_count":1,"children":[]},{"name":".findById()","total_count":1,"children":[]},{"name":".InfraEnvironmentRepository()","total_count":1,"children":[]},{"name":".mapRow()","total_count":1,"children":[]},{"name":".save()","total_count":1,"children":[]},{"name":"InfraEnvironmentRepository","total_count":1,"children":[]}]}]},{"name":"scheduler","total_count":4,"children":[{"name":"JiraDailyBatchScheduler.java","total_count":4,"children":[{"name":".runDailyJiraBatch()","total_count":1,"children":[]},{"name":".syncAllCustomers()","total_count":1,"children":[]},{"name":".syncAllCustomersWithDateRange()","total_count":1,"children":[]},{"name":"JiraDailyBatchScheduler","total_count":1,"children":[]}]}]},{"name":"service","total_count":189,"children":[{"name":"AuditReportService.java","total_count":3,"children":[{"name":".executeAuditBackground()","total_count":1,"children":[]},{"name":".startAudit()","total_count":1,"children":[]},{"name":"AuditReportService","total_count":1,"children":[]}]},{"name":"BigQueryBatchService.java","total_count":14,"children":[{"name":".checkAzureAppKeysExpiryAndNotifySlack()","total_count":1,"children":[]},{"name":".cleanupDeletedData()","total_count":1,"children":[]},{"name":".collectAzureAppCredentials()","total_count":1,"children":[]},{"name":".deleteDailyReservations()","total_count":1,"children":[]},{"name":".ensureDailyRecommenderTableExists()","total_count":1,"children":[]},{"name":".getStringFromStruct()","total_count":1,"children":[]},{"name":".getValueFromStruct()","total_count":1,"children":[]},{"name":".insertDailyAssetBatch()","total_count":1,"children":[]},{"name":".insertDailyRecommenderBatch()","total_count":1,"children":[]},{"name":".insertDailyReservationBatch()","total_count":1,"children":[]},{"name":".processCredential()","total_count":1,"children":[]},{"name":".runDailySnapshotBatch()","total_count":1,"children":[]},{"name":".sendSlackNotification()","total_count":1,"children":[]},{"name":"BigQueryBatchService","total_count":1,"children":[]}]},{"name":"EncryptionService.java","total_count":4,"children":[{"name":".decrypt()","total_count":1,"children":[]},{"name":".encrypt()","total_count":1,"children":[]},{"name":".init()","total_count":1,"children":[]},{"name":"EncryptionService","total_count":1,"children":[]}]},{"name":"ExcelExportService.java","total_count":7,"children":[{"name":".createHeaderStyle()","total_count":1,"children":[]},{"name":".createStatusStyle()","total_count":1,"children":[]},{"name":".exportAuditReport()","total_count":1,"children":[]},{"name":".exportAuditReportsByProject()","total_count":1,"children":[]},{"name":".fillTemplateAuditData()","total_count":1,"children":[]},{"name":".setCell()","total_count":1,"children":[]},{"name":"ExcelExportService","total_count":1,"children":[]}]},{"name":"GcpAuditService.java","total_count":51,"children":[{"name":".assignProject()","total_count":1,"children":[]},{"name":".auditBasicInfo()","total_count":1,"children":[]},{"name":".auditBigQuery()","total_count":1,"children":[]},{"name":".auditCdn()","total_count":1,"children":[]},{"name":".auditCloudRun()","total_count":1,"children":[]},{"name":".auditComposer()","total_count":1,"children":[]},{"name":".auditDatabase()","total_count":1,"children":[]},{"name":".auditDataproc()","total_count":1,"children":[]},{"name":".auditDisks()","total_count":1,"children":[]},{"name":".auditDns()","total_count":1,"children":[]},{"name":".auditExternalIps()","total_count":1,"children":[]},{"name":".auditFirewalls()","total_count":1,"children":[]},{"name":".auditGKE()","total_count":1,"children":[]},{"name":".auditIam()","total_count":1,"children":[]},{"name":".auditInstanceGroups()","total_count":1,"children":[]},{"name":".auditInstanceTemplates()","total_count":1,"children":[]},{"name":".auditKms()","total_count":1,"children":[]},{"name":".auditLoadBalancing()","total_count":1,"children":[]},{"name":".auditLogging()","total_count":1,"children":[]},{"name":".auditNat()","total_count":1,"children":[]},{"name":".auditNic()","total_count":1,"children":[]},{"name":".auditQuotas()","total_count":1,"children":[]},{"name":".auditScc()","total_count":1,"children":[]},{"name":".auditServiceAccounts()","total_count":1,"children":[]},{"name":".auditSnapshots()","total_count":1,"children":[]},{"name":".auditStorage()","total_count":1,"children":[]},{"name":".auditVertexAi()","total_count":1,"children":[]},{"name":".auditVmInstances()","total_count":1,"children":[]},{"name":".auditVpcNetworks()","total_count":1,"children":[]},{"name":".auditVpn()","total_count":1,"children":[]},{"name":".checkEndpointPrivateRest()","total_count":1,"children":[]},{"name":".checkNotebookPrivateRest()","total_count":1,"children":[]},{"name":".createFullDetail()","total_count":1,"children":[]},{"name":".extractRegionFromUrl()","total_count":1,"children":[]},{"name":".fetchCloudSqlViaRest()","total_count":1,"children":[]},{"name":".fetchPoliciesFromUrl()","total_count":1,"children":[]},{"name":".formatEpochToYmd()","total_count":1,"children":[]},{"name":".formatScheduleFrequency()","total_count":1,"children":[]},{"name":".formatTimeAmPm()","total_count":1,"children":[]},{"name":".getBooleanFromStruct()","total_count":1,"children":[]},{"name":".getDiskNameFromUrl()","total_count":1,"children":[]},{"name":".getKoreanRoleName()","total_count":1,"children":[]},{"name":".getOneHourLater()","total_count":1,"children":[]},{"name":".getStringFromStruct()","total_count":1,"children":[]},{"name":".getValueFromStruct()","total_count":1,"children":[]},{"name":".mapServiceFriendlyName()","total_count":1,"children":[]},{"name":".performGcpAudit()","total_count":1,"children":[]},{"name":".resolveLbNameFromTarget()","total_count":1,"children":[]},{"name":".SaKeyInfo()","total_count":1,"children":[]},{"name":"GcpAuditService","total_count":1,"children":[]},{"name":"SaKeyInfo","total_count":1,"children":[]}]},{"name":"GcpRecommenderService.java","total_count":7,"children":[{"name":".fetchRealGcpRecommendations()","total_count":1,"children":[]},{"name":".getCostRecommendations()","total_count":1,"children":[]},{"name":".getPerformanceRecommendations()","total_count":1,"children":[]},{"name":".getSecurityRecommendations()","total_count":1,"children":[]},{"name":".translateRecommendationToKorean()","total_count":1,"children":[]},{"name":"GcpRecommendation","total_count":1,"children":[]},{"name":"GcpRecommenderService","total_count":1,"children":[]}]},{"name":"GcpResourceFetcher.java","total_count":38,"children":[{"name":".getAlloyDbAssets()","total_count":1,"children":[]},{"name":".getAppEngineServiceCount()","total_count":1,"children":[]},{"name":".getBigQueryDatasets()","total_count":1,"children":[]},{"name":".getBigQueryTables()","total_count":1,"children":[]},{"name":".getCloudRunJobs()","total_count":1,"children":[]},{"name":".getCloudRunServices()","total_count":1,"children":[]},{"name":".getCloudSqlAssets()","total_count":1,"children":[]},{"name":".getCommitments()","total_count":1,"children":[]},{"name":".getComputeAddresses()","total_count":1,"children":[]},{"name":".getComputeDisks()","total_count":1,"children":[]},{"name":".getComputeFirewalls()","total_count":1,"children":[]},{"name":".getComputeImages()","total_count":1,"children":[]},{"name":".getComputeNetworks()","total_count":1,"children":[]},{"name":".getComputeRouters()","total_count":1,"children":[]},{"name":".getComputeRoutes()","total_count":1,"children":[]},{"name":".getComputeSnapshots()","total_count":1,"children":[]},{"name":".getComputeSubnetworks()","total_count":1,"children":[]},{"name":".getForwardingRules()","total_count":1,"children":[]},{"name":".getGkeClusters()","total_count":1,"children":[]},{"name":".getIamPolicy()","total_count":1,"children":[]},{"name":".getKmsKeyRings()","total_count":1,"children":[]},{"name":".getMemorystoreInstances()","total_count":1,"children":[]},{"name":".getOwnerAccountCounts()","total_count":1,"children":[]},{"name":".getPubSubSubscriptions()","total_count":1,"children":[]},{"name":".getPubSubTopics()","total_count":1,"children":[]},{"name":".getSecrets()","total_count":1,"children":[]},{"name":".getServiceAccountKeys()","total_count":1,"children":[]},{"name":".getServiceAccounts()","total_count":1,"children":[]},{"name":".getSslCertificates()","total_count":1,"children":[]},{"name":".getStorageBuckets()","total_count":1,"children":[]},{"name":".getTargetHttpProxyUrlMapMap()","total_count":1,"children":[]},{"name":".getTargetHttpsProxyUrlMapMap()","total_count":1,"children":[]},{"name":".getTargetVpnGateways()","total_count":1,"children":[]},{"name":".getUrlMaps()","total_count":1,"children":[]},{"name":".getVmInstances()","total_count":1,"children":[]},{"name":".getVpnGateways()","total_count":1,"children":[]},{"name":".getVpnTunnels()","total_count":1,"children":[]},{"name":"GcpResourceFetcher","total_count":1,"children":[]}]},{"name":"InfraCustomerService.java","total_count":5,"children":[{"name":".deleteCustomer()","total_count":1,"children":[]},{"name":".getAllCustomers()","total_count":1,"children":[]},{"name":".getCustomerWithEnvironments()","total_count":1,"children":[]},{"name":".saveCustomer()","total_count":1,"children":[]},{"name":"InfraCustomerService","total_count":1,"children":[]}]},{"name":"InfraEnvironmentService.java","total_count":7,"children":[{"name":".deleteEnvironment()","total_count":1,"children":[]},{"name":".getAllEnvironments()","total_count":1,"children":[]},{"name":".getDecryptedSecret()","total_count":1,"children":[]},{"name":".getEnvironment()","total_count":1,"children":[]},{"name":".getEnvironmentsByCustomer()","total_count":1,"children":[]},{"name":".saveEnvironment()","total_count":1,"children":[]},{"name":"InfraEnvironmentService","total_count":1,"children":[]}]},{"name":"JiraBigQueryService.java","total_count":4,"children":[{"name":".getAssetMapping()","total_count":1,"children":[]},{"name":".saveDailyJiraIssues()","total_count":1,"children":[]},{"name":".truncateTable()","total_count":1,"children":[]},{"name":"JiraBigQueryService","total_count":1,"children":[]}]},{"name":"JiraClientService.java","total_count":8,"children":[{"name":".fetchAllIssuesByProject()","total_count":1,"children":[]},{"name":".fetchIssuesByDateRange()","total_count":1,"children":[]},{"name":".fetchIssuesByProjectAndDays()","total_count":1,"children":[]},{"name":".fetchIssuesWithJql()","total_count":1,"children":[]},{"name":".formatIsoTimestamp()","total_count":1,"children":[]},{"name":".mapWorkCategory()","total_count":1,"children":[]},{"name":".parseJiraIssue()","total_count":1,"children":[]},{"name":"JiraClientService","total_count":1,"children":[]}]},{"name":"MonthlyReportService.java","total_count":16,"children":[{"name":".CachedReport()","total_count":1,"children":[]},{"name":".fetchAllDailyRecommenders()","total_count":1,"children":[]},{"name":".fetchCudCommitments()","total_count":1,"children":[]},{"name":".fetchJiraIssues()","total_count":1,"children":[]},{"name":".fetchLatestSnapshotTime()","total_count":1,"children":[]},{"name":".fetchMonthlyAssetsIntegrated()","total_count":1,"children":[]},{"name":".fetchMonthlyAssetsLegacy()","total_count":1,"children":[]},{"name":".generateMonthlyReport()","total_count":1,"children":[]},{"name":".getDatasetLocation()","total_count":1,"children":[]},{"name":".getLatestValue()","total_count":1,"children":[]},{"name":".getPrefixLatestValues()","total_count":1,"children":[]},{"name":".getTrendList()","total_count":1,"children":[]},{"name":".queryWithFallback()","total_count":1,"children":[]},{"name":".saveCustomText()","total_count":1,"children":[]},{"name":"CachedReport","total_count":1,"children":[]},{"name":"MonthlyReportService","total_count":1,"children":[]}]},{"name":"ReservationService.java","total_count":11,"children":[{"name":".buildAndInsertCredential()","total_count":1,"children":[]},{"name":".deleteDailyReservations()","total_count":1,"children":[]},{"name":".getReservations()","total_count":1,"children":[]},{"name":".getStringValue()","total_count":1,"children":[]},{"name":".getUpcomingExpiryReservations()","total_count":1,"children":[]},{"name":".insertReservation()","total_count":1,"children":[]},{"name":".refreshAzureAppCredentials()","total_count":1,"children":[]},{"name":".refreshAzureRi()","total_count":1,"children":[]},{"name":".refreshGcpCud()","total_count":1,"children":[]},{"name":".refreshReservations()","total_count":1,"children":[]},{"name":"ReservationService","total_count":1,"children":[]}]},{"name":"ScheduledReportService.java","total_count":2,"children":[{"name":".generateMonthlyReports()","total_count":1,"children":[]},{"name":"ScheduledReportService","total_count":1,"children":[]}]},{"name":"VertexAiGeminiService.java","total_count":12,"children":[{"name":".buildIntegratedPrompt()","total_count":1,"children":[]},{"name":".buildPrompt()","total_count":1,"children":[]},{"name":".callGeminiApi()","total_count":1,"children":[]},{"name":".cleanAiResponse()","total_count":1,"children":[]},{"name":".fallbackParallelSummarize()","total_count":1,"children":[]},{"name":".filterValidItems()","total_count":1,"children":[]},{"name":".getDefaultEmptySummary()","total_count":1,"children":[]},{"name":".parseIntegratedJsonResponse()","total_count":1,"children":[]},{"name":".summarizeAllCategoriesIntegrated()","total_count":1,"children":[]},{"name":".summarizeCategory()","total_count":1,"children":[]},{"name":".VertexAiGeminiService()","total_count":1,"children":[]},{"name":"VertexAiGeminiService","total_count":1,"children":[]}]}]}]}]}]}]},{"name":"resources","total_count":6,"children":[{"name":"application.yml","total_count":6,"children":[{"name":"application.yml (\ubc31\uc5d4\ub4dc \uc124\uc815)","total_count":1,"children":[]},{"name":"BigQuery \ub370\uc774\ud130\uc14b \uc124\uc815","total_count":1,"children":[]},{"name":"GCP \ud1b5\ud569 (spring.cloud.gcp)","total_count":1,"children":[]},{"name":"Jira \ud1b5\ud569 (base-url/user-email/api-token)","total_count":1,"children":[]},{"name":"Slack \uc6f9\ud6c5 \uc54c\ub9bc","total_count":1,"children":[]},{"name":"\uc554\ud638\ud654 \ud0a4 \ubcf4\uc548 \uc124\uc815","total_count":1,"children":[]}]}]}]},{"name":"test","total_count":15,"children":[{"name":"java","total_count":15,"children":[{"name":"com","total_count":15,"children":[{"name":"example","total_count":15,"children":[{"name":"infra","total_count":15,"children":[{"name":"DateTimeParseTest.java","total_count":2,"children":[{"name":".testParse()","total_count":1,"children":[]},{"name":"DateTimeParseTest","total_count":1,"children":[]}]},{"name":"LBAuditTest.java","total_count":2,"children":[{"name":".testAuditLBs()","total_count":1,"children":[]},{"name":"LBAuditTest","total_count":1,"children":[]}]},{"name":"PptxExportServiceTest.java","total_count":5,"children":[{"name":".createMockRow()","total_count":1,"children":[]},{"name":".setUp()","total_count":1,"children":[]},{"name":".testPrintForwardingRules()","total_count":1,"children":[]},{"name":".testPrintNewSlidesStructure()","total_count":1,"children":[]},{"name":"PptxExportServiceTest","total_count":1,"children":[]}]},{"name":"ReadTemplateTest.java","total_count":2,"children":[{"name":".testReadTemplate()","total_count":1,"children":[]},{"name":"ReadTemplateTest","total_count":1,"children":[]}]},{"name":"SslCertVerifyTest.java","total_count":2,"children":[{"name":".verifySslCertificates()","total_count":1,"children":[]},{"name":"SslCertVerifyTest","total_count":1,"children":[]}]},{"name":"TestAcl.java","total_count":2,"children":[{"name":".testAclReflection()","total_count":1,"children":[]},{"name":"TestAcl","total_count":1,"children":[]}]}]}]}]}]}]}]},{"name":"build.gradle","total_count":1,"children":[]},{"name":"settings.gradle","total_count":1,"children":[]}]},{"name":"BUILD.md","total_count":6,"children":[{"name":"Cloud Infra Admin \ube4c\ub4dc \uac00\uc774\ub4dc","total_count":1,"children":[]},{"name":"Gradle \ud0dc\uc2a4\ud06c \uad6c\uc870","total_count":1,"children":[]},{"name":"JAR \ud328\ud0a4\uc9d5 (bootJar)","total_count":1,"children":[]},{"name":"\ube4c\ub4dc \ud30c\uc774\ud504\ub77c\uc778 \ud750\ub984","total_count":1,"children":[]},{"name":"\uc815\uc801 \ub9ac\uc18c\uc2a4 \uc11c\ube59 (classpath:/static/)","total_count":1,"children":[]},{"name":"\ud504\ub860\ud2b8\uc5d4\ub4dc \ube4c\ub4dc (npm run build = tsc && vite build)","total_count":1,"children":[]}]},{"name":"deploy.py","total_count":2,"children":[{"name":"deploy()","total_count":1,"children":[]},{"name":"log()","total_count":1,"children":[]}]},{"name":"frontend","total_count":94,"children":[{"name":"index.html","total_count":3,"children":[{"name":"Black Dashboard React UI \ud14c\ub9c8","total_count":1,"children":[]},{"name":"index.html (\ud504\ub860\ud2b8\uc5d4\ub4dc \uc9c4\uc785\uc810)","total_count":1,"children":[]},{"name":"SPA \uc5d4\ud2b8\ub9ac (#root + main.tsx)","total_count":1,"children":[]}]},{"name":"package.json","total_count":28,"children":[{"name":"@types/react","total_count":1,"children":[]},{"name":"@types/react","total_count":1,"children":[]},{"name":"@types/react-dom","total_count":1,"children":[]},{"name":"@types/react-dom","total_count":1,"children":[]},{"name":"@vitejs/plugin-react","total_count":1,"children":[]},{"name":"@vitejs/plugin-react","total_count":1,"children":[]},{"name":"axios","total_count":1,"children":[]},{"name":"axios","total_count":1,"children":[]},{"name":"build","total_count":1,"children":[]},{"name":"dependencies","total_count":1,"children":[]},{"name":"dev","total_count":1,"children":[]},{"name":"devDependencies","total_count":1,"children":[]},{"name":"name","total_count":1,"children":[]},{"name":"preview","total_count":1,"children":[]},{"name":"private","total_count":1,"children":[]},{"name":"react","total_count":1,"children":[]},{"name":"react","total_count":1,"children":[]},{"name":"react-dom","total_count":1,"children":[]},{"name":"react-dom","total_count":1,"children":[]},{"name":"react-router-dom","total_count":1,"children":[]},{"name":"react-router-dom","total_count":1,"children":[]},{"name":"scripts","total_count":1,"children":[]},{"name":"type","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"typescript","total_count":1,"children":[]},{"name":"version","total_count":1,"children":[]},{"name":"vite","total_count":1,"children":[]},{"name":"vite","total_count":1,"children":[]}]},{"name":"src","total_count":34,"children":[{"name":"App.tsx","total_count":1,"children":[{"name":"App()","total_count":1,"children":[]}]},{"name":"layouts","total_count":1,"children":[{"name":"MainLayout.tsx","total_count":1,"children":[{"name":"MainLayout()","total_count":1,"children":[]}]}]},{"name":"pages","total_count":11,"children":[{"name":"AzureRegularReportPage.tsx","total_count":1,"children":[{"name":"AzureRegularReportPage()","total_count":1,"children":[]}]},{"name":"AzureVmCheckPage.tsx","total_count":1,"children":[{"name":"AzureVmCheckPage()","total_count":1,"children":[]}]},{"name":"DashboardPage.tsx","total_count":1,"children":[{"name":"DashboardPage()","total_count":1,"children":[]}]},{"name":"GcpMonthlyReportViewPage.tsx","total_count":4,"children":[{"name":"CudCommitment","total_count":1,"children":[]},{"name":"GcpMonthlyReportViewPage()","total_count":1,"children":[]},{"name":"MonthlyReportData","total_count":1,"children":[]},{"name":"WorkLogItem","total_count":1,"children":[]}]},{"name":"GcpVmCheckPage.tsx","total_count":1,"children":[{"name":"GcpVmCheckPage()","total_count":1,"children":[]}]},{"name":"IntegratedManagementListPage.tsx","total_count":1,"children":[{"name":"IntegratedManagementListPage()","total_count":1,"children":[]}]},{"name":"IntegratedRegistrationPage.tsx","total_count":1,"children":[{"name":"IntegratedRegistrationPage()","total_count":1,"children":[]}]},{"name":"ReservationPage.tsx","total_count":1,"children":[{"name":"ReservationPage()","total_count":1,"children":[]}]}]},{"name":"services","total_count":20,"children":[{"name":"api.ts","total_count":20,"children":[{"name":"CloudProject","total_count":1,"children":[]},{"name":"deleteCustomer()","total_count":1,"children":[]},{"name":"deleteEnvironment()","total_count":1,"children":[]},{"name":"downloadAuditReport()","total_count":1,"children":[]},{"name":"downloadPptxAuditReport()","total_count":1,"children":[]},{"name":"downloadPptxAuditReportDirectly()","total_count":1,"children":[]},{"name":"getAuditStatus()","total_count":1,"children":[]},{"name":"getCustomer()","total_count":1,"children":[]},{"name":"getCustomers()","total_count":1,"children":[]},{"name":"getEnvironmentsByCustomer()","total_count":1,"children":[]},{"name":"getJiraIssues()","total_count":1,"children":[]},{"name":"getReservations()","total_count":1,"children":[]},{"name":"getUpcomingExpiryReservations()","total_count":1,"children":[]},{"name":"InfraCustomer","total_count":1,"children":[]},{"name":"InfraEnvironment","total_count":1,"children":[]},{"name":"JiraIssueItem","total_count":1,"children":[]},{"name":"refreshReservations()","total_count":1,"children":[]},{"name":"ReservationDto","total_count":1,"children":[]},{"name":"runAudit()","total_count":1,"children":[]},{"name":"saveCustomer()","total_count":1,"children":[]}]}]},{"name":"main.tsx","total_count":1,"children":[]}]},{"name":"tsconfig.json","total_count":21,"children":[{"name":"allowJs","total_count":1,"children":[]},{"name":"allowSyntheticDefaultImports","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"DOM","total_count":1,"children":[]},{"name":"DOM.Iterable","total_count":1,"children":[]},{"name":"ESNext","total_count":1,"children":[]},{"name":"forceConsistentCasingInFileNames","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"isolatedModules","total_count":1,"children":[]},{"name":"jsx","total_count":1,"children":[]},{"name":"lib","total_count":1,"children":[]},{"name":"module","total_count":1,"children":[]},{"name":"moduleResolution","total_count":1,"children":[]},{"name":"noEmit","total_count":1,"children":[]},{"name":"references","total_count":1,"children":[]},{"name":"resolveJsonModule","total_count":1,"children":[]},{"name":"skipLibCheck","total_count":1,"children":[]},{"name":"src","total_count":1,"children":[]},{"name":"strict","total_count":1,"children":[]},{"name":"target","total_count":1,"children":[]},{"name":"useDefineForClassFields","total_count":1,"children":[]}]},{"name":"tsconfig.node.json","total_count":7,"children":[{"name":"allowSyntheticDefaultImports","total_count":1,"children":[]},{"name":"compilerOptions","total_count":1,"children":[]},{"name":"composite","total_count":1,"children":[]},{"name":"include","total_count":1,"children":[]},{"name":"module","total_count":1,"children":[]},{"name":"moduleResolution","total_count":1,"children":[]},{"name":"vite.config.ts","total_count":1,"children":[]}]},{"name":"vite.config.ts","total_count":1,"children":[]}]}]};
+
+    function transformData(jsonData) {
+        // Helper function to recursively build the children structure
+        function processNode(node, parentL1StageName) {
+            let displayName = node.name;
+            // Append total_count if it exists and is not already in the name
+            if (node.total_count !== undefined) {
+                if (!/\(Total Count: \d+\)$/.test(displayName)) {
+                    displayName += ` (Total Count: ${node.total_count})`;
+                }
+            }
+
+            const newNode = { name: displayName };
+
+            if (parentL1StageName === "Root") {
+                 newNode.originalStageName = node.name;
+            } else {
+                newNode.originalStageName = parentL1StageName;
+            }
+
+            if (node.children && node.children.length > 0) {
+                const stageNameToPass = (parentL1StageName === "Root") ? node.name : parentL1StageName;
+                newNode.children = node.children.map(child => processNode(child, stageNameToPass));
+            }
+
+            return newNode;
+        }
+
+        let rootDisplayName = jsonData.name;
+        if (jsonData.total_count !== undefined && !/\(Total Count: \d+\)$/.test(rootDisplayName)) {
+            rootDisplayName += ` (Total Count: ${jsonData.total_count})`;
+        }
+
+        return {
+            name: rootDisplayName,
+            originalStageName: "Root",
+            children: (jsonData.children || []).map(child => processNode(child, "Root"))
+        };
+    }
+
+    const treeData = transformData(initialJsonData);
+
+    // Auto-populated phaseColors: every depth-1 child of the root gets
+    // a stable colour from a bigger palette so all top-level dirs are
+    // distinguishable.
+    const PALETTE = [
+      ["#3498DB","#2980B9","#AED6F1"], ["#2ECC71","#27AE60","#A9DFBF"],
+      ["#E74C3C","#C0392B","#F5B7B1"], ["#9B59B6","#8E44AD","#D7BDE2"],
+      ["#F39C12","#D68910","#FAD7A0"], ["#1ABC9C","#117864","#A2D9CE"],
+      ["#34495E","#1B2631","#ABB2B9"], ["#E67E22","#BA4A00","#F5CBA7"],
+      ["#16A085","#0E6655","#A2D9CE"], ["#D35400","#A04000","#EDBB99"],
+      ["#7F8C8D","#566573","#D5DBDB"], ["#C0392B","#7B241C","#F5B7B1"],
+      ["#2E86C1","#1B4F72","#A9CCE3"], ["#28B463","#196F3D","#A9DFBF"],
+      ["#AF7AC5","#6C3483","#D2B4DE"],
+    ];
+    const phaseColors = { "Root": { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+                          "Default": { fill: "#BDC3C7", stroke: "#95A5A6", collapsedFill: "#ECF0F1" } };
+    (initialJsonData.children || []).forEach((c, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      phaseColors[c.name] = { fill: pal[0], stroke: pal[1], collapsedFill: pal[2] };
+    });
+
+    const levelSpecificPalettes = {
+      0: { fill: "#4A4A4A", stroke: "#333333", collapsedFill: "#6C757D" },
+      2: { fill: "#6ab04c", stroke: "#508a38", collapsedFill: "#a3d391" },
+      3: { fill: "#f0932b", stroke: "#d0730f", collapsedFill: "#f6c07e" },
+      4: { fill: "#be2edd", stroke: "#a01cb3", collapsedFill: "#e08bf2" },
+      5: { fill: "#00a8ff", stroke: "#007ac1", collapsedFill: "#74d2ff" },
+      6: { fill: "#e55039", stroke: "#c23620", collapsedFill: "#f09a8d" },
+      default: { fill: "#747d8c", stroke: "#57606f", collapsedFill: "#a4b0be" }
+    };
+
+    const svgElement = d3.select("#tree-svg");
+    const initialSvgWidth = +svgElement.attr("width");
+    const initialSvgHeight = +svgElement.attr("height");
+    const margin = { top: 40, right: 120, bottom: 80, left: 450 };
+    let width = initialSvgWidth - margin.left - margin.right;
+    let height = initialSvgHeight - margin.top - margin.bottom;
+    const duration = 500;
+    let nodeCounter = 0;
+    const g = svgElement.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+    const treemap = d3.tree().nodeSize([40, 0]);
+    let rootNode = d3.hierarchy(treeData, d => d.children);
+    rootNode.x0 = 0;
+    rootNode.y0 = 0;
+
+    if (rootNode.children) {
+      rootNode.children.forEach(d_child => {
+        if (d_child.children) { collapseBranch(d_child); }
+      });
+    }
+    updateTree(rootNode);
+
+    function collapseBranch(d) { if (d.children) { d._children = d.children; d._children.forEach(collapseBranch); d.children = null; } }
+    function expandBranch(d) { if (d._children) { d.children = d._children; d._children = null; } if (d.children) { d.children.forEach(expandBranch); } }
+    window.expandAll = () => { expandBranch(rootNode); updateTree(rootNode); };
+    window.collapseAll = () => { if (rootNode.children) { rootNode.children.forEach(collapseBranch); } updateTree(rootNode); };
+    window.resetView = () => { if (rootNode.children) { rootNode.children.forEach(d_child => { if (d_child.children || d_child._children) { collapseBranch(d_child); } }); } if (rootNode._children && !rootNode.children) { rootNode.children = rootNode._children; rootNode._children = null; } updateTree(rootNode); };
+
+    function updateTree(source) {
+      const treeLayoutData = treemap(rootNode);
+      let nodes = treeLayoutData.descendants();
+      let links = treeLayoutData.descendants().slice(1);
+
+      let minX = 0;
+      let maxX = 0;
+      if (nodes.length > 0) {
+        minX = d3.min(nodes, d => d.x);
+        maxX = d3.max(nodes, d => d.x);
+      }
+
+      let neededHeight = Math.max(initialSvgHeight, maxX - minX + margin.top + margin.bottom + 100);
+      svgElement.transition().duration(duration / 2).attr("height", neededHeight);
+      g.transition().duration(duration / 2).attr("transform", `translate(${margin.left},${margin.top - minX + 40})`);
+
+      nodes.forEach(d => { d.y = d.depth * 400; }); // Adjust horizontal separation if needed
+
+      const node = g.selectAll('g.node').data(nodes, d => d.id || (d.id = ++nodeCounter));
+      const nodeEnter = node.enter().append('g')
+        .attr('class', d => "node" + (d.children || d._children ? " node--internal" : " node--leaf") + (d._children ? " _children" : ""))
+        .attr('transform', d => `translate(${source.y0},${source.x0})`)
+        .on('click', (event, d) => { if (d.children) { d._children = d.children; d.children = null; } else if (d._children) { d.children = d._children; d._children = null; } updateTree(d); })
+        .style('cursor', d => (d.children || d._children) ? 'pointer' : 'default');
+
+      nodeEnter.append('circle').attr('r', 1e-6);
+
+      nodeEnter.append('text')
+        .attr('dy', '.35em')
+        .attr('x', d => d.children || d._children ? -14 : 14)
+        .attr('text-anchor', d => d.children || d._children ? 'end' : 'start')
+        .style("fill-opacity", 1e-6)
+        .call(wrapText, 380);
+
+      const nodeUpdate = nodeEnter.merge(node);
+      nodeUpdate.transition().duration(duration)
+        .attr('transform', d => `translate(${d.y},${d.x})`)
+        .attr('class', d => "node" + (d.children ? " node--internal" : " node--leaf") + (d._children ? " node--internal _children" : ""));
+
+      nodeUpdate.select('circle').attr('r', 8.5)
+        .style('fill', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            if (d._children) return palette.collapsedFill;
+            if (d.children) return palette.fill;
+            return "#fff";
+        })
+        .style('stroke', d => {
+            let palette;
+            if (d.depth === 0) {
+                palette = levelSpecificPalettes[0];
+            } else if (d.depth === 1) {
+                palette = phaseColors[d.data.originalStageName] || phaseColors.Default;
+            } else {
+                palette = levelSpecificPalettes[d.depth] || levelSpecificPalettes.default;
+            }
+            return palette.stroke;
+        });
+      nodeUpdate.select('text').style("fill-opacity", 1).call(wrapText, 380);
+
+      const nodeExit = node.exit().transition().duration(duration).attr('transform', d => `translate(${source.y},${source.x})`).remove();
+      nodeExit.select('circle').attr('r', 1e-6);
+      nodeExit.select('text').style('fill-opacity', 1e-6);
+
+      const link = g.selectAll('path.link').data(links, d => d.id);
+      const linkEnter = link.enter().insert('path', "g").attr('class', 'link').attr('d', d => { const o = { x: source.x0, y: source.y0 }; return diagonal(o, o); });
+
+      linkEnter.merge(link).transition().duration(duration).attr('d', d => diagonal(d, d.parent))
+        .style('stroke', d => {
+            const sourceNode = d.parent;
+            if (!sourceNode) return phaseColors.Default.stroke;
+            const l1AncestorName = sourceNode.data.originalStageName;
+            const colorPalette = phaseColors[l1AncestorName] || phaseColors.Default;
+            return colorPalette.stroke;
+        });
+      link.exit().transition().duration(duration).attr('d', d => { const o = { x: source.x, y: source.y }; return diagonal(o, o); }).remove();
+      nodes.forEach(d => { d.x0 = d.x; d.y0 = d.y; });
+    }
+
+    function diagonal(s, d) { return `M ${s.y} ${s.x} C ${(s.y + d.y) / 2} ${s.x}, ${(s.y + d.y) / 2} ${d.x}, ${d.y} ${d.x}`; }
+
+    function wrapText(textElements, maxWidth) {
+        const textPartColors = {
+            name: '#343a40',
+            count: '#0056b3'
+        };
+        const countRegex = /(\s\(Total Count: \d+\))$/;
+
+        textElements.each(function () {
+            const textD3 = d3.select(this);
+            const originalNodeText = textD3.datum().data.name;
+            const x = parseFloat(textD3.attr("x") || 0);
+            const initialDy = textD3.attr("dy");
+            const textAnchor = textD3.attr("text-anchor");
+            const lineHeight = 1.1;
+
+            textD3.text(null);
+
+            let namePart = originalNodeText;
+            let countPartText = "";
+
+            const countMatch = originalNodeText.match(countRegex);
+            if (countMatch && originalNodeText.endsWith(countMatch[0])) {
+                namePart = originalNodeText.substring(0, originalNodeText.length - countMatch[0].length).trim();
+                countPartText = countMatch[0].trim();
+            }
+
+            const tokens = [];
+            namePart.split(/\s+/).filter(Boolean).forEach(word => {
+                tokens.push({ text: word, type: 'name' });
+            });
+            if (countPartText) {
+                tokens.push({ text: countPartText, type: 'count' });
+            }
+
+            if (tokens.length === 0 && originalNodeText) {
+                tokens.push({ text: originalNodeText, type: 'name' });
+            }
+
+            let currentTspan = textD3.append("tspan").attr("x", x).attr("dy", initialDy);
+            if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+
+            let lineTokens = [];
+
+            for (let i = 0; i < tokens.length; i++) {
+                const tokenObj = tokens[i];
+
+                lineTokens.push(tokenObj);
+                currentTspan.text(lineTokens.map(t => t.text).join(" "));
+
+                if (currentTspan.node().getComputedTextLength() > maxWidth && lineTokens.length > 1) {
+                    lineTokens.pop();
+
+                    currentTspan.text(null);
+                    lineTokens.forEach((prevToken, idx) => {
+                        currentTspan.append("tspan")
+                            .text((idx > 0 ? " " : "") + prevToken.text)
+                            .style("fill", textPartColors[prevToken.type] || textPartColors.name)
+                            .style("font-weight", prevToken.type === 'count' ? "bold" : "normal");
+                    });
+
+                    lineTokens = [tokenObj];
+                    currentTspan = textD3.append("tspan").attr("x", x).attr("dy", lineHeight + "em");
+                    if (textAnchor === "end") currentTspan.attr("text-anchor", "end");
+                }
+            }
+
+            currentTspan.text(null);
+            lineTokens.forEach((token, idx) => {
+                currentTspan.append("tspan")
+                    .text((idx > 0 ? " " : "") + token.text)
+                    .style("fill", textPartColors[token.type] || textPartColors.name)
+                    .style("font-weight", token.type === 'count' ? "bold" : "normal");
+            });
+
+            if (textD3.selectAll("tspan > tspan").empty() && textD3.select("tspan").text().length === 0 && originalNodeText) {
+                let t = textD3.select("tspan");
+                let displayText = originalNodeText;
+                t.text(displayText).style("fill", textPartColors.name);
+                if (t.node() && t.node().getComputedTextLength() > maxWidth && displayText.length > 20) {
+                    let estimatedChars = Math.floor(maxWidth / (t.node().getComputedTextLength()/displayText.length) );
+                    displayText = displayText.substring(0, Math.max(0, estimatedChars - 3)) + "...";
+                    t.text(displayText);
+                }
+            }
+        });
+    }
+  </script>
+</body>
+</html>

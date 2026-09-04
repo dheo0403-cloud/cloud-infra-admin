@@ -1,0 +1,10 @@
+node_modules
+frontend
+backend/src
+backend/.gradle
+.gradle
+.idea
+*.log
+.git
+.DS_Store
+!backend/build/libs/*.jar

@@ -1,0 +1,119 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.4'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Javadoc) {
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    // Web
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    
+    // Security (Creds Encryption)
+    implementation 'org.springframework.security:spring-security-crypto'
+    
+    // Cloud SDK (GCP APIs) - Managed by BOM for consistency
+    implementation platform('com.google.cloud:libraries-bom:26.50.0')
+    implementation 'com.google.cloud:google-cloud-compute'
+    implementation 'com.google.cloud:google-cloud-asset'
+    implementation 'com.google.cloud:google-cloud-monitoring'
+    implementation 'com.google.cloud:google-cloud-resourcemanager'
+    implementation 'com.google.cloud:google-cloud-service-usage'
+    implementation 'com.google.cloud:google-cloud-storage'
+    implementation 'com.google.cloud:google-cloud-bigquery'
+    implementation 'com.google.cloud:google-cloud-bigqueryreservation'
+    implementation 'com.google.cloud:google-cloud-dns'
+    implementation 'com.google.cloud:google-cloud-run'
+    implementation 'com.google.cloud:google-cloud-orchestration-airflow'
+    implementation 'com.google.cloud:google-cloud-alloydb'
+    implementation 'com.google.cloud:google-cloud-dataproc'
+    implementation 'com.google.cloud:google-cloud-aiplatform'
+    implementation 'com.google.cloud:google-cloud-notebooks'
+    implementation 'com.google.cloud:google-cloud-kms'
+    implementation 'com.google.cloud:google-cloud-container'
+    implementation 'com.google.cloud:google-cloud-gke-backup'
+    implementation 'com.google.cloud:google-cloud-logging'
+    implementation 'com.google.cloud:google-cloud-securitycenter'
+    implementation 'com.google.cloud:google-cloud-network-management'
+    implementation 'com.google.cloud:google-iam-admin'
+    implementation 'com.google.auth:google-auth-library-oauth2-http'
+    implementation 'com.google.cloud:google-cloud-pubsub'
+    implementation 'com.google.cloud:google-cloud-secretmanager'
+    implementation 'com.google.cloud:google-cloud-redis'
+    
+    // Excel Export (Apache POI)
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+
+    compileOnly 'org.projectlombok:lombok:1.18.30'
+    annotationProcessor 'org.projectlombok:lombok:1.18.30'
+    testCompileOnly 'org.projectlombok:lombok:1.18.30'
+    testAnnotationProcessor 'org.projectlombok:lombok:1.18.30'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+def frontendDir = "$projectDir/../frontend"
+
+task installFrontendDependencies(type: Exec) {
+    workingDir "$frontendDir"
+    if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')) {
+        commandLine 'npm.cmd', 'install', '--production=false'
+    } else {
+        commandLine 'npm', 'install', '--production=false'
+    }
+}
+
+task buildFrontend(type: Exec) {
+    dependsOn installFrontendDependencies
+    workingDir "$frontendDir"
+    if (System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')) {
+        commandLine 'npm.cmd', 'run', 'build'
+    } else {
+        commandLine 'npm', 'run', 'build'
+    }
+}
+
+task copyFrontendToBackend(type: Copy) {
+    dependsOn buildFrontend
+    from "$frontendDir/dist"
+    into "$projectDir/src/main/resources/static"
+    doLast {
+        copy {
+            from "$frontendDir/dist"
+            into "$buildDir/resources/main/static"
+        }
+    }
+}
+
+processResources {
+    dependsOn copyFrontendToBackend
+    exclude '**/~$*'
+}
+
+springBoot {
+    mainClass = 'com.example.infra.CloudInfraAdminApplication'
+}
+
+bootJar {
+    dependsOn copyFrontendToBackend
+    archiveFileName = 'cloud-infra-admin-0.0.1-SNAPSHOT.jar'
+    destinationDirectory = file("build/libs")
+}

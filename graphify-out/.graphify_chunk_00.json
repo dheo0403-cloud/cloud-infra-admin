@@ -1,0 +1,395 @@
+{
+  "nodes": [
+    {
+      "id": "build",
+      "label": "Cloud Infra Admin 빌드 가이드",
+      "file_type": "document",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "backend_src_main_resources_application",
+      "label": "application.yml (백엔드 설정)",
+      "file_type": "code",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "frontend_index",
+      "label": "index.html (프론트엔드 진입점)",
+      "file_type": "code",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\frontend\\index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "build_flow",
+      "label": "빌드 파이프라인 흐름",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "jar_packaging",
+      "label": "JAR 패키징 (bootJar)",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "static_resource_serving",
+      "label": "정적 리소스 서빙 (classpath:/static/)",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "frontend_build",
+      "label": "프론트엔드 빌드 (npm run build = tsc && vite build)",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "npm 기본값이 production=true여서 devDependencies가 누락되므로 gradle task에서 --production=false를 강제해 tsc/vite를 설치한다."
+    },
+    {
+      "id": "gradle_task",
+      "label": "Gradle 태스크 구조",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "gcp_integration",
+      "label": "GCP 통합 (spring.cloud.gcp)",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "bigquery_dataset",
+      "label": "BigQuery 데이터셋 설정",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "slack_notification",
+      "label": "Slack 웹훅 알림",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "jira_integration",
+      "label": "Jira 통합 (base-url/user-email/api-token)",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "encryption_security",
+      "label": "암호화 키 보안 설정",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "black_dashboard_theme",
+      "label": "Black Dashboard React UI 테마",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\frontend\\index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "spa_entry",
+      "label": "SPA 엔트리 (#root + main.tsx)",
+      "file_type": "concept",
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\frontend\\index.html",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "build",
+      "target": "build_flow",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build",
+      "target": "jar_packaging",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build",
+      "target": "gradle_task",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build",
+      "target": "frontend_index",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build",
+      "target": "backend_src_main_resources_application",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build_flow",
+      "target": "frontend_build",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build_flow",
+      "target": "jar_packaging",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "build_flow",
+      "target": "static_resource_serving",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "gradle_task",
+      "target": "frontend_build",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "frontend_build",
+      "target": "frontend_index",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "jar_packaging",
+      "target": "frontend_index",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "jar_packaging",
+      "target": "backend_src_main_resources_application",
+      "relation": "shares_data_with",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "static_resource_serving",
+      "target": "frontend_index",
+      "relation": "references",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_src_main_resources_application",
+      "target": "gcp_integration",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "gcp_integration",
+      "target": "bigquery_dataset",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_src_main_resources_application",
+      "target": "slack_notification",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_src_main_resources_application",
+      "target": "jira_integration",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_src_main_resources_application",
+      "target": "encryption_security",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\backend\\src\\main\\resources\\application.yml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "frontend_index",
+      "target": "black_dashboard_theme",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\frontend\\index.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "frontend_index",
+      "target": "spa_entry",
+      "relation": "implements",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\frontend\\index.html",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "backend_src_main_resources_application",
+      "target": "build",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [
+    {
+      "id": "build_pipeline_hyper",
+      "label": "전체 빌드 파이프라인 (프론트엔드 → 백엔드 → JAR)",
+      "nodes": ["build", "build_flow", "frontend_build", "gradle_task", "jar_packaging", "static_resource_serving", "frontend_index", "backend_src_main_resources_application"],
+      "relation": "participate_in",
+      "confidence": "INFERRED",
+      "confidence_score": 0.9,
+      "source_file": "C:\\Users\\MZC01-MICHAEL\\Desktop\\허동진\\프로젝트\\cloud-infra-admin\\BUILD.md"
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

@@ -1,0 +1,33 @@
+spring:
+  cloud:
+    gcp:
+      project-id: ${GCP_PROJECT_ID:mzc-gcp-managed}
+      credentials:
+        location: ${GCP_CREDENTIALS_LOCATION:classpath:gcp-credentials.json}
+      bigquery:
+        dataset: ${BIGQUERY_DATASET:infra_admin_dataset}
+  jackson:
+    time-zone: Asia/Seoul
+
+server:
+  port: ${SERVER_PORT:8080}
+  tomcat:
+    accesslog:
+      enabled: true
+      pattern: "%h %l %u %t \"%r\" %s %b %Dms"
+
+logging:
+  level:
+    org.springframework.web: INFO
+    com.example.infra: INFO
+
+app:
+  security:
+    encryption-key: "MZC-INFRA-SECRET-KEY"
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL:https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK}
+
+jira:
+  base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}
+  user-email: ${JIRA_USER_EMAIL:michael@mz.co.kr}
+  api-token: ${JIRA_API_TOKEN:YOUR_JIRA_API_TOKEN}

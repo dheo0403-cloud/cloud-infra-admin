@@ -1,0 +1,3 @@
+C:\Users\MZC01-MICHAEL\Desktop\허동진\프로젝트\cloud-infra-admin\BUILD.md
+C:\Users\MZC01-MICHAEL\Desktop\허동진\프로젝트\cloud-infra-admin\backend\src\main\resources\application.yml
+C:\Users\MZC01-MICHAEL\Desktop\허동진\프로젝트\cloud-infra-admin\frontend\index.html

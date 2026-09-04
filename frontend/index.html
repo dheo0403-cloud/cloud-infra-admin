@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloud Infra Admin</title>
+    <!-- Google Fonts: Poppins, Montserrat & Noto Sans KR (Black Dashboard Sample Fonts) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&family=Poppins:wght@300;400;500;600;700&display=swap">
+    <!-- Font Awesome 6.4.0 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Bootstrap Base Style -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css">
+    <style>
+      :root {
+        --bd-main-bg: #1e1e2f;
+        --bd-card-bg: #27293d;
+        --bd-card-hover: #2b2d42;
+        --bd-input-bg: #1d1e2c;
+        --bd-input-border: #2b2b42;
+        --bd-blue-primary: #1d8cf8;
+        --bd-blue-gradient: linear-gradient(0deg, #3358f4 0%, #1d8cf8 100%);
+        --bd-teal-primary: #00f2c3;
+        --bd-danger-red: #ff3860;
+        --bd-orange-warning: #ff8d72;
+        --bd-text-main: #ffffff;
+        --bd-text-sub: #cbd5e1;
+        --bd-text-muted: #9a9a9a;
+        --bd-border-radius: 0.2857rem;
+      }
+
+      body, html {
+        background-color: var(--bd-main-bg) !important;
+        font-family: 'Poppins', 'Noto Sans KR', 'Montserrat', -apple-system, sans-serif !important;
+        color: var(--bd-text-main) !important;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+      }
+
+      /* Black Dashboard React Signature Floating Sidebar (Electric Blue Theme) */
+      .sidebar-wrapper-panel {
+        position: fixed;
+        top: 20px;
+        bottom: 20px;
+        left: 20px;
+        width: 240px;
+        background: #27293d !important;
+        box-shadow: 0 0 45px 0 rgba(0, 0, 0, 0.6) !important;
+        border-radius: 0.2857rem !important;
+        z-index: 1030;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+      }
+
+      .sidebar-wrapper-panel .logo {
+        padding: 20px 15px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 0 15px;
+        display: flex;
+        align-items: center;
+      }
+
+      .sidebar-wrapper-panel .logo-text {
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        font-family: 'Poppins', sans-serif;
+        text-decoration: none !important;
+      }
+
+      .sidebar-wrapper-panel .nav {
+        margin-top: 15px;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .sidebar-wrapper-panel .nav-header {
+        color: #9a9a9a;
+        font-size: 0.68rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 15px 25px 5px 25px;
+      }
+
+      .sidebar-wrapper-panel .nav-item {
+        margin: 4px 15px;
+      }
+
+      .sidebar-wrapper-panel .nav-link {
+        display: flex;
+        align-items: center;
+        padding: 10px 15px;
+        color: rgba(255, 255, 255, 0.7) !important;
+        text-decoration: none !important;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        border-radius: var(--bd-border-radius);
+        transition: all 0.15s ease;
+      }
+
+      .sidebar-wrapper-panel .nav-link i {
+        font-size: 1.1rem;
+        margin-right: 15px;
+        width: 20px;
+        text-align: center;
+      }
+
+      .sidebar-wrapper-panel .nav-link:hover {
+        background-color: rgba(255, 255, 255, 0.08) !important;
+        color: #ffffff !important;
+      }
+
+      /* Active Sidebar Item: Electric Blue Gradient */
+      .sidebar-wrapper-panel .nav-link.active,
+      .sidebar-wrapper-panel .nav-link.bd-active {
+        background: linear-gradient(0deg, #3358f4 0%, #1d8cf8 100%) !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 20px 0px rgba(0, 0, 0, 0.14), 0 7px 10px -5px rgba(29, 140, 248, 0.4) !important;
+      }
+
+      /* Main Content Panel */
+      .main-panel-content {
+        margin-left: 280px;
+        padding: 20px 30px;
+        min-height: 100vh;
+        background-color: var(--bd-main-bg);
+      }
+
+      /* Black Dashboard Cards */
+      .card {
+        background: #27293d !important;
+        border: 0 !important;
+        border-radius: 0.2857rem !important;
+        box-shadow: 0 1px 20px 0px rgba(0, 0, 0, 0.1) !important;
+        margin-bottom: 30px;
+      }
+
+      .card-header {
+        background: transparent !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        padding: 15px 20px !important;
+      }
+
+      .card-category {
+        color: #9a9a9a !important;
+        font-size: 0.75rem !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        margin-bottom: 5px;
+      }
+
+      .card-title {
+        color: #ffffff !important;
+        font-size: 1.2rem !important;
+        font-weight: 300 !important;
+        margin-bottom: 0 !important;
+      }
+
+      .card-body {
+        padding: 20px !important;
+      }
+
+      /* Black Dashboard Buttons (Electric Blue Theme Primary) */
+      .btn-blue, .btn-primary, .btn-pink {
+        background-image: linear-gradient(to bottom right, #1d8cf8, #3358f4, #1d8cf8) !important;
+        background-size: 210% 210% !important;
+        background-position: top right !important;
+        border: none !important;
+        border-radius: 0.2857rem !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 15px 0 rgba(29, 140, 248, 0.35) !important;
+        transition: all 0.15s ease !important;
+        font-weight: 500 !important;
+      }
+
+      .btn-blue:hover, .btn-primary:hover, .btn-pink:hover {
+        background-position: top left !important;
+        box-shadow: 0 6px 20px 0 rgba(29, 140, 248, 0.5) !important;
+        color: #ffffff !important;
+      }
+
+      .btn-danger, .btn-red {
+        background-image: linear-gradient(to bottom right, #ff3860, #fd5d93, #ff3860) !important;
+        background-size: 210% 210% !important;
+        border: none !important;
+        border-radius: 0.2857rem !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 15px 0 rgba(255, 56, 96, 0.35) !important;
+      }
+
+      /* Black Dashboard Tables & Disable Hover Completely */
+      .table {
+        color: rgba(255, 255, 255, 0.8) !important;
+        margin-bottom: 0 !important;
+      }
+
+      .table thead th {
+        color: #9a9a9a !important;
+        font-size: 0.75rem !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-top: none !important;
+        padding: 12px 15px !important;
+      }
+
+      .table tbody td {
+        padding: 12px 15px !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+        vertical-align: middle !important;
+        font-size: 0.88rem !important;
+      }
+
+      /* Disable all hover effects on table rows and cells */
+      .table tbody tr:hover,
+      .table tbody tr:hover td,
+      .table-dark tbody tr:hover,
+      .table-dark tbody tr:hover td,
+      .table-hover tbody tr:hover,
+      .table-hover tbody tr:hover td {
+        background-color: inherit !important;
+        background: inherit !important;
+        color: inherit !important;
+        box-shadow: none !important;
+      }
+
+      /* Custom Badges */
+      .badge-bd-azure {
+        background: rgba(29, 140, 248, 0.2) !important;
+        color: #1d8cf8 !important;
+        border: 1px solid rgba(29, 140, 248, 0.4) !important;
+        font-weight: 600;
+        padding: 0.35em 0.65em;
+        border-radius: 0.25rem;
+      }
+
+      .badge-bd-gcp {
+        background: rgba(0, 242, 195, 0.2) !important;
+        color: #00f2c3 !important;
+        border: 1px solid rgba(0, 242, 195, 0.4) !important;
+        font-weight: 600;
+        padding: 0.35em 0.65em;
+        border-radius: 0.25rem;
+      }
+
+      .badge-bd-red, .badge-danger {
+        background: rgba(255, 56, 96, 0.25) !important;
+        color: #ff3860 !important;
+        border: 1px solid rgba(255, 56, 96, 0.5) !important;
+        font-weight: 700;
+        padding: 0.35em 0.65em;
+        border-radius: 0.25rem;
+      }
+
+      .badge-bd-teal {
+        background: rgba(0, 242, 195, 0.2) !important;
+        color: #00f2c3 !important;
+        border: 1px solid rgba(0, 242, 195, 0.4) !important;
+        font-weight: 600;
+        padding: 0.35em 0.65em;
+        border-radius: 0.25rem;
+      }
+
+      /* Form controls */
+      .form-control {
+        background-color: var(--bd-input-bg) !important;
+        border: 1px solid var(--bd-input-border) !important;
+        color: #ffffff !important;
+        border-radius: 0.2857rem !important;
+      }
+
+      .form-control:focus {
+        border-color: #1d8cf8 !important;
+        box-shadow: 0 0 0 0.2rem rgba(29, 140, 248, 0.25) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
