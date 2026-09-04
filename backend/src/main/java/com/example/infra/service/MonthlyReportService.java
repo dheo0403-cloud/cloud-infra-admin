@@ -766,6 +766,10 @@ public class MonthlyReportService {
                     "FROM `%s.%s` " +
                     "WHERE UPPER(%s) = UPPER(@jiraKey) " +
                     "  AND (report_yn IS NULL OR UPPER(TRIM(CAST(report_yn AS STRING))) NOT IN ('NO', 'N')) " +
+                    "  AND (issue_type IS NULL OR (" +
+                    "       TRIM(CAST(issue_type AS STRING)) NOT IN ('하위작업', '하위 작업', 'Sub-task', 'Subtask') " +
+                    "       AND UPPER(TRIM(CAST(issue_type AS STRING))) NOT IN ('SUB-TASK', 'SUBTASK', 'SUB_TASK')" +
+                    "  )) " +
                     "  AND ( " +
                     "       SUBSTR(CAST(created_at AS STRING), 1, 10) BETWEEN @startDate AND @endDate " +
                     "       OR (created_at IS NULL AND SUBSTR(CAST(snapshot_date AS STRING), 1, 10) BETWEEN @startDate AND @endDate) " +
@@ -785,13 +789,16 @@ public class MonthlyReportService {
                         String key = row.get("issue_key").isNull() ? "" : row.get("issue_key").getStringValue();
                         if (key.isEmpty() || !seen.add(key)) continue;
 
+                        String rawIssueType = row.get("issue_type").isNull() ? "" : row.get("issue_type").getStringValue();
+                        if (isSubtaskType(rawIssueType)) continue;
+
                         String summary = row.get("summary").isNull() ? "" : row.get("summary").getStringValue();
                         String workCategory = "기술지원";
                         try {
                             if (!row.get("work_category").isNull() && !row.get("work_category").getStringValue().isEmpty()) {
                                 workCategory = row.get("work_category").getStringValue();
-                            } else if (!row.get("issue_type").isNull() && !row.get("issue_type").getStringValue().isEmpty()) {
-                                workCategory = row.get("issue_type").getStringValue();
+                            } else if (!rawIssueType.isEmpty()) {
+                                workCategory = rawIssueType;
                             }
                         } catch (Exception ignored) {}
 
@@ -817,9 +824,21 @@ public class MonthlyReportService {
             }
         }
 
-        log.info("[JIRA-FETCH] Loaded total {} work logs for key: {} (Period: {} ~ {})", 
+        log.info("[JIRA-FETCH] Loaded total {} work logs for key: {} (Period: {} ~ {})",
                 list.size(), jiraProjectKey, startDateStr, endDateStr);
         return list;
+    }
+
+    /**
+     * Jira 이슈 유형이 하위 작업(Sub-task)인지 여부 판별
+     */
+    public static boolean isSubtaskType(String issueType) {
+        if (issueType == null || issueType.trim().isEmpty()) return false;
+        String trimmed = issueType.trim();
+        String upper = trimmed.toUpperCase();
+        return trimmed.equals("하위작업") || trimmed.equals("하위 작업")
+                || upper.equals("SUB-TASK") || upper.equals("SUBTASK") || upper.equals("SUB_TASK")
+                || upper.contains("SUBTASK") || upper.contains("SUB-TASK");
     }
 
     private List<CudCommitmentDto> fetchCudCommitments(String projectId) {

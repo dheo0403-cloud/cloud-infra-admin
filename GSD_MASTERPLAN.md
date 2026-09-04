@@ -1,35 +1,30 @@
-# 🚀 GCP REPORT 리소스(PD, 스냅샷, VPN) 집계 데이터 정합성 복구 GSD 마스터플랜
+# 🚀 Jira 보고서 하위 작업(Sub-task) 제외 쿼리 필터링 GSD 마스터플랜
 
-본 문서는 `cloud-infra-admin`의 **GCP REPORT > Persistent Disk, 스냅샷, Cloud VPN 핵심 지표** 화면에서 밸로프(`infra-platform`) 고객사의 리소스 집계 데이터 불일치(PD 47->43, 스냅샷 56->70, VPN 1->0)를 근본적으로 해결하기 위한 실행 계획서입니다.
+본 문서는 `cloud-infra-admin`의 **GCP REPORT > 기술지원/작업 내역** 화면에서 Jira 프로젝트의 상위 이슈 외에 팀원들이 추가한 하위 작업(`issue_type = '하위작업'`)까지 함께 노출되어 작업 내역이 중복 집계되는 문제를 해결하기 위한 실행 계획서입니다.
 
 ---
 
 ## 📊 작업 의존성 로드맵 (Dependency Graph)
 
 ```
-[Phase 1: 자원별 집계 오차 원인 분석 및 정규화] (완료)
-  ├─ 1.1 Persistent Disk: 비활성/삭제 중(DELETING/FAILED) 디스크 필터링 부재로 4개 과다 집계 확인
-  ├─ 1.2 Snapshot: Snapshot Schedule Policy 자동 백업 및 리전/인스턴트 스냅샷 누락(14개) 확인
-  └─ 1.3 Cloud VPN: 프론트엔드 displayTot 삼항 연산자 Fallback 1 하드코딩 오류 확인
+[Phase 1: Jira 보고서 조회 로직 탐색 및 필터링 설계] (완료)
+  ├─ 1.1 BigQuery schema 및 jira_issue_inventory 내 issue_type='하위작업' 확인
+  └─ 1.2 MonthlyReportService.java의 fetchJiraIssues 조회 쿼리 분석 및 WHERE 조건 도출
                    │
                    ▼
-[Phase 2: 백엔드 수집 엔진 & 프론트엔드 UI 수정] (진행 중)
-  ├─ 2.1 GcpResourceFetcher.java & BigQueryBatchService.java 수정
-  │    ├─ getComputeDisks: READY 상태의 유효 활성 디스크만 필터링 (47 -> 43개)
-  │    └─ getComputeSnapshots: 자동 백업 정책 및 전체 스냅샷 누락 없이 포괄 수집 (56 -> 70개)
-  ├─ 2.2 GcpMonthlyReportViewPage.tsx 수정
-  │    └─ VPN displayTot 및 렌더링 로직 수정 (0개 시 1 치환 제거, 미사용/0개 정상 표기)
-  └─ 2.3 단위 테스트 스위트 (GcpResourceCountTest.java) 신설 및 100% PASS 검증
+[Phase 2: 백엔드 조회 쿼리 및 매핑 로직 수정] (진행 중)
+  ├─ 2.1 MonthlyReportService.java: SQL 조건절에 issue_type NOT IN ('하위작업', ...) 추가
+  ├─ 2.2 Row 매핑 루프 내 Java 방어 로직 추가 (2중 방어 필터)
+  └─ 2.3 단위 테스트 스위트 (JiraSubtaskFilterTest.java) 작성 및 검증
                    │
                    ▼
-[Phase 3: 프론트엔드 UI 통합 빌드 & 자동 검증]
-  ├─ 3.1 프론트엔드 및 백엔드 통합 패키징 (./gradlew clean bootJar)
-  ├─ 3.2 로컬 테스트 서버 렌더링 검증 (verify-ui / Puppeteer / Playwright)
-  └─ 3.3 밸로프 고객사 선택 시 PD 43개, 스냅샷 70개, VPN 0개 UI 표출 검증
+[Phase 3: 빌드 검증 및 백엔드 재기동]
+  ├─ 3.1 백엔드 컴파일 및 빌드 (./gradlew bootJar) 검증
+  └─ 3.2 로컬 8080 서버 무중단 재기동 및 헬스체크 확인
                    │
                    ▼
 [Phase 4: Git 형상 관리 및 완료 보고]
-  ├─ 4.1 fix/gcp-resource-count 브랜치 생성 및 상세 커밋 (원인 및 조치 내용 명시)
+  ├─ 4.1 fix/jira-report-exclude-subtask 브랜치 생성 및 상세 커밋
   ├─ 4.2 WORK_HISTORY.md 및 task-observer 자동 기록
   └─ 4.3 사용자 최종 결과 보고
 ```
@@ -38,32 +33,27 @@
 
 ## 🛠️ 세부 작업 분할 (Task Breakdown)
 
-### Task 1: 백엔드 디스크 & 스냅샷 수집 엔진 리팩토링
+### Task 1: `MonthlyReportService.java` BigQuery 조회 쿼리 리팩토링
 - **수정 대상 파일:**
-  - `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java`
-  - `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`
-- **구현 내용:**
-  1. **Persistent Disk (47 -> 43):**
-     - `getComputeDisks()`에서 `READY` 상태인 정상 디스크만 선별하거나, `DELETING`/`FAILED` 상태의 비정상 디스크를 제외하여 유효한 43개 디스크만 정확하게 수집.
-     - `BigQueryBatchService.java`에서 디스크 상태 판별 강화.
-  2. **Snapshot (56 -> 70):**
-     - `getComputeSnapshots()`에서 표준 스냅샷뿐만 아니라 자동 백업 스냅샷(Resource Policy / Snapshot Schedule 기반 생성분) 및 리전/인스턴트 스냅샷을 포괄적으로 수집하여 총 70개 정합성 확보.
+  - `backend/src/main/java/com/example/infra/service/MonthlyReportService.java`
+- **구현 세부사항:**
+  1. BigQuery SQL WHERE 조건절에 `issue_type` 하위 작업 제외 조건 추가:
+     ```sql
+     AND (issue_type IS NULL OR (
+          TRIM(CAST(issue_type AS STRING)) NOT IN ('하위작업', '하위 작업', 'Sub-task', 'Subtask')
+          AND UPPER(TRIM(CAST(issue_type AS STRING))) NOT IN ('SUB-TASK', 'SUBTASK', 'SUB_TASK')
+     ))
+     ```
+  2. Java 결과 반복 처리(`tableResult.iterateAll()`) 시에도 `issue_type`이 하위작업에 해당하는 경우 건너뛰는 2차 필터링 적용.
 
-### Task 2: 프론트엔드 Cloud VPN 렌더링 결함 수정
-- **수정 대상 파일:**
-  - `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
-- **구현 내용:**
-  1. `const displayTot = vpnTot > 0 ? vpnTot : (reportData.vpnTotal || 1);` 오류 코드를 `const displayTot = vpnTot;`로 정정.
-  2. `displayTot === 0`일 때 'Cloud VPN 총 수량 0개 (미사용)', 연결률 '0%', '0/0개 사용 중' 등으로 정상 렌더링되도록 수정.
-
-### Task 3: 단위 테스트 스위트 작성
+### Task 2: 단위 테스트 작성 및 정합성 검증
 - **생성 대상 파일:**
-  - `backend/src/test/java/com/example/infra/GcpResourceCountTest.java`
+  - `backend/src/test/java/com/example/infra/JiraSubtaskFilterTest.java`
 - **검증 내용:**
-  - 밸로프 모의 데이터에 대해 PD 43개, 스냅샷 70개, VPN 0개가 정확하게 계산되는지 단위 테스트 검증.
+  - 상위 작업과 하위 작업이 혼재된 모의 Jira 데이터 세트에서 하위 작업이 정상적으로 제외되고 상위 프로젝트 작업만 100% 선별되는지 단위 테스트 검증.
 
-### Task 4: 통합 빌드, UI 검증 및 형상 관리
+### Task 3: 프로젝트 빌드 및 Git 브랜치 형상 관리
 - **수행 작업:**
-  - 전체 빌드 (`./gradlew clean bootJar`)
-  - 로컬 8080 서버 재기동 및 UI 렌더링 확인
-  - `fix/gcp-resource-count` 브랜치에 커밋
+  - `./gradlew bootJar` 실행
+  - `start_backend_server.bat`를 통한 백엔드 서버(8080) 재기동
+  - `fix/jira-report-exclude-subtask` 브랜치 커밋 및 보고
