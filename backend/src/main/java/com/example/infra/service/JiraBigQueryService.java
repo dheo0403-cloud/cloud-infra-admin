@@ -17,6 +17,9 @@ public class JiraBigQueryService {
 
     private final BigQuery bigQuery;
 
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -38,7 +41,7 @@ public class JiraBigQueryService {
     public Map<String, String> getAssetMapping() {
         Map<String, String> map = new HashMap<>();
         try {
-            String query = String.format("SELECT asset_id, project_name FROM `%s.jira_asset_mapping`", datasetName);
+            String query = String.format("SELECT asset_id, project_name FROM `%s.%s.jira_asset_mapping`", targetProjectId, datasetName);
             TableResult result = bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
             for (FieldValueList row : result.iterateAll()) {
                 if (!row.get("asset_id").isNull() && !row.get("project_name").isNull()) {
@@ -56,12 +59,12 @@ public class JiraBigQueryService {
      */
     public void truncateTable() {
         try {
-            String sql = String.format("TRUNCATE TABLE `%s.%s`", datasetName, TABLE_NAME);
+            String sql = String.format("TRUNCATE TABLE `%s.%s.%s`", targetProjectId, datasetName, TABLE_NAME);
             QueryJobConfiguration config = QueryJobConfiguration.newBuilder(sql).build();
             bigQuery.query(config);
-            log.info("[JIRA-BQ] Successfully truncated table {}.{}", datasetName, TABLE_NAME);
+            log.info("[JIRA-BQ] Successfully truncated table {}.{}.{}", targetProjectId, datasetName, TABLE_NAME);
         } catch (Exception e) {
-            log.warn("[JIRA-BQ] Error truncating table {}.{}: {}", datasetName, TABLE_NAME, e.getMessage());
+            log.warn("[JIRA-BQ] Error truncating table {}.{}.{}: {}", targetProjectId, datasetName, TABLE_NAME, e.getMessage());
         }
     }
 
@@ -80,8 +83,8 @@ public class JiraBigQueryService {
         Map<String, String> assetMap = getAssetMapping();
 
         // 1. 당일 해당 프로젝트 기존 데이터 삭제 (멱등성 보장)
-        String deleteSql = String.format("DELETE FROM `%s.%s` WHERE snapshot_date = '%s' AND project_key = '%s' AND provider_type = '%s'",
-                datasetName, TABLE_NAME, dateStr, projectKey, providerType);
+        String deleteSql = String.format("DELETE FROM `%s.%s.%s` WHERE snapshot_date = '%s' AND project_key = '%s' AND provider_type = '%s'",
+                targetProjectId, datasetName, TABLE_NAME, dateStr, projectKey, providerType);
         try {
             QueryJobConfiguration deleteConfig = QueryJobConfiguration.newBuilder(deleteSql).build();
             bigQuery.query(deleteConfig);
@@ -133,7 +136,7 @@ public class JiraBigQueryService {
         int batchSize = 500;
         for (int i = 0; i < rowsToInsert.size(); i += batchSize) {
             List<InsertAllRequest.RowToInsert> batch = rowsToInsert.subList(i, Math.min(i + batchSize, rowsToInsert.size()));
-            InsertAllRequest insertRequest = InsertAllRequest.newBuilder(TableId.of(datasetName, TABLE_NAME), batch).build();
+            InsertAllRequest insertRequest = InsertAllRequest.newBuilder(TableId.of(targetProjectId, datasetName, TABLE_NAME), batch).build();
             InsertAllResponse response = bigQuery.insertAll(insertRequest);
 
             if (response.hasErrors()) {
@@ -144,7 +147,7 @@ public class JiraBigQueryService {
             }
         }
 
-        log.info("[JIRA-BQ] Successfully loaded {} issues to BigQuery table {}.{} for customer: {} (Project: {})",
-                rowsToInsert.size(), datasetName, TABLE_NAME, customerName, projectKey);
+        log.info("[JIRA-BQ] Successfully loaded {} issues to BigQuery table {}.{}.{} for customer: {} (Project: {})",
+                rowsToInsert.size(), targetProjectId, datasetName, TABLE_NAME, customerName, projectKey);
     }
 }

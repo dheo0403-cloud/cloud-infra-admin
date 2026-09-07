@@ -27,6 +27,9 @@ public class MonthlyReportService {
     private final GcpRecommenderService gcpRecommenderService;
     private final VertexAiGeminiService vertexAiGeminiService;
 
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -51,10 +54,10 @@ public class MonthlyReportService {
     private String getDatasetLocation() {
         if (cachedDatasetLocation != null) return cachedDatasetLocation;
         try {
-            Dataset dataset = bigQuery.getDataset(datasetName);
+            Dataset dataset = bigQuery.getDataset(DatasetId.of(targetProjectId, datasetName));
             if (dataset != null && dataset.getLocation() != null) {
                 cachedDatasetLocation = dataset.getLocation();
-                log.info("Detected BigQuery dataset '{}' location: {}", datasetName, cachedDatasetLocation);
+                log.info("Detected BigQuery dataset '{}.{}' location: {}", targetProjectId, datasetName, cachedDatasetLocation);
                 return cachedDatasetLocation;
             }
         } catch (Exception e) {
@@ -64,14 +67,14 @@ public class MonthlyReportService {
     }
 
     private TableResult queryWithFallback(String projectId, String tableName, String selectFields, String whereClause, Map<String, QueryParameterValue> params) {
-        String sql = String.format("SELECT %s FROM `%s.%s` %s", selectFields, datasetName, tableName, whereClause);
+        String sql = String.format("SELECT %s FROM `%s.%s.%s` %s", selectFields, targetProjectId, datasetName, tableName, whereClause);
 
         String primaryLoc = getDatasetLocation();
         if (primaryLoc != null && !primaryLoc.isEmpty()) {
             try {
                 QueryJobConfiguration.Builder b = QueryJobConfiguration.newBuilder(sql);
                 if (params != null) params.forEach(b::addNamedParameter);
-                JobId jobId = JobId.newBuilder().setProject(projectId).setLocation(primaryLoc).build();
+                JobId jobId = JobId.newBuilder().setProject(targetProjectId).setLocation(primaryLoc).build();
                 return bigQuery.query(b.build(), jobId);
             } catch (Exception e) {
                 log.debug("Direct location {} failed for table {}: {}", primaryLoc, tableName, e.getMessage());
@@ -84,7 +87,7 @@ public class MonthlyReportService {
             try {
                 QueryJobConfiguration.Builder b = QueryJobConfiguration.newBuilder(sql);
                 if (params != null) params.forEach(b::addNamedParameter);
-                JobId jobId = JobId.newBuilder().setProject(projectId).setLocation(loc).build();
+                JobId jobId = JobId.newBuilder().setProject(targetProjectId).setLocation(loc).build();
                 TableResult result = bigQuery.query(b.build(), jobId);
                 cachedDatasetLocation = loc;
                 return result;
@@ -97,7 +100,7 @@ public class MonthlyReportService {
             if (params != null) params.forEach(b::addNamedParameter);
             return bigQuery.query(b.build());
         } catch (Exception e) {
-            log.debug("BigQuery query not found for table {} (project {}): {}", tableName, projectId, e.getMessage());
+            log.debug("BigQuery query not found for table {}.{}.{} (project {}): {}", targetProjectId, datasetName, tableName, projectId, e.getMessage());
             return null;
         }
     }
@@ -673,7 +676,7 @@ public class MonthlyReportService {
         for (String ym : yearMonths) result.put(ym, new HashMap<>());
         String selectFields = "resource_type, resource_count";
         String whereClause = "WHERE project_id = @projectId AND CAST(snapshot_date AS STRING) = (" +
-                "  SELECT MAX(CAST(snapshot_date AS STRING)) FROM `infra_admin_dataset.daily_asset_inventory` " +
+                String.format("  SELECT MAX(CAST(snapshot_date AS STRING)) FROM `%s.%s.daily_asset_inventory` ", targetProjectId, datasetName) +
                 "  WHERE project_id = @projectId AND STARTS_WITH(CAST(snapshot_date AS STRING), @yearMonthPrefix)" +
                 ")";
         for (String ym : yearMonths) {
@@ -768,7 +771,7 @@ public class MonthlyReportService {
             String sql = String.format(
                     "SELECT issue_key, summary, work_category, issue_type, report_yn, " +
                     "       CAST(created_at AS STRING) as created_at, CAST(snapshot_date AS STRING) as snapshot_date " +
-                    "FROM `%s.%s` " +
+                    "FROM `%s.%s.%s` " +
                     "WHERE UPPER(%s) = UPPER(@jiraKey) " +
                     "  AND (report_yn IS NULL OR UPPER(TRIM(CAST(report_yn AS STRING))) NOT IN ('NO', 'N')) " +
                     "  AND (issue_type IS NULL OR (" +
@@ -780,7 +783,7 @@ public class MonthlyReportService {
                     "       OR (created_at IS NULL AND SUBSTR(CAST(snapshot_date AS STRING), 1, 10) BETWEEN @startDate AND @endDate) " +
                     "  ) " +
                     "ORDER BY created_at DESC",
-                    datasetName, tbl, col);
+                    targetProjectId, datasetName, tbl, col);
 
             try {
                 QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(sql)
@@ -819,13 +822,13 @@ public class MonthlyReportService {
                                 .build());
                     }
                     if (!list.isEmpty()) {
-                        log.info("[JIRA-FETCH] Successfully loaded {} issues from table {}.{} within period {} ~ {}", 
-                                list.size(), datasetName, tbl, startDateStr, endDateStr);
+                        log.info("[JIRA-FETCH] Successfully loaded {} issues from table {}.{}.{} within period {} ~ {}",
+                                list.size(), targetProjectId, datasetName, tbl, startDateStr, endDateStr);
                         break;
                     }
                 }
             } catch (Exception e) {
-                log.debug("[JIRA-FETCH] Candidate {}.{} with column {} skipped: {}", datasetName, tbl, col, e.getMessage());
+                log.debug("[JIRA-FETCH] Candidate {}.{}.{} with column {} skipped: {}", targetProjectId, datasetName, tbl, col, e.getMessage());
             }
         }
 

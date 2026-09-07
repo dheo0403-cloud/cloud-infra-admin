@@ -21,6 +21,9 @@ public class InfraCustomerRepository {
     private final BigQuery bigQuery;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -33,10 +36,10 @@ public class InfraCustomerRepository {
     public List<InfraCustomer> findAll() {
         String query = String.format(
             "WITH UniqueCustomers AS (" +
-            "  SELECT * FROM `%s.%s` " +
+            "  SELECT * FROM `%s.%s.%s` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             "), UniqueEnvs AS (" +
-            "  SELECT * FROM `%s.infra_environment` " +
+            "  SELECT * FROM `%s.%s.infra_environment` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             ") " +
             "SELECT c.id, c.name, c.contact_person, c.contact_email, c.report_frequency, c.msp_grade, c.msp_sales_rep, c.msp_rep, c.jira_project_key_gcp, c.jira_project_key_azure, c.created_at, c.is_deleted, " +
@@ -46,7 +49,7 @@ public class InfraCustomerRepository {
             "LEFT JOIN UniqueEnvs e ON e.customer_id = c.id AND (e.is_deleted IS NULL OR e.is_deleted = FALSE) " +
             "WHERE (c.is_deleted IS NULL OR c.is_deleted = FALSE) " +
             "ORDER BY c.created_at DESC",
-            datasetName, TABLE_NAME, datasetName
+            targetProjectId, datasetName, TABLE_NAME, targetProjectId, datasetName
         );
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query).build();
 
@@ -98,10 +101,10 @@ public class InfraCustomerRepository {
     public java.util.Optional<InfraCustomer> findById(String id) {
         String query = String.format(
             "WITH UniqueCustomers AS (" +
-            "  SELECT * FROM `%s.%s` " +
+            "  SELECT * FROM `%s.%s.%s` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             "), UniqueEnvs AS (" +
-            "  SELECT * FROM `%s.infra_environment` " +
+            "  SELECT * FROM `%s.%s.infra_environment` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             ") " +
             "SELECT c.id, c.name, c.contact_person, c.contact_email, c.report_frequency, c.msp_grade, c.msp_sales_rep, c.msp_rep, c.jira_project_key_gcp, c.jira_project_key_azure, c.created_at, c.is_deleted, " +
@@ -110,7 +113,7 @@ public class InfraCustomerRepository {
             "FROM UniqueCustomers c " +
             "LEFT JOIN UniqueEnvs e ON e.customer_id = c.id AND (e.is_deleted IS NULL OR e.is_deleted = FALSE) " +
             "WHERE c.id = @id AND (c.is_deleted IS NULL OR c.is_deleted = FALSE)",
-            datasetName, TABLE_NAME, datasetName
+            targetProjectId, datasetName, TABLE_NAME, targetProjectId, datasetName
         );
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)
                 .addNamedParameter("id", QueryParameterValue.string(id))
@@ -166,9 +169,9 @@ public class InfraCustomerRepository {
             customer.setId(java.util.UUID.randomUUID().toString());
         }
         customer.setCreatedAt(LocalDateTime.now());
-        
-        String query = String.format("INSERT INTO `%s.%s` (id, name, contact_person, contact_email, report_frequency, msp_grade, msp_sales_rep, msp_rep, jira_project_key_gcp, jira_project_key_azure, created_at, is_deleted) " +
-                "VALUES (@id, @name, @contactPerson, @contactEmail, @reportFrequency, @mspGrade, @mspSalesRep, @mspRep, @jiraProjectKeyGcp, @jiraProjectKeyAzure, @createdAt, @isDeleted)", datasetName, TABLE_NAME);
+
+        String query = String.format("INSERT INTO `%s.%s.%s` (id, name, contact_person, contact_email, report_frequency, msp_grade, msp_sales_rep, msp_rep, jira_project_key_gcp, jira_project_key_azure, created_at, is_deleted) " +
+                "VALUES (@id, @name, @contactPerson, @contactEmail, @reportFrequency, @mspGrade, @mspSalesRep, @mspRep, @jiraProjectKeyGcp, @jiraProjectKeyAzure, @createdAt, @isDeleted)", targetProjectId, datasetName, TABLE_NAME);
         
         java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         String createdAtStr = customer.getCreatedAt().format(formatter);

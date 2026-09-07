@@ -14,7 +14,10 @@ import java.util.List;
 public class InfraAuditDetailRepository {
 
     private final BigQuery bigQuery;
-    
+
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -29,8 +32,8 @@ public class InfraAuditDetailRepository {
             detail.setId(UUID.randomUUID().toString());
         }
 
-        TableId tableId = TableId.of(datasetName, TABLE_NAME);
-        
+        TableId tableId = TableId.of(targetProjectId, datasetName, TABLE_NAME);
+
         Map<String, Object> rowContent = new HashMap<>();
         rowContent.put("id", detail.getId());
         rowContent.put("report_id", detail.getReport() != null ? detail.getReport().getId() : null);
@@ -40,7 +43,7 @@ public class InfraAuditDetailRepository {
         rowContent.put("result_text", detail.getResultText());
         rowContent.put("remediation", detail.getRemediation());
         rowContent.put("check_result", detail.getCheckResult());
-        
+
         // Add customer mapping
         rowContent.put("customer_name", detail.getReport() != null && detail.getReport().getEnvironment() != null && detail.getReport().getEnvironment().getCustomer() != null ? detail.getReport().getEnvironment().getCustomer().getName() : null);
         rowContent.put("audit_date", detail.getReport() != null && detail.getReport().getAuditDate() != null ? detail.getReport().getAuditDate().toString() : null);
@@ -59,15 +62,15 @@ public class InfraAuditDetailRepository {
 
     public void saveAll(List<InfraAuditDetail> details) {
         if (details == null || details.isEmpty()) return;
-        
-        TableId tableId = TableId.of(datasetName, TABLE_NAME);
+
+        TableId tableId = TableId.of(targetProjectId, datasetName, TABLE_NAME);
         InsertAllRequest.Builder builder = InsertAllRequest.newBuilder(tableId);
-        
+
         for (InfraAuditDetail detail : details) {
             if (detail.getId() == null) {
                 detail.setId(UUID.randomUUID().toString());
             }
-            
+
             Map<String, Object> rowContent = new HashMap<>();
             rowContent.put("id", detail.getId());
             rowContent.put("report_id", detail.getReport() != null ? detail.getReport().getId() : null);
@@ -77,16 +80,16 @@ public class InfraAuditDetailRepository {
             rowContent.put("result_text", detail.getResultText());
             rowContent.put("remediation", detail.getRemediation());
             rowContent.put("check_result", detail.getCheckResult());
-            
+
             rowContent.put("customer_name", detail.getReport() != null && detail.getReport().getEnvironment() != null && detail.getReport().getEnvironment().getCustomer() != null ? detail.getReport().getEnvironment().getCustomer().getName() : null);
             rowContent.put("audit_date", detail.getReport() != null && detail.getReport().getAuditDate() != null ? detail.getReport().getAuditDate().toString() : null);
             rowContent.put("project_id", detail.getProjectId());
-            
+
             builder.addRow(detail.getId(), rowContent);
         }
-        
+
         InsertAllResponse response = bigQuery.insertAll(builder.build());
-        
+
         if (response.hasErrors()) {
             throw new RuntimeException("BigQuery Batch Insert Failed for Details: " + response.getInsertErrors());
         }
@@ -94,8 +97,8 @@ public class InfraAuditDetailRepository {
 
     public List<InfraAuditDetail> findByReportId(String reportId) {
         String query = String.format(
-            "SELECT * FROM `%s.%s` WHERE report_id = @reportId",
-            datasetName, TABLE_NAME
+            "SELECT * FROM `%s.%s.%s` WHERE report_id = @reportId",
+            targetProjectId, datasetName, TABLE_NAME
         );
 
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)

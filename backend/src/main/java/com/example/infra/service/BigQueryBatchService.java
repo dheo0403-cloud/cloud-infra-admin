@@ -42,6 +42,9 @@ public class BigQueryBatchService {
     private final GcpRecommenderService gcpRecommenderService;
     private final BigQuery bigQuery;
 
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -1102,7 +1105,7 @@ public class BigQueryBatchService {
     }
 
     private void insertDailyAssetBatch(String snapshotDate, String projectId, String customerName, String resourceType, int count) {
-        TableId tableId = TableId.of(datasetName, "daily_asset_inventory");
+        TableId tableId = TableId.of(targetProjectId, datasetName, "daily_asset_inventory");
         Map<String, Object> rowContent = new HashMap<>();
         rowContent.put("snapshot_date", snapshotDate);
         rowContent.put("project_id", projectId);
@@ -1118,7 +1121,7 @@ public class BigQueryBatchService {
             if (response.hasErrors()) {
                 log.error("BigQuery insert error for daily_asset_inventory: {}", response.getInsertErrors());
             } else {
-                log.info("Successfully inserted daily batch for {} / {}", projectId, resourceType);
+                log.info("Successfully inserted daily batch for {} / {} into {}.{}", projectId, resourceType, targetProjectId, datasetName);
             }
         } catch (Exception e) {
             log.error("BigQuery insert failed", e);
@@ -1128,7 +1131,7 @@ public class BigQueryBatchService {
     private void ensureDailyRecommenderTableExists() {
         try {
             String createTableDdl = String.format(
-                "CREATE TABLE IF NOT EXISTS `%s.daily_recommender_inventory` (" +
+                "CREATE TABLE IF NOT EXISTS `%s.%s.daily_recommender_inventory` (" +
                 "  snapshot_date DATE," +
                 "  project_id STRING," +
                 "  customer_name STRING," +
@@ -1137,7 +1140,7 @@ public class BigQueryBatchService {
                 "  recommender_id STRING," +
                 "  recommendation_description STRING," +
                 "  created_at TIMESTAMP" +
-                ")", datasetName
+                ")", targetProjectId, datasetName
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
         } catch (Exception e) {
@@ -1147,7 +1150,7 @@ public class BigQueryBatchService {
 
     private void insertDailyRecommenderBatch(String snapshotDate, String projectId, String customerName, String category, String priority, String recommenderId, String description) {
         ensureDailyRecommenderTableExists();
-        TableId tableId = TableId.of(datasetName, "daily_recommender_inventory");
+        TableId tableId = TableId.of(targetProjectId, datasetName, "daily_recommender_inventory");
         Map<String, Object> rowContent = new HashMap<>();
         rowContent.put("snapshot_date", snapshotDate);
         rowContent.put("project_id", projectId);
@@ -1166,7 +1169,7 @@ public class BigQueryBatchService {
             if (response.hasErrors()) {
                 log.error("BigQuery insert error for daily_recommender_inventory: {}", response.getInsertErrors());
             } else {
-                log.info("Successfully inserted daily recommender batch for {} / {} / {}", projectId, category, recommenderId);
+                log.info("Successfully inserted daily recommender batch for {} / {} / {} into {}.{}", projectId, category, recommenderId, targetProjectId, datasetName);
             }
         } catch (Exception e) {
             log.error("BigQuery insert failed for daily_recommender_inventory", e);
@@ -1282,7 +1285,7 @@ public class BigQueryBatchService {
     private void insertDailyReservationBatch(String snapshotDate, String projectId, String customerName,
             String provider, String reservationName, String status, String startDate, String expiryDate,
             String plan, String type, String region, String scope, String resourceDetail) {
-        TableId tableId = TableId.of(datasetName, "daily_reservation_inventory");
+        TableId tableId = TableId.of(targetProjectId, datasetName, "daily_reservation_inventory");
         Map<String, Object> rowContent = new HashMap<>();
         rowContent.put("snapshot_date", snapshotDate);
         rowContent.put("project_id", projectId);
@@ -1312,9 +1315,9 @@ public class BigQueryBatchService {
     private void deleteDailyReservations(String snapshotDate, String customerName, String provider) {
         try {
             String query = String.format(
-                "DELETE FROM `%s.daily_reservation_inventory` " +
+                "DELETE FROM `%s.%s.daily_reservation_inventory` " +
                 "WHERE snapshot_date = '%s' AND customer_name = '%s' AND provider = '%s'",
-                datasetName, snapshotDate, customerName, provider);
+                targetProjectId, datasetName, snapshotDate, customerName, provider);
             bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
             log.info("Cleared existing daily_reservation_inventory for snapshot: {}, customer: {}, provider: {}", snapshotDate, customerName, provider);
         } catch (Exception e) {
@@ -1331,18 +1334,18 @@ public class BigQueryBatchService {
             for (String table : tables) {
                 // 1. 중복된 과거 데이터 삭제 (동일 id 중 created_at이 가장 최신이 아닌 데이터)
                 String deleteDuplicatesQuery = String.format(
-                    "DELETE FROM `%s.%s` main " +
+                    "DELETE FROM `%s.%s.%s` main " +
                     "WHERE main.created_at < (" +
                     "  SELECT MAX(sub.created_at) " +
-                    "  FROM `%s.%s` sub " +
+                    "  FROM `%s.%s.%s` sub " +
                     "  WHERE sub.id = main.id" +
-                    ")", datasetName, table, datasetName, table);
+                    ")", targetProjectId, datasetName, table, targetProjectId, datasetName, table);
                 bigQuery.query(QueryJobConfiguration.newBuilder(deleteDuplicatesQuery).build());
                 log.info("Successfully deleted older duplicate data in {}", table);
 
                 // 2. is_deleted = TRUE 인 데이터 삭제
                 String deleteSoftDeletedQuery = String.format(
-                    "DELETE FROM `%s.%s` WHERE is_deleted = TRUE", datasetName, table);
+                    "DELETE FROM `%s.%s.%s` WHERE is_deleted = TRUE", targetProjectId, datasetName, table);
                 bigQuery.query(QueryJobConfiguration.newBuilder(deleteSoftDeletedQuery).build());
                 log.info("Successfully hard-deleted 'is_deleted = TRUE' data in {}", table);
             }
@@ -1357,16 +1360,16 @@ public class BigQueryBatchService {
         try {
             String query = String.format(
                 "SELECT customer_name, reservation_name, expiry_date " +
-                "FROM `%s.daily_reservation_inventory` " +
+                "FROM `%s.%s.daily_reservation_inventory` " +
                 "WHERE provider = 'AZURE_APP' " +
                 "  AND snapshot_date = (" +
                 "      SELECT MAX(snapshot_date) " +
-                "      FROM `%s.daily_reservation_inventory` " +
+                "      FROM `%s.%s.daily_reservation_inventory` " +
                 "      WHERE provider = 'AZURE_APP'" +
                 "  ) " +
                 "  AND DATE_DIFF(PARSE_DATE('%%Y-%%m-%%d', expiry_date), CURRENT_DATE(), DAY) <= 10 " +
                 "  AND DATE_DIFF(PARSE_DATE('%%Y-%%m-%%d', expiry_date), CURRENT_DATE(), DAY) >= 0",
-                datasetName, datasetName
+                targetProjectId, datasetName, targetProjectId, datasetName
             );
 
             QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query).build();

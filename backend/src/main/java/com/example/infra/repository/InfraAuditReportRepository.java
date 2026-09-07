@@ -17,7 +17,10 @@ public class InfraAuditReportRepository {
     private final BigQuery bigQuery;
     private final InfraEnvironmentRepository environmentRepository;
     private final InfraAuditDetailRepository auditDetailRepository;
-    
+
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -28,15 +31,15 @@ public class InfraAuditReportRepository {
         this.environmentRepository = environmentRepository;
         this.auditDetailRepository = auditDetailRepository;
     }
-    
+
     public InfraAuditReport save(InfraAuditReport report) {
         if (report.getId() == null) {
             // BigQuery는 Auto-Increment가 없으므로 UUID 생성
             report.setId(UUID.randomUUID().toString());
         }
 
-        TableId tableId = TableId.of(datasetName, TABLE_NAME);
-        
+        TableId tableId = TableId.of(targetProjectId, datasetName, TABLE_NAME);
+
         Map<String, Object> rowContent = new HashMap<>();
         rowContent.put("id", report.getId());
         rowContent.put("environment_id", report.getEnvironment() != null ? report.getEnvironment().getId() : null);
@@ -58,8 +61,8 @@ public class InfraAuditReportRepository {
 
     public List<InfraAuditReport> findByEnvironmentIdOrderByAuditDateDesc(String environmentId) {
         String query = String.format(
-            "SELECT * FROM `%s.%s` WHERE environment_id = @envId ORDER BY audit_date DESC",
-            datasetName, TABLE_NAME
+            "SELECT * FROM `%s.%s.%s` WHERE environment_id = @envId ORDER BY audit_date DESC",
+            targetProjectId, datasetName, TABLE_NAME
         );
 
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)
@@ -78,11 +81,11 @@ public class InfraAuditReportRepository {
                 }
                 report.setAuditorName(row.get("auditor_name").isNull() ? null : row.get("auditor_name").getStringValue());
                 report.setSummary(row.get("summary").isNull() ? null : row.get("summary").getStringValue());
-                
+
                 // Hydrate details
                 List<com.example.infra.entity.InfraAuditDetail> details = auditDetailRepository.findByReportId(report.getId());
                 report.setDetails(details);
-                
+
                 reports.add(report);
             }
         } catch (InterruptedException e) {
@@ -95,8 +98,8 @@ public class InfraAuditReportRepository {
 
     public java.util.Optional<InfraAuditReport> findById(String id) {
         String query = String.format(
-            "SELECT * FROM `%s.%s` WHERE id = @id LIMIT 1",
-            datasetName, TABLE_NAME
+            "SELECT * FROM `%s.%s.%s` WHERE id = @id LIMIT 1",
+            targetProjectId, datasetName, TABLE_NAME
         );
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)
                 .addNamedParameter("id", QueryParameterValue.string(id))

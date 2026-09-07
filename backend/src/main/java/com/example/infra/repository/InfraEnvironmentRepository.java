@@ -17,7 +17,10 @@ public class InfraEnvironmentRepository {
 
     private final BigQuery bigQuery;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    
+
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -30,17 +33,17 @@ public class InfraEnvironmentRepository {
     public Optional<InfraEnvironment> findById(String id) {
         String query = String.format(
             "WITH UniqueEnvs AS (" +
-            "  SELECT * FROM `%s.%s` " +
+            "  SELECT * FROM `%s.%s.%s` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             "), UniqueCustomers AS (" +
-            "  SELECT * FROM `%s.infra_customer` " +
+            "  SELECT * FROM `%s.%s.infra_customer` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             ") " +
             "SELECT e.*, c.name as customer_name, c.report_frequency as customer_report_frequency, c.msp_grade as customer_msp_grade, c.msp_sales_rep as customer_msp_sales_rep, c.msp_rep as customer_msp_rep " +
             "FROM UniqueEnvs e " +
             "LEFT JOIN UniqueCustomers c ON e.customer_id = c.id AND (c.is_deleted IS NULL OR c.is_deleted = FALSE) " +
             "WHERE e.id = @id AND (e.is_deleted IS NULL OR e.is_deleted = FALSE) LIMIT 100",
-            datasetName, TABLE_NAME, datasetName
+            targetProjectId, datasetName, TABLE_NAME, targetProjectId, datasetName
         );
 
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)
@@ -64,7 +67,7 @@ public class InfraEnvironmentRepository {
             env.setId(java.util.UUID.randomUUID().toString());
         }
         env.setCreatedAt(java.time.LocalDateTime.now());
-        
+
         String projectsJson = "[]";
         try {
             projectsJson = objectMapper.writeValueAsString(
@@ -73,8 +76,8 @@ public class InfraEnvironmentRepository {
             );
         } catch (Exception ex) {}
 
-        String query = String.format("INSERT INTO `%s.%s` (id, customer_id, provider_type, environment_name, encrypted_secret, azure_tenant_id, azure_client_id, project_ids, created_at, is_deleted) " +
-                "VALUES (@id, @customerId, @providerType, @environmentName, @encryptedSecret, @azureTenantId, @azureClientId, @projectIds, @createdAt, @isDeleted)", datasetName, TABLE_NAME);
+        String query = String.format("INSERT INTO `%s.%s.%s` (id, customer_id, provider_type, environment_name, encrypted_secret, azure_tenant_id, azure_client_id, project_ids, created_at, is_deleted) " +
+                "VALUES (@id, @customerId, @providerType, @environmentName, @encryptedSecret, @azureTenantId, @azureClientId, @projectIds, @createdAt, @isDeleted)", targetProjectId, datasetName, TABLE_NAME);
 
         java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         String createdAtStr = env.getCreatedAt().format(formatter);
@@ -114,22 +117,22 @@ public class InfraEnvironmentRepository {
     public List<InfraEnvironment> findAllByCustomerId(String customerId) {
         String query = String.format(
             "WITH UniqueEnvs AS (" +
-            "  SELECT * FROM `%s.%s` " +
+            "  SELECT * FROM `%s.%s.%s` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             "), UniqueCustomers AS (" +
-            "  SELECT * FROM `%s.infra_customer` " +
+            "  SELECT * FROM `%s.%s.infra_customer` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             ") " +
             "SELECT e.*, c.name as customer_name, c.report_frequency as customer_report_frequency, c.msp_grade as customer_msp_grade, c.msp_sales_rep as customer_msp_sales_rep, c.msp_rep as customer_msp_rep " +
             "FROM UniqueEnvs e " +
             "LEFT JOIN UniqueCustomers c ON e.customer_id = c.id AND (c.is_deleted IS NULL OR c.is_deleted = FALSE) " +
-            "WHERE e.customer_id = @customerId AND (e.is_deleted IS NULL OR e.is_deleted = FALSE)", 
-            datasetName, TABLE_NAME, datasetName
+            "WHERE e.customer_id = @customerId AND (e.is_deleted IS NULL OR e.is_deleted = FALSE)",
+            targetProjectId, datasetName, TABLE_NAME, targetProjectId, datasetName
         );
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)
                 .addNamedParameter("customerId", QueryParameterValue.string(customerId))
                 .build();
-        
+
         List<InfraEnvironment> list = new ArrayList<>();
         try {
             TableResult results = bigQuery.query(queryConfig);
@@ -145,17 +148,17 @@ public class InfraEnvironmentRepository {
     public List<InfraEnvironment> findAll() {
         String query = String.format(
             "WITH UniqueEnvs AS (" +
-            "  SELECT * FROM `%s.%s` " +
+            "  SELECT * FROM `%s.%s.%s` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             "), UniqueCustomers AS (" +
-            "  SELECT * FROM `%s.infra_customer` " +
+            "  SELECT * FROM `%s.%s.infra_customer` " +
             "  QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1" +
             ") " +
             "SELECT e.*, c.name as customer_name, c.report_frequency as customer_report_frequency, c.msp_grade as customer_msp_grade, c.msp_sales_rep as customer_msp_sales_rep, c.msp_rep as customer_msp_rep " +
             "FROM UniqueEnvs e " +
             "LEFT JOIN UniqueCustomers c ON e.customer_id = c.id AND (c.is_deleted IS NULL OR c.is_deleted = FALSE) " +
-            "WHERE (e.is_deleted IS NULL OR e.is_deleted = FALSE)", 
-            datasetName, TABLE_NAME, datasetName
+            "WHERE (e.is_deleted IS NULL OR e.is_deleted = FALSE)",
+            targetProjectId, datasetName, TABLE_NAME, targetProjectId, datasetName
         );
         QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query).build();
         

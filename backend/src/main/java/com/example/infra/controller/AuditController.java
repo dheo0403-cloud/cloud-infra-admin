@@ -36,6 +36,12 @@ public class AuditController {
     private final com.google.cloud.bigquery.BigQuery bigQuery;
     private final com.example.infra.service.BigQueryBatchService bigQueryBatchService;
 
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
+    @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
+    private String datasetName;
+
     // BigQuery 스트리밍 인서트 지연으로 인한 다운로드 실패를 피하기 위해 캐시 맵 활용
     private final ConcurrentHashMap<String, InfraAuditReport> reportCache = new ConcurrentHashMap<>();
 
@@ -302,11 +308,13 @@ public class AuditController {
     @GetMapping("/test-bq")
     public ResponseEntity<String> testBq() {
         try {
-            com.google.cloud.bigquery.BigQuery bigQuery = com.google.cloud.bigquery.BigQueryOptions.getDefaultInstance().getService();
             com.google.cloud.bigquery.QueryJobConfiguration queryConfig = com.google.cloud.bigquery.QueryJobConfiguration.newBuilder(
-                "SELECT id, report_id, customer_name, audit_date, category, item " +
-                "FROM `msp-g2cms1-wjis-240118.infra_admin_dataset.infra_audit_detail` " +
-                "ORDER BY audit_date DESC LIMIT 5"
+                String.format(
+                    "SELECT id, report_id, customer_name, audit_date, category, item " +
+                    "FROM `%s.%s.infra_audit_detail` " +
+                    "ORDER BY audit_date DESC LIMIT 5",
+                    targetProjectId, datasetName
+                )
             ).build();
             com.google.cloud.bigquery.TableResult results = bigQuery.query(queryConfig);
             StringBuilder sb = new StringBuilder();

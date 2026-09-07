@@ -33,6 +33,9 @@ public class ReservationService {
     private final GcpResourceFetcher gcpResourceFetcher;
     private final BigQuery bigQuery;
 
+    @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
+    private String targetProjectId;
+
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
@@ -48,12 +51,12 @@ public class ReservationService {
 
         // BigQuery에서 최신 snapshot_date의 데이터 조회
         String query = String.format(
-            "SELECT * FROM `%s.daily_reservation_inventory` " +
+            "SELECT * FROM `%s.%s.daily_reservation_inventory` " +
             "WHERE customer_name = '%s' AND provider = '%s' AND provider != 'AZURE_APP' AND (type IS NULL OR type NOT IN ('CLIENT_SECRET', 'CERTIFICATE')) " +
-            "AND snapshot_date = (SELECT MAX(snapshot_date) FROM `%s.daily_reservation_inventory` WHERE customer_name = '%s' AND provider = '%s') " +
+            "AND snapshot_date = (SELECT MAX(snapshot_date) FROM `%s.%s.daily_reservation_inventory` WHERE customer_name = '%s' AND provider = '%s') " +
             "ORDER BY expiry_date ASC",
-            datasetName, customerName, provider,
-            datasetName, customerName, provider);
+            targetProjectId, datasetName, customerName, provider,
+            targetProjectId, datasetName, customerName, provider);
 
         List<ReservationDto> results = new ArrayList<>();
         try {
@@ -88,11 +91,11 @@ public class ReservationService {
         String query = String.format(
             "WITH latest_snapshots AS (\n" +
             "    SELECT customer_name, provider, MAX(snapshot_date) as max_snapshot\n" +
-            "    FROM `%s.daily_reservation_inventory`\n" +
+            "    FROM `%s.%s.daily_reservation_inventory`\n" +
             "    WHERE provider != 'AZURE_APP'\n" +
             "    GROUP BY customer_name, provider\n" +
             ")\n" +
-            "SELECT r.* FROM `%s.daily_reservation_inventory` r\n" +
+            "SELECT r.* FROM `%s.%s.daily_reservation_inventory` r\n" +
             "JOIN latest_snapshots l ON r.customer_name = l.customer_name \n" +
             "    AND r.provider = l.provider \n" +
             "    AND r.snapshot_date = l.max_snapshot\n" +
@@ -102,7 +105,7 @@ public class ReservationService {
             "    AND SAFE_CAST(r.expiry_date AS DATE) >= CURRENT_DATE()\n" +
             "    AND SAFE_CAST(r.expiry_date AS DATE) < DATE_ADD(CURRENT_DATE(), INTERVAL 100 DAY)\n" +
             "ORDER BY r.expiry_date ASC",
-            datasetName, datasetName
+            targetProjectId, datasetName, targetProjectId, datasetName
         );
 
         List<ReservationDto> results = new ArrayList<>();
@@ -418,7 +421,7 @@ public class ReservationService {
     private void insertReservation(String snapshotDate, String projectId, String customerName,
             String provider, String reservationName, String status, String startDate, String expiryDate,
             String plan, String type, String region, String scope, String resourceDetail) {
-        TableId tableId = TableId.of(datasetName, "daily_reservation_inventory");
+        TableId tableId = TableId.of(targetProjectId, datasetName, "daily_reservation_inventory");
         Map<String, Object> rowContent = new HashMap<>();
         rowContent.put("snapshot_date", snapshotDate);
         rowContent.put("project_id", projectId);
@@ -445,9 +448,9 @@ public class ReservationService {
     private void deleteDailyReservations(String snapshotDate, String customerName, String provider) {
         try {
             String query = String.format(
-                "DELETE FROM `%s.daily_reservation_inventory` " +
+                "DELETE FROM `%s.%s.daily_reservation_inventory` " +
                 "WHERE snapshot_date = '%s' AND customer_name = '%s' AND provider = '%s'",
-                datasetName, snapshotDate, customerName, provider);
+                targetProjectId, datasetName, snapshotDate, customerName, provider);
             bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
             log.info("Cleared existing daily_reservation_inventory for snapshot: {}, customer: {}, provider: {}", snapshotDate, customerName, provider);
         } catch (Exception e) {

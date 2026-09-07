@@ -29,11 +29,12 @@ public class LBAuditTest {
         GoogleCredentials credentials = GoogleCredentials.fromStream(credStream);
         BigQuery bigQuery = BigQueryOptions.newBuilder()
                 .setCredentials(credentials)
-                .setProjectId("msp-g2cms1-wjis-240118")
+                .setProjectId("mzc-gcp-managed")
                 .build()
                 .getService();
-        
+
         InfraEnvironmentRepository repo = new InfraEnvironmentRepository(bigQuery);
+        org.springframework.test.util.ReflectionTestUtils.setField(repo, "targetProjectId", "mzc-gcp-managed");
         org.springframework.test.util.ReflectionTestUtils.setField(repo, "datasetName", "infra_admin_dataset");
         
         List<InfraEnvironment> envs = repo.findAll();
