@@ -14,14 +14,14 @@
   └─ 1.4 GcpMonthlyReportViewPage: 프론트엔드 [대상: xxx] 뱃지 렌더링 규격 정의
                    │
                    ▼
-[Phase 2: DB 스키마 추가 및 데이터 파이프라인 전구간 수정] (진행 중)
-  ├─ 2.1 BigQueryBatchService: daily_recommender_inventory DDL에 target_resource_name 추가 및 ALTER TABLE 안전 마이그레이션
-  ├─ 2.2 BigQueryBatchService: insertDailyRecommenderBatch에 targetResourceName, priority 동적 바인딩
-  ├─ 2.3 MonthlyReportService: fetchAllDailyRecommenders에서 target_resource_name 쿼리 및 formatRecommendationText 연동
-  └─ 2.4 GcpMonthlyReportViewPage: [대상: xxx] 태그 감지 및 인디고 큐브 뱃지 직관적 UI 렌더링 고도화
+[Phase 2: DB 스키마 추가 및 데이터 파이프라인 전구간 수정] (완료)
+  ├─ 2.1 BigQueryBatchService: daily_recommender_inventory DDL에 target_resource_name 추가 및 ALTER TABLE 안전 마이그레이션 (완료)
+  ├─ 2.2 BigQueryBatchService: insertDailyRecommenderBatch에 targetResourceName, priority 동적 바인딩 (완료)
+  ├─ 2.3 MonthlyReportService: fetchAllDailyRecommenders에서 target_resource_name 쿼리 및 formatRecommendationText 연동 (완료)
+  └─ 2.4 GcpMonthlyReportViewPage: [대상: xxx] 태그 감지 및 인디고 큐브 뱃지 직관적 UI 렌더링 고도화 (완료)
                    │
                    ▼
-[Phase 3: 수집 배치 1회 수동 트리거 및 Chrome CDP E2E 검증]
+[Phase 3: 수집 배치 1회 수동 트리거 및 E2E UI 렌더링 검증] (진행 중)
   ├─ 3.1 Spring Boot 백엔드 컴파일 & Gradle bootJar 패키징
   ├─ 3.2 수집 배치 1회 수동 트리거 및 BigQuery target_resource_name 적재 실시간 로그 확인
   ├─ 3.3 로컬 8080 서버 재기동 및 GCP 리포트 화면 접속
