@@ -55,6 +55,11 @@ public class BigQueryBatchService {
     @Scheduled(cron = "0 0 2 * * ?")
     public void runDailySnapshotBatch() {
         log.info("Starting Daily Snapshot Batch for GCP Resources");
+
+        // Recommender 데이터는 히스토리 누적 없이 최신 상태만 유지(Overwrite)하므로 배치 시작 시 테이블을 1회 초기화(TRUNCATE)
+        // (자산/Jira/예약 등 타 배치는 기존대로 날짜별 누적 적재 유지)
+        truncateDailyRecommenderTable();
+
         List<InfraEnvironment> environments = environmentService.getAllEnvironments();
         String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
@@ -1159,6 +1164,22 @@ public class BigQueryBatchService {
             }
         } catch (Exception e) {
             log.debug("Check/Create daily_recommender_inventory table skipped: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Recommender 데이터 테이블 초기화 (TRUNCATE)
+     * - Recommender 데이터는 일별 누적 적재하지 않고 최신 상태(Latest Snapshot)만 유지하도록 덮어쓰기 처리
+     * - daily_asset_inventory, jira_issue_inventory, daily_reservation_inventory 등 타 배치에는 일절 영향 없음
+     */
+    public void truncateDailyRecommenderTable() {
+        ensureDailyRecommenderTableExists();
+        try {
+            String truncateSql = String.format("TRUNCATE TABLE `%s.%s.daily_recommender_inventory`", targetProjectId, datasetName);
+            bigQuery.query(QueryJobConfiguration.newBuilder(truncateSql).build());
+            log.info("Successfully truncated table {}.{}.daily_recommender_inventory for latest snapshot overwrite", targetProjectId, datasetName);
+        } catch (Exception e) {
+            log.error("Failed to truncate daily_recommender_inventory table: {}", e.getMessage(), e);
         }
     }
 

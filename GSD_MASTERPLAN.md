@@ -1,70 +1,64 @@
-# 🚀 GCP Active Assist 권고사항 대상 리소스(target_resource_name) 전구간 파이프라인 연동 GSD 마스터플랜
+# 🚀 GCP Active Assist Recommender 최신 덮어쓰기(Truncate & Insert) 파이프라인 GSD 마스터플랜
 
-본 문서는 GCP Recommender API에서 수집되는 권고사항 데이터의 대상 리소스 식별자(Target Resource Name)를 BigQuery 테이블 스키마에 추가하고, 수집-적재-조회-프론트엔드 UI 뱃지 렌더링에 이르는 전구간 파이프라인을 완전 연동하기 위한 실행 계획서입니다.
+본 문서는 GCP Recommender API 권고사항 데이터를 BigQuery에 적재할 때, 히스토리를 누적하지 않고 최신 상태만 유지(Overwrite / Truncate & Insert)하도록 파이프라인을 수정하기 위한 실행 계획서입니다.
+
+---
+
+## 📌 핵심 설계 및 안전 규칙
+
+1. **Recommender 테이블 한정 TRUNCATE:**
+   - 오직 `daily_recommender_inventory` 테이블에만 적용하며, 자산(`daily_asset_inventory`), Jira(`jira_issue_inventory`), 예약(`daily_reservation_inventory`) 등 다른 테이블의 날짜별 누적(Append) 로직은 절대 변경하지 않습니다.
+2. **배치 시작 시점 1회 TRUNCATE 보장:**
+   - 전체 GCP 환경 및 프로젝트 순회 전(배치 시작 시점)에 `TRUNCATE TABLE daily_recommender_inventory`를 1회 실행하여, 모든 프로젝트의 최신 스냅샷이 온전히 담길 수 있도록 합니다.
+3. **무중단 DDL 및 안전 예외 처리:**
+   - 테이블이 없거나 쿼리 실패 시에도 `ensureDailyRecommenderTableExists()`를 통해 테이블을 먼저 보장하고, 에러를 안전하게 로깅합니다.
 
 ---
 
 ## 📊 작업 의존성 로드맵 (Dependency Graph)
 
 ```
-[Phase 1: repomix 기반 원인 분석 및 파싱 경로 설계] (완료)
-  ├─ 1.1 GcpRecommenderService: targetResources, operationGroups, description 3단계 추출 로직 확인
-  ├─ 1.2 BigQueryBatchService: daily_recommender_inventory 테이블 내 target_resource_name 컬럼 누락 식별
-  ├─ 1.3 MonthlyReportService: SELECT 쿼리 및 DTO 매핑 시 대상 리소스명 누락 분석
-  └─ 1.4 GcpMonthlyReportViewPage: 프론트엔드 [대상: xxx] 뱃지 렌더링 규격 정의
+[Phase 1: Recommender 적재 로직 분석 (repomix)] (완료)
+  ├─ 1.1 BigQueryBatchService.java 내 insertDailyRecommenderBatch 스트리밍 인서트(insertAll) 방식 확인
+  └─ 1.2 LoadJob 대신 DDL 쿼리(TRUNCATE TABLE)를 활용한 방법 A 채택
                    │
                    ▼
-[Phase 2: DB 스키마 추가 및 데이터 파이프라인 전구간 수정] (완료)
-  ├─ 2.1 BigQueryBatchService: daily_recommender_inventory DDL에 target_resource_name 추가 및 ALTER TABLE 안전 마이그레이션 (완료)
-  ├─ 2.2 BigQueryBatchService: insertDailyRecommenderBatch에 targetResourceName, priority 동적 바인딩 (완료)
-  ├─ 2.3 MonthlyReportService: fetchAllDailyRecommenders에서 target_resource_name 쿼리 및 formatRecommendationText 연동 (완료)
-  └─ 2.4 GcpMonthlyReportViewPage: [대상: xxx] 태그 감지 및 인디고 큐브 뱃지 직관적 UI 렌더링 고도화 (완료)
+[Phase 2: BigQueryBatchService 덮어쓰기 로직 구현 (GSD)] (진행 중)
+  ├─ 2.1 truncateDailyRecommenderTable() 전용 메서드 신설
+  ├─ 2.2 runDailySnapshotBatch() 시작 시점에 truncateDailyRecommenderTable() 1회 호출
+  └─ 2.3 타 배치(Asset, Jira, Reservation) 누적 적재 로직의 무결성 보존 확인
                    │
                    ▼
-[Phase 3: 수집 배치 1회 수동 트리거 및 E2E UI 렌더링 검증] (진행 중)
-  ├─ 3.1 Spring Boot 백엔드 컴파일 & Gradle bootJar 패키징
-  ├─ 3.2 수집 배치 1회 수동 트리거 및 BigQuery target_resource_name 적재 실시간 로그 확인
-  ├─ 3.3 로컬 8080 서버 재기동 및 GCP 리포트 화면 접속
-  └─ 3.4 Chrome CDP 기반 권고사항 리스트 내 [대상: 리소스명] 뱃지 렌더링 실측 100% 검증
+[Phase 3: 로컬 테스트 및 덮어쓰기 검증]
+  ├─ 3.1 BigQueryRecommenderOverwriteTest 단위 테스트 작성 및 실행
+  ├─ 3.2 TRUNCATE 실행 로그 및 최신 데이터 단일 스냅샷 적재 건수 검증
+  └─ 3.3 백엔드 빌드 및 배포 정합성 확인
                    │
                    ▼
-[Phase 4: GitHub 형상 관리 및 작업 이력 저장]
-  ├─ 4.1 feature/recommender-resource-mapping 브랜치 생성 및 상세 커밋
+[Phase 4: 형상 관리 및 커밋]
+  ├─ 4.1 feature/recommender-bq-overwrite 브랜치 생성 및 상세 커밋
   ├─ 4.2 WORK_HISTORY.md 및 task-observer 자동 기록
-  └─ 4.3 사용자 최종 완료 보고
+  └─ 4.3 최종 브리핑
 ```
 
 ---
 
 ## 🛠️ 세부 작업 분할 (Task Breakdown)
 
-### Task 1: `BigQueryBatchService.java` 스키마 및 적재 로직 수정
+### Task 1: `BigQueryBatchService.java` Recommender TRUNCATE 로직 추가
 - **수정 대상 파일:**
   - `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`
 - **구현 세부사항:**
-  1. `ensureDailyRecommenderTableExists()` DDL에 `target_resource_name STRING` 추가.
-  2. 기존 생성된 테이블을 위한 `ALTER TABLE `%s.%s.daily_recommender_inventory` ADD COLUMN IF NOT EXISTS target_resource_name STRING` 추가.
-  3. `insertDailyRecommenderBatch` 파라미터에 `String targetResourceName` 추가 및 `rowContent.put("target_resource_name", targetResourceName)`.
-  4. GCP Recommender 배치 수집 루프(라인 974)에서 `rec.getPriority()`와 `rec.getTargetResource()`를 전달.
+  1. `truncateDailyRecommenderTable()` 메서드 작성
+  2. `runDailySnapshotBatch()` 진입 시점에 `truncateDailyRecommenderTable()` 호출
+  3. `daily_asset_inventory` 등 타 배치에는 일절 영향 없도록 격리
 
-### Task 2: `MonthlyReportService.java` 조회 및 텍스트 조합 로직 수정
-- **수정 대상 파일:**
-  - `backend/src/main/java/com/example/infra/service/MonthlyReportService.java`
-- **구현 세부사항:**
-  1. `fetchAllDailyRecommenders()`의 `selectFields`에 `target_resource_name` 추가.
-  2. `row.get("target_resource_name")` 값이 존재하면 이를 우선 사용하고, 없으면 `extractTargetFromDescription`으로 Fallback.
-  3. `GcpRecommenderService.formatRecommendationText(prio, targetRes, koreanDesc)`로 규격화하여 리스트에 적재.
+### Task 2: 로컬 단위 테스트 및 검증
+- **테스트 파일:**
+  - `backend/src/test/java/com/example/infra/BigQueryRecommenderOverwriteTest.java`
+- **검증 내용:**
+  - `truncateDailyRecommenderTable()` 호출 후 테이블 카운트 0건 확인
+  - Recommender 수집 및 적재 후 최신 데이터만 정상 존재하는지 확인
 
-### Task 3: `GcpMonthlyReportViewPage.tsx` 프론트엔드 뱃지 렌더링 고도화
-- **수정 대상 파일:**
-  - `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
-- **구현 세부사항:**
-  1. `renderRecommendationItem`에서 `[대상: xxx]` 및 `[Target: xxx]`를 정밀 파싱.
-  2. 리소스명을 깔끔한 인디고 큐브 뱃지(`<i className="fas fa-cube mr-1"></i>{targetTag}`)로 렌더링.
-
-### Task 4: 통합 빌드, 수동 배치 트리거 및 E2E 검증
-- **수행 작업:**
-  - `bootJar` 패키징 및 백엔드 8080 서버 재배포
-  - 수동 배치 트리거 후 BigQuery `daily_recommender_inventory` 적재 검증
-  - Chrome CDP Headless로 대시보드 권고사항 리스트 내 리소스 뱃지 실측 E2E 검증
-  - `feature/recommender-resource-mapping` 브랜치 커밋 및 `WORK_HISTORY.md` 기록
+### Task 3: 형상 관리 및 브리핑
+- `feature/recommender-bq-overwrite` 브랜치 커밋 및 브리핑
