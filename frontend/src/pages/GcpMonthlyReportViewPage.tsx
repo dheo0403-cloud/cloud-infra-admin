@@ -164,7 +164,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
     // Editable Work Logs
     const [editWorkLogs, setEditWorkLogs] = useState<WorkLogItem[]>([]);
-    const [savingText, setSavingText] = useState<boolean>(false);
     const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
 
 
@@ -334,42 +333,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
     // Automatically load report on manual button click only
     // (Removed auto-fetch useEffect to allow manual selection before generation)
-
-    const handleSaveText = async () => {
-        if (!selectedProject) return;
-        setSavingText(true);
-        try {
-            const res = await fetch('/api/reports/gcp/monthly/save', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectId: selectedProject,
-                    targetYearMonth: selectedYearMonth,
-                    customComments: editComments,
-                    customRecommendations: editRecommendations,
-                    mspSalesContact: editSalesContact,
-                    mspTechContact: editTechContact,
-                    mspGrade: editGrade,
-                    customRecSecurity: editRecSecurity,
-                    customRecCost: editRecCost,
-                    customRecPerformance: editRecPerformance,
-                    customExecSecurity: editExecSecurity,
-                    customExecCost: editExecCost,
-                    customExecPerformance: editExecPerformance,
-                    customWorkLogs: JSON.stringify(editWorkLogs)
-                })
-            });
-            if (res.ok) {
-                alert("보고서 작성 내용이 성공적으로 저장되었습니다!");
-                fetchReport();
-            }
-        } catch (e) {
-            console.error("Failed to save report text", e);
-            alert("저장 중 오류가 발생했습니다.");
-        } finally {
-            setSavingText(false);
-        }
-    };
 
     const handleGenerateAiSummary = async () => {
         if (!reportData) return;
@@ -544,17 +507,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     cursor: pointer;
                 }
                 .btn-edit.active { background-color: #f59e0b; }
-
-                .btn-save {
-                    background-color: #059669;
-                    color: #ffffff;
-                    font-size: 12px;
-                    font-weight: 700;
-                    padding: 6px 12px;
-                    border-radius: 6px;
-                    border: none;
-                    cursor: pointer;
-                }
 
                 .btn-generate {
                     background-color: #2563eb;
@@ -827,12 +779,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             <i className={`fas ${isEditMode ? 'fa-check' : 'fa-edit'} mr-1`}></i>
                             {isEditMode ? '편집 종료' : '편집 모드'}
                         </button>
-
-                        {isEditMode && (
-                            <button className="btn-save" onClick={handleSaveText} disabled={savingText}>
-                                <i className="fas fa-save mr-1"></i>{savingText ? '저장 중...' : '작성 내용 저장'}
-                            </button>
-                        )}
 
                         <button className="btn-pdf" onClick={handlePrint} disabled={!reportData}>
                             <i className="fas fa-file-pdf"></i> PDF 저장 / 인쇄
