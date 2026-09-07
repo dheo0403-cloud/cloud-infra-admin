@@ -704,7 +704,7 @@ public class MonthlyReportService {
         map.put("PERFORMANCE", new ArrayList<>());
         map.put("RELIABILITY", new ArrayList<>());
 
-        String selectFields = "category, priority, recommendation_description";
+        String selectFields = "category, priority, target_resource_name, recommendation_description";
         String whereClause = "WHERE project_id = @projectId AND STARTS_WITH(CAST(snapshot_date AS STRING), @yearMonthPrefix) " +
                 "ORDER BY CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 WHEN 'LOW' THEN 4 ELSE 5 END, snapshot_date DESC";
 
@@ -723,10 +723,19 @@ public class MonthlyReportService {
                         if (!row.get("priority").isNull()) prio = row.get("priority").getStringValue();
                     } catch (Exception ignored) {}
 
+                    String targetRes = "";
+                    try {
+                        if (!row.get("target_resource_name").isNull()) {
+                            targetRes = row.get("target_resource_name").getStringValue();
+                        }
+                    } catch (Exception ignored) {}
+
                     if (desc != null && !desc.isEmpty() && map.containsKey(cat)) {
                         String koreanDesc = gcpRecommenderService.translateRecommendationToKorean(desc);
-                        String targetRes = GcpRecommenderService.extractTargetFromDescription(desc);
-                        if (targetRes.isEmpty()) {
+                        if (targetRes == null || targetRes.trim().isEmpty()) {
+                            targetRes = GcpRecommenderService.extractTargetFromDescription(desc);
+                        }
+                        if (targetRes == null || targetRes.trim().isEmpty()) {
                             targetRes = GcpRecommenderService.extractTargetFromDescription(koreanDesc);
                         }
 

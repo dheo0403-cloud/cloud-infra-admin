@@ -1,34 +1,35 @@
-# 🚀 대시보드 지표 카드 0건/미사용 시 회색(비활성화) 조건부 스타일링 일관성 적용 GSD 마스터플랜
+# 🚀 GCP Active Assist 권고사항 대상 리소스(target_resource_name) 전구간 파이프라인 연동 GSD 마스터플랜
 
-본 문서는 Cloud Infra Admin 리포트 대시보드 화면(`GcpMonthlyReportViewPage.tsx`)의 핵심 지표 카드들(LB, GKE, Cloud Run, Cloud SQL, Cloud VPN, VPC) 중, 자원이 0개이거나 미사용(N/A) 상태일 때 모든 지표 카드가 일관되게 회색(비활성화) 테마로 렌더링되도록 표준화하기 위한 실행 계획서입니다.
+본 문서는 GCP Recommender API에서 수집되는 권고사항 데이터의 대상 리소스 식별자(Target Resource Name)를 BigQuery 테이블 스키마에 추가하고, 수집-적재-조회-프론트엔드 UI 뱃지 렌더링에 이르는 전구간 파이프라인을 완전 연동하기 위한 실행 계획서입니다.
 
 ---
 
 ## 📊 작업 의존성 로드맵 (Dependency Graph)
 
 ```
-[Phase 1: repomix 기반 컴포넌트 로직 분석 및 차이 식별] (완료)
-  ├─ 1.1 LB/GKE 컴포넌트의 isLbExist / isGkeExist 조건부 회색 렌더링 패턴 분석
-  ├─ 1.2 Cloud Run / Cloud SQL / Cloud VPN / VPC의 하드코딩된 원색 스타일 결함 식별
-  └─ 1.3 표준 회색(비활성화) 디자인 토큰(#f8fafc, #e2e8f0, #94a3b8, #64748b) 규격화
+[Phase 1: repomix 기반 원인 분석 및 파싱 경로 설계] (완료)
+  ├─ 1.1 GcpRecommenderService: targetResources, operationGroups, description 3단계 추출 로직 확인
+  ├─ 1.2 BigQueryBatchService: daily_recommender_inventory 테이블 내 target_resource_name 컬럼 누락 식별
+  ├─ 1.3 MonthlyReportService: SELECT 쿼리 및 DTO 매핑 시 대상 리소스명 누락 분석
+  └─ 1.4 GcpMonthlyReportViewPage: 프론트엔드 [대상: xxx] 뱃지 렌더링 규격 정의
                    │
                    ▼
-[Phase 2: 전 지표 카드 조건부 회색 스타일링 일괄 적용] (진행 중)
-  ├─ 2.1 Cloud Run 핵심 지표: isCloudRunExist (총 서비스/Job > 0) 기준 3개 카드 회색 분기
-  ├─ 2.2 Cloud SQL 핵심 지표: isSqlExist (sqlTotal > 0) 기준 HA/DB엔진/백업 3개 카드 회색 분기
-  ├─ 2.3 Cloud VPN 핵심 지표: isVpnExist (displayTot > 0) 기준 총 수량/암호화/연결률 카드 회색 분기
-  └─ 2.4 VPC 핵심 지표: totalIp > 0 / totalFw > 0 기준 프로그레스바 및 레이블 회색 분기
+[Phase 2: DB 스키마 추가 및 데이터 파이프라인 전구간 수정] (진행 중)
+  ├─ 2.1 BigQueryBatchService: daily_recommender_inventory DDL에 target_resource_name 추가 및 ALTER TABLE 안전 마이그레이션
+  ├─ 2.2 BigQueryBatchService: insertDailyRecommenderBatch에 targetResourceName, priority 동적 바인딩
+  ├─ 2.3 MonthlyReportService: fetchAllDailyRecommenders에서 target_resource_name 쿼리 및 formatRecommendationText 연동
+  └─ 2.4 GcpMonthlyReportViewPage: [대상: xxx] 태그 감지 및 인디고 큐브 뱃지 직관적 UI 렌더링 고도화
                    │
                    ▼
-[Phase 3: 프론트엔드 빌드 및 Playwright/Chrome CDP E2E 렌더링 검증]
-  ├─ 3.1 프론트엔드 TypeScript 컴파일 & Vite 빌드
-  ├─ 3.2 0건 자원(Cloud Run, Cloud SQL, Cloud VPN 등) mock 데이터 기반 DOM 실측
-  ├─ 3.3 회색 배경(#f8fafc), 회색 바(#94a3b8), N/A 뱃지 및 콘솔 에러 0건 확인
-  └─ 3.4 통합 패키징(bootJar) 및 8080 서버 재배포
+[Phase 3: 수집 배치 1회 수동 트리거 및 Chrome CDP E2E 검증]
+  ├─ 3.1 Spring Boot 백엔드 컴파일 & Gradle bootJar 패키징
+  ├─ 3.2 수집 배치 1회 수동 트리거 및 BigQuery target_resource_name 적재 실시간 로그 확인
+  ├─ 3.3 로컬 8080 서버 재기동 및 GCP 리포트 화면 접속
+  └─ 3.4 Chrome CDP 기반 권고사항 리스트 내 [대상: 리소스명] 뱃지 렌더링 실측 100% 검증
                    │
                    ▼
 [Phase 4: GitHub 형상 관리 및 작업 이력 저장]
-  ├─ 4.1 fix/empty-metric-gray-styles 브랜치 생성 및 상세 커밋
+  ├─ 4.1 feature/recommender-resource-mapping 브랜치 생성 및 상세 커밋
   ├─ 4.2 WORK_HISTORY.md 및 task-observer 자동 기록
   └─ 4.3 사용자 최종 완료 보고
 ```
@@ -37,26 +38,33 @@
 
 ## 🛠️ 세부 작업 분할 (Task Breakdown)
 
-### Task 1: `GcpMonthlyReportViewPage.tsx` 조건부 회색 렌더링 일괄 적용
+### Task 1: `BigQueryBatchService.java` 스키마 및 적재 로직 수정
+- **수정 대상 파일:**
+  - `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`
+- **구현 세부사항:**
+  1. `ensureDailyRecommenderTableExists()` DDL에 `target_resource_name STRING` 추가.
+  2. 기존 생성된 테이블을 위한 `ALTER TABLE `%s.%s.daily_recommender_inventory` ADD COLUMN IF NOT EXISTS target_resource_name STRING` 추가.
+  3. `insertDailyRecommenderBatch` 파라미터에 `String targetResourceName` 추가 및 `rowContent.put("target_resource_name", targetResourceName)`.
+  4. GCP Recommender 배치 수집 루프(라인 974)에서 `rec.getPriority()`와 `rec.getTargetResource()`를 전달.
+
+### Task 2: `MonthlyReportService.java` 조회 및 텍스트 조합 로직 수정
+- **수정 대상 파일:**
+  - `backend/src/main/java/com/example/infra/service/MonthlyReportService.java`
+- **구현 세부사항:**
+  1. `fetchAllDailyRecommenders()`의 `selectFields`에 `target_resource_name` 추가.
+  2. `row.get("target_resource_name")` 값이 존재하면 이를 우선 사용하고, 없으면 `extractTargetFromDescription`으로 Fallback.
+  3. `GcpRecommenderService.formatRecommendationText(prio, targetRes, koreanDesc)`로 규격화하여 리스트에 적재.
+
+### Task 3: `GcpMonthlyReportViewPage.tsx` 프론트엔드 뱃지 렌더링 고도화
 - **수정 대상 파일:**
   - `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
 - **구현 세부사항:**
-  1. **Cloud Run 핵심 지표:**
-     - `const isCrExist = (ingAll + ingInt + jobTot) > 0;` (또는 `reportData.cloudRunSummary?.totalServices > 0`)
-     - 배경색: `isCrExist ? '#fffbe6' : '#f8fafc'`, 보더: `isCrExist ? '#ffe58f' : '#e2e8f0'`, 좌측바: `isCrExist ? '#d97706' : '#94a3b8'`
-     - 아이콘 및 텍스트/수치: `isCrExist ? '#d97706' : '#64748b'`, 서브텍스트: `isCrExist ? ... : '미사용 (배포된 서비스 없음)'`
-     - 내부 접근 서비스 & Jobs 카드도 동일하게 `isCrExist` 기준으로 비활성화 회색 처리.
-  2. **Cloud SQL 핵심 지표:**
-     - `const isSqlExist = sqlTot > 0;`
-     - HA 구성 카드, DB 엔진 버전 카드, 자동 백업/PITR 카드 3종 모두 `isSqlExist`가 false일 때 `#f8fafc`, `#e2e8f0`, `#94a3b8`, `#64748b` 회색 적용 및 "미사용" 뱃지 표시.
-  3. **Cloud VPN 핵심 지표:**
-     - `const isVpnExist = displayTot > 0;`
-     - 상단 요약 카드: `isVpnExist ? '#fffbeb' : '#f8fafc'`, 좌측바: `isVpnExist ? '#f59e0b' : '#94a3b8'`, 아이콘: `isVpnExist ? '#d97706' : '#64748b'`, 우측 수치: `isVpnExist ? `${displayTot}개` : '0개 (N/A)'`
-     - 프로그레스 바: `isVpnExist ? '#0284c7' : '#cbd5e1'`, 텍스트: `isVpnExist ? ... : '#64748b'`
-  4. **VPC 핵심 지표:**
-     - IP 사용률 & 방화벽 로그율: `totalIp > 0`, `totalFw > 0`일 때만 강조색, 0일 때는 회색(`#64748b`, `#cbd5e1`) 렌더링.
+  1. `renderRecommendationItem`에서 `[대상: xxx]` 및 `[Target: xxx]`를 정밀 파싱.
+  2. 리소스명을 깔끔한 인디고 큐브 뱃지(`<i className="fas fa-cube mr-1"></i>{targetTag}`)로 렌더링.
 
-### Task 2: 자동화 UI 실측 검증 및 형상 관리
-- **검증 및 커밋:**
-  - Chrome CDP로 0건인 프로젝트/데이터 렌더링 시 background, border, color CSS 속성 실측 검증
-  - `fix/empty-metric-gray-styles` 브랜치 커밋 및 `WORK_HISTORY.md` 기록
+### Task 4: 통합 빌드, 수동 배치 트리거 및 E2E 검증
+- **수행 작업:**
+  - `bootJar` 패키징 및 백엔드 8080 서버 재배포
+  - 수동 배치 트리거 후 BigQuery `daily_recommender_inventory` 적재 검증
+  - Chrome CDP Headless로 대시보드 권고사항 리스트 내 리소스 뱃지 실측 E2E 검증
+  - `feature/recommender-resource-mapping` 브랜치 커밋 및 `WORK_HISTORY.md` 기록

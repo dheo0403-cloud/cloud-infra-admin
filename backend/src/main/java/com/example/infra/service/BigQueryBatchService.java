@@ -971,7 +971,9 @@ public class BigQueryBatchService {
                         for (String cat : Arrays.asList("SECURITY", "COST", "PERFORMANCE", "RELIABILITY", "MANAGABILITY", "SUSTAINABILITY")) {
                             List<GcpRecommenderService.GcpRecommendation> realRecs = gcpRecommenderService.fetchRealGcpRecommendations(credentials, projectId, cat);
                             for (GcpRecommenderService.GcpRecommendation rec : realRecs) {
-                                insertDailyRecommenderBatch(snapshotDate, projectId, customerName, cat, "HIGH", rec.getRecommenderId(), rec.getDescription());
+                                String prio = rec.getPriority() != null && !rec.getPriority().isEmpty() ? rec.getPriority() : "MEDIUM";
+                                String targetRes = rec.getTargetResource() != null ? rec.getTargetResource() : "";
+                                insertDailyRecommenderBatch(snapshotDate, projectId, customerName, cat, prio, rec.getRecommenderId(), targetRes, rec.getDescription());
                             }
                         }
                         log.info("GCP Active Assist Recommender: successfully collected real recommendations for project {}", projectId);
@@ -1138,17 +1140,29 @@ public class BigQueryBatchService {
                 "  category STRING," +
                 "  priority STRING," +
                 "  recommender_id STRING," +
+                "  target_resource_name STRING," +
                 "  recommendation_description STRING," +
                 "  created_at TIMESTAMP" +
                 ")", targetProjectId, datasetName
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
+
+            // 기존 테이블에 target_resource_name 컬럼이 없는 경우를 위한 안전 마이그레이션 DDL
+            try {
+                String alterTableDdl = String.format(
+                    "ALTER TABLE `%s.%s.daily_recommender_inventory` ADD COLUMN IF NOT EXISTS target_resource_name STRING",
+                    targetProjectId, datasetName
+                );
+                bigQuery.query(QueryJobConfiguration.newBuilder(alterTableDdl).build());
+            } catch (Exception alterEx) {
+                log.debug("ALTER TABLE target_resource_name skipped/already exists: {}", alterEx.getMessage());
+            }
         } catch (Exception e) {
             log.debug("Check/Create daily_recommender_inventory table skipped: {}", e.getMessage());
         }
     }
 
-    private void insertDailyRecommenderBatch(String snapshotDate, String projectId, String customerName, String category, String priority, String recommenderId, String description) {
+    private void insertDailyRecommenderBatch(String snapshotDate, String projectId, String customerName, String category, String priority, String recommenderId, String targetResourceName, String description) {
         ensureDailyRecommenderTableExists();
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_recommender_inventory");
         Map<String, Object> rowContent = new HashMap<>();
@@ -1158,6 +1172,7 @@ public class BigQueryBatchService {
         rowContent.put("category", category);
         rowContent.put("priority", priority);
         rowContent.put("recommender_id", recommenderId);
+        rowContent.put("target_resource_name", targetResourceName != null ? targetResourceName : "");
         rowContent.put("recommendation_description", description);
         rowContent.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
 
@@ -1169,7 +1184,7 @@ public class BigQueryBatchService {
             if (response.hasErrors()) {
                 log.error("BigQuery insert error for daily_recommender_inventory: {}", response.getInsertErrors());
             } else {
-                log.info("Successfully inserted daily recommender batch for {} / {} / {} into {}.{}", projectId, category, recommenderId, targetProjectId, datasetName);
+                log.info("Successfully inserted daily recommender batch for {} / {} / {} / {} into {}.{}", projectId, category, recommenderId, targetResourceName, targetProjectId, datasetName);
             }
         } catch (Exception e) {
             log.error("BigQuery insert failed for daily_recommender_inventory", e);

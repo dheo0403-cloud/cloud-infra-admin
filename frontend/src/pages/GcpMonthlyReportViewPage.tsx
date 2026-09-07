@@ -182,11 +182,11 @@ const GcpMonthlyReportViewPage: React.FC = () => {
             text = text.substring(prioMatch[0].length).trim();
         }
 
-        // 2. [대상: xxx] 또는 [Target: xxx] 대상 리소스명 추출
-        const targetMatch = text.match(/^\[(?:대상|Target):\s*([^\]]+)\]\s*/i);
+        // 2. [대상: xxx], [Target: xxx], [리소스: xxx] 대상 리소스명 추출
+        const targetMatch = text.match(/\[(?:대상|Target|리소스|Resource):\s*([^\]]+)\]/i);
         if (targetMatch) {
             targetTag = targetMatch[1].trim();
-            text = text.substring(targetMatch[0].length).trim();
+            text = text.replace(targetMatch[0], '').trim();
         }
 
         const getPrioBadgeStyle = (prio: string) => {
@@ -217,18 +217,19 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                 )}
                 {targetTag && (
                     <span style={{
-                        fontSize: '10px',
+                        fontSize: '10.5px',
                         fontWeight: 700,
                         backgroundColor: '#e0e7ff',
                         color: '#3730a3',
                         border: '1px solid #c7d2fe',
-                        padding: '1px 6px',
+                        padding: '2px 7px',
                         borderRadius: '4px',
                         marginRight: '6px',
                         display: 'inline-block',
-                        verticalAlign: 'middle'
+                        verticalAlign: 'middle',
+                        boxShadow: '0 1px 2px rgba(55, 48, 163, 0.08)'
                     }}>
-                        <i className="fas fa-cube mr-1" style={{ fontSize: '9px' }}></i>{targetTag}
+                        <i className="fas fa-cube mr-1" style={{ fontSize: '9.5px', color: '#4f46e5' }}></i>{targetTag}
                     </span>
                 )}
                 <span>{text}</span>
