@@ -1485,15 +1485,18 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                             const usedIp = reportData.ipSummary?.externalUsed || 0;
                                             const unusedIp = reportData.ipSummary?.externalUnused || 0;
                                             const totalIp = usedIp + unusedIp;
-                                            const ipPct = totalIp > 0 ? Math.round((usedIp / totalIp) * 100) : 0;
+                                            const isIpExist = totalIp > 0;
+                                            const ipPct = isIpExist ? Math.round((usedIp / totalIp) * 100) : 0;
                                             return (
                                                 <>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                                         <span style={{ color: '#475569' }}>VPC External Static IP 사용률</span>
-                                                        <span style={{ fontWeight: 700, color: '#2563eb' }}>{ipPct}% ({usedIp}/{totalIp}개 사용 중)</span>
+                                                        <span style={{ fontWeight: 700, color: isIpExist ? '#2563eb' : '#64748b' }}>
+                                                            {isIpExist ? `${ipPct}% (${usedIp}/${totalIp}개 사용 중)` : '0개 (데이터 없음)'}
+                                                        </span>
                                                     </div>
                                                     <div className="progress-bar-bg">
-                                                        <div className="progress-bar-fill" style={{ width: `${ipPct}%`, backgroundColor: '#3b82f6' }}></div>
+                                                        <div className="progress-bar-fill" style={{ width: `${ipPct}%`, backgroundColor: isIpExist ? '#3b82f6' : '#cbd5e1' }}></div>
                                                     </div>
                                                 </>
                                             );
@@ -1504,15 +1507,18 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         {(() => {
                                             const loggingFw = reportData.fwSummary?.loggingEnabled || 0;
                                             const totalFw = reportData.fwSummary?.totalRules || 0;
-                                            const fwPct = totalFw > 0 ? Math.round((loggingFw / totalFw) * 100) : 0;
+                                            const isFwExist = totalFw > 0;
+                                            const fwPct = isFwExist ? Math.round((loggingFw / totalFw) * 100) : 0;
                                             return (
                                                 <>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                                         <span style={{ color: '#475569' }}>방화벽 로그 활성화율</span>
-                                                        <span style={{ fontWeight: 700, color: '#d97706' }}>{fwPct}% ({loggingFw}/{totalFw}개 설정됨)</span>
+                                                        <span style={{ fontWeight: 700, color: isFwExist ? '#d97706' : '#64748b' }}>
+                                                            {isFwExist ? `${fwPct}% (${loggingFw}/${totalFw}개 설정됨)` : '0개 (데이터 없음)'}
+                                                        </span>
                                                     </div>
                                                     <div className="progress-bar-bg">
-                                                        <div className="progress-bar-fill" style={{ width: `${fwPct}%`, backgroundColor: '#f59e0b' }}></div>
+                                                        <div className="progress-bar-fill" style={{ width: `${fwPct}%`, backgroundColor: isFwExist ? '#f59e0b' : '#cbd5e1' }}></div>
                                                     </div>
                                                 </>
                                             );
@@ -1785,75 +1791,113 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const ingAll = reportData.cloudRunSummary?.ingressAll || 0;
                                     const ingInt = reportData.cloudRunSummary?.ingressInternal || 0;
                                     const jobTot = reportData.cloudRunSummary?.jobTotal || 0;
+                                    const crTotal = (reportData.cloudRunSummary?.totalServices || 0) + jobTot;
+                                    const isCrExist = crTotal > 0 || (ingAll + ingInt + jobTot) > 0;
 
                                     return (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: 'auto 0' }}>
                                             {/* Card 1: External Access Services */}
                                             <div style={{
                                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px',
-                                                backgroundColor: '#fffbe6', border: '1px solid #ffe58f', borderRadius: '8px', position: 'relative'
+                                                backgroundColor: isCrExist ? '#fffbe6' : '#f8fafc',
+                                                border: isCrExist ? '1px solid #ffe58f' : '1px solid #e2e8f0',
+                                                borderRadius: '8px', position: 'relative'
                                             }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#d97706', borderRadius: '8px 0 0 8px' }}></div>
+                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isCrExist ? '#d97706' : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                                                     <div style={{
-                                                        width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#fef3c7',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706', fontSize: '12px'
+                                                        width: '28px', height: '28px', borderRadius: '50%',
+                                                        backgroundColor: isCrExist ? '#fef3c7' : '#f1f5f9',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: isCrExist ? '#d97706' : '#64748b', fontSize: '12px'
                                                     }}>
                                                         <i className="fas fa-globe"></i>
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>외부 접근 허용 서비스 수</span>
-                                                        <span style={{ display: 'block', fontSize: '9px', color: '#78350f', marginTop: '1px' }}>INGRESS_TRAFFIC_ALL 설정</span>
+                                                        <span style={{ display: 'block', fontSize: '9px', color: isCrExist ? '#78350f' : '#64748b', marginTop: '1px' }}>
+                                                            {isCrExist ? 'INGRESS_TRAFFIC_ALL 설정' : '미사용 (배포된 서비스 없음)'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#d97706' }}>{ingAll}개</span>
+                                                    {isCrExist ? (
+                                                        <span style={{ fontSize: '13px', fontWeight: 900, color: '#d97706' }}>{ingAll}개</span>
+                                                    ) : (
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                                            N/A
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 
                                             {/* Card 2: Internal Access Services */}
                                             <div style={{
                                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px',
-                                                backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', position: 'relative'
+                                                backgroundColor: isCrExist ? '#f0fdf4' : '#f8fafc',
+                                                border: isCrExist ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                                borderRadius: '8px', position: 'relative'
                                             }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#10b981', borderRadius: '8px 0 0 8px' }}></div>
+                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isCrExist ? '#10b981' : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                                                     <div style={{
-                                                        width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#dcfce7',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '12px'
+                                                        width: '28px', height: '28px', borderRadius: '50%',
+                                                        backgroundColor: isCrExist ? '#dcfce7' : '#f1f5f9',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: isCrExist ? '#16a34a' : '#64748b', fontSize: '12px'
                                                     }}>
                                                         <i className="fas fa-shield-alt"></i>
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>내부 접근 허용 서비스 수</span>
-                                                        <span style={{ display: 'block', fontSize: '9px', color: '#14532d', marginTop: '1px' }}>VPC / Internal LB 트래픽 전용</span>
+                                                        <span style={{ display: 'block', fontSize: '9px', color: isCrExist ? '#14532d' : '#64748b', marginTop: '1px' }}>
+                                                            {isCrExist ? 'VPC / Internal LB 트래픽 전용' : '미사용 (배포된 서비스 없음)'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#16a34a' }}>{ingInt}개</span>
+                                                    {isCrExist ? (
+                                                        <span style={{ fontSize: '13px', fontWeight: 900, color: '#16a34a' }}>{ingInt}개</span>
+                                                    ) : (
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                                            N/A
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 
                                             {/* Card 3: Cloud Run Jobs Count */}
                                             <div style={{
                                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px',
-                                                backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', position: 'relative'
+                                                backgroundColor: isCrExist ? '#f5f3ff' : '#f8fafc',
+                                                border: isCrExist ? '1px solid #ddd6fe' : '1px solid #e2e8f0',
+                                                borderRadius: '8px', position: 'relative'
                                             }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#7c3aed', borderRadius: '8px 0 0 8px' }}></div>
+                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isCrExist ? '#7c3aed' : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                                                     <div style={{
-                                                        width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ede9fe',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6d28d9', fontSize: '12px'
+                                                        width: '28px', height: '28px', borderRadius: '50%',
+                                                        backgroundColor: isCrExist ? '#ede9fe' : '#f1f5f9',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: isCrExist ? '#6d28d9' : '#64748b', fontSize: '12px'
                                                     }}>
                                                         <i className="fas fa-tasks"></i>
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>Cloud Run Jobs 총 개수</span>
-                                                        <span style={{ display: 'block', fontSize: '9px', color: '#5b21b6', marginTop: '1px' }}>배치 및 온디맨드 실행 태스크</span>
+                                                        <span style={{ display: 'block', fontSize: '9px', color: isCrExist ? '#5b21b6' : '#64748b', marginTop: '1px' }}>
+                                                            {isCrExist ? '배치 및 온디맨드 실행 태스크' : '미사용 (설정된 Job 없음)'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <span style={{ fontSize: '13px', fontWeight: 900, color: '#6d28d9' }}>{jobTot}개</span>
+                                                    {isCrExist ? (
+                                                        <span style={{ fontSize: '13px', fontWeight: 900, color: '#6d28d9' }}>{jobTot}개</span>
+                                                    ) : (
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                                            N/A
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -1929,24 +1973,43 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const vpnDisconn = reportData.vpnSummary?.disconnectedTunnels || 0;
                                     const vpnTot = reportData.vpnSummary?.totalTunnels != null ? reportData.vpnSummary.totalTunnels : (vpnConn + vpnDisconn);
                                     const displayTot = vpnTot;
-                                    const connPct = vpnTot > 0 ? Math.round((vpnConn / vpnTot) * 100) : 0;
+                                    const isVpnExist = displayTot > 0;
+                                    const connPct = isVpnExist ? Math.round((vpnConn / displayTot) * 100) : 0;
 
                                     return (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                             {/* Card Style matching 2nd image */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '10px', position: 'relative' }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#f59e0b', borderRadius: '10px 0 0 10px' }}></div>
+                                            <div style={{
+                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px',
+                                                backgroundColor: isVpnExist ? '#fffbeb' : '#f8fafc',
+                                                border: isVpnExist ? '1px solid #fef3c7' : '1px solid #e2e8f0',
+                                                borderRadius: '10px', position: 'relative'
+                                            }}>
+                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isVpnExist ? '#f59e0b' : '#94a3b8', borderRadius: '10px 0 0 10px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
-                                                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706', fontSize: '12px' }}>
+                                                    <div style={{
+                                                        width: '32px', height: '32px', borderRadius: '50%',
+                                                        backgroundColor: isVpnExist ? '#fef3c7' : '#f1f5f9',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        color: isVpnExist ? '#d97706' : '#64748b', fontSize: '12px'
+                                                    }}>
                                                         <i className="fas fa-lock"></i>
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>Cloud VPN 총 수량</span>
-                                                        <span style={{ display: 'block', fontSize: '9px', color: '#b45309', marginTop: '1px' }}>{displayTot > 0 ? 'IPsec IKEv2 터널 암호화 설정' : '미사용 (설정된 VPN 터널 없음)'}</span>
+                                                        <span style={{ display: 'block', fontSize: '9px', color: isVpnExist ? '#b45309' : '#64748b', marginTop: '1px' }}>
+                                                            {isVpnExist ? 'IPsec IKEv2 터널 암호화 설정' : '미사용 (설정된 VPN 터널 없음)'}
+                                                        </span>
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <span style={{ fontSize: '16px', fontWeight: 900, color: '#d97706' }}>{displayTot}<span style={{ fontSize: '11px', fontWeight: 700, color: '#d97706', marginLeft: '2px' }}>개</span></span>
+                                                    {isVpnExist ? (
+                                                        <span style={{ fontSize: '16px', fontWeight: 900, color: '#d97706' }}>{displayTot}<span style={{ fontSize: '11px', fontWeight: 700, color: '#d97706', marginLeft: '2px' }}>개</span></span>
+                                                    ) : (
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                                            0개 (N/A)
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -1954,12 +2017,12 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                             <div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                                                     <span style={{ fontSize: '10px', color: '#475569', fontWeight: 600 }}>VPN 터널 암호화 (IPsec IKEv2)</span>
-                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#0284c7' }}>
-                                                        {displayTot > 0 ? `100% (${displayTot}/${displayTot}개 사용 중)` : '0% (0/0개 사용 중)'}
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: isVpnExist ? '#0284c7' : '#64748b' }}>
+                                                        {isVpnExist ? `100% (${displayTot}/${displayTot}개 사용 중)` : '0% (0/0개 사용 중)'}
                                                     </span>
                                                 </div>
                                                 <div className="progress-bar-bg" style={{ height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                                    <div style={{ width: displayTot > 0 ? '100%' : '0%', backgroundColor: '#0284c7', height: '100%', borderRadius: '3px' }}></div>
+                                                    <div style={{ width: isVpnExist ? '100%' : '0%', backgroundColor: isVpnExist ? '#0284c7' : '#cbd5e1', height: '100%', borderRadius: '3px' }}></div>
                                                 </div>
                                             </div>
 
@@ -1967,12 +2030,12 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                             <div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
                                                     <span style={{ fontSize: '10px', color: '#475569', fontWeight: 600 }}>Cloud VPN 터널 정상 연결률</span>
-                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#10b981' }}>
-                                                        {displayTot > 0 ? `${connPct}% (${vpnConn}/${displayTot}개 연결됨)` : '0% (0/0개 연결됨)'}
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: isVpnExist ? '#10b981' : '#64748b' }}>
+                                                        {isVpnExist ? `${connPct}% (${vpnConn}/${displayTot}개 연결됨)` : '0% (0/0개 연결됨)'}
                                                     </span>
                                                 </div>
                                                 <div className="progress-bar-bg" style={{ height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                                    <div style={{ width: `${connPct}%`, backgroundColor: '#10b981', height: '100%', borderRadius: '3px' }}></div>
+                                                    <div style={{ width: `${connPct}%`, backgroundColor: isVpnExist ? '#10b981' : '#cbd5e1', height: '100%', borderRadius: '3px' }}></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2026,80 +2089,111 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                                     {(() => {
                                         const sqlTot = reportData.sqlTotal || 0;
+                                        const isSqlExist = sqlTot > 0;
                                         const haCount = reportData.sqlHaTypes?.HA || 0;
                                         const engineName = (reportData.sqlEngines && Object.keys(reportData.sqlEngines).length > 0)
                                             ? Object.keys(reportData.sqlEngines).join(', ')
-                                            : (sqlTot > 0 ? 'PostgreSQL' : '없음');
+                                            : (isSqlExist ? 'PostgreSQL' : '없음');
 
                                         return (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: 'auto 0' }}>
                                                 {/* Card 1: HA Configuration */}
                                                 <div style={{
                                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px',
-                                                    backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', position: 'relative'
+                                                    backgroundColor: isSqlExist ? '#f0fdf4' : '#f8fafc',
+                                                    border: isSqlExist ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                                    borderRadius: '8px', position: 'relative'
                                                 }}>
-                                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#10b981', borderRadius: '8px 0 0 8px' }}></div>
+                                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isSqlExist ? '#10b981' : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                                                         <div style={{
-                                                            width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#dcfce7',
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', fontSize: '12px'
+                                                            width: '28px', height: '28px', borderRadius: '50%',
+                                                            backgroundColor: isSqlExist ? '#dcfce7' : '#f1f5f9',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: isSqlExist ? '#16a34a' : '#64748b', fontSize: '12px'
                                                         }}>
                                                             <i className="fas fa-shield-alt"></i>
                                                         </div>
                                                         <div>
                                                             <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>고가용성 (HA) 구성</span>
-                                                            <span style={{ display: 'block', fontSize: '9px', color: '#14532d', marginTop: '1px' }}>Regional HA 이중화 구성 수</span>
+                                                            <span style={{ display: 'block', fontSize: '9px', color: isSqlExist ? '#14532d' : '#64748b', marginTop: '1px' }}>
+                                                                {isSqlExist ? 'Regional HA 이중화 구성 수' : '미사용 (Cloud SQL 인스턴스 없음)'}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: '13px', fontWeight: 900, color: '#16a34a' }}>{sqlTot > 0 ? `${haCount}개` : '0개'}</span>
+                                                        {isSqlExist ? (
+                                                            <span style={{ fontSize: '13px', fontWeight: 900, color: '#16a34a' }}>{haCount}개</span>
+                                                        ) : (
+                                                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                                                N/A
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
 
                                                 {/* Card 2: DB Engine Representative Version */}
                                                 <div style={{
                                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px',
-                                                    backgroundColor: '#e0e7ff', border: '1px solid #c7d2fe', borderRadius: '8px', position: 'relative'
+                                                    backgroundColor: isSqlExist ? '#e0e7ff' : '#f8fafc',
+                                                    border: isSqlExist ? '1px solid #c7d2fe' : '1px solid #e2e8f0',
+                                                    borderRadius: '8px', position: 'relative'
                                                 }}>
-                                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#4f46e5', borderRadius: '8px 0 0 8px' }}></div>
+                                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isSqlExist ? '#4f46e5' : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                                                         <div style={{
-                                                            width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#c7d2fe',
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4338ca', fontSize: '12px'
+                                                            width: '28px', height: '28px', borderRadius: '50%',
+                                                            backgroundColor: isSqlExist ? '#c7d2fe' : '#f1f5f9',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: isSqlExist ? '#4338ca' : '#64748b', fontSize: '12px'
                                                         }}>
                                                             <i className="fas fa-database"></i>
                                                         </div>
                                                         <div>
                                                             <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>DB 엔진 대표 버전</span>
-                                                            <span style={{ display: 'block', fontSize: '9px', color: '#312e81', marginTop: '1px' }}>엔진 종류 및 버전 정보</span>
+                                                            <span style={{ display: 'block', fontSize: '9px', color: isSqlExist ? '#312e81' : '#64748b', marginTop: '1px' }}>
+                                                                {isSqlExist ? '엔진 종류 및 버전 정보' : '미사용 (설정된 DB 엔진 없음)'}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: '12px', fontWeight: 800, color: '#4338ca' }}>{engineName}</span>
+                                                        {isSqlExist ? (
+                                                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#4338ca' }}>{engineName}</span>
+                                                        ) : (
+                                                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                                                N/A
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
 
                                                 {/* Card 3: Automated Backup & Recovery */}
                                                 <div style={{
                                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px',
-                                                    backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', position: 'relative'
+                                                    backgroundColor: isSqlExist ? '#f5f3ff' : '#f8fafc',
+                                                    border: isSqlExist ? '1px solid #ddd6fe' : '1px solid #e2e8f0',
+                                                    borderRadius: '8px', position: 'relative'
                                                 }}>
-                                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#7c3aed', borderRadius: '8px 0 0 8px' }}></div>
+                                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isSqlExist ? '#7c3aed' : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
                                                         <div style={{
-                                                            width: '28px', height: '28px', borderRadius: '50%', backgroundColor: '#ede9fe',
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6d28d9', fontSize: '12px'
+                                                            width: '28px', height: '28px', borderRadius: '50%',
+                                                            backgroundColor: isSqlExist ? '#ede9fe' : '#f1f5f9',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            color: isSqlExist ? '#6d28d9' : '#64748b', fontSize: '12px'
                                                         }}>
                                                             <i className="fas fa-cloud-upload-alt"></i>
                                                         </div>
                                                         <div>
                                                             <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>자동 백업 및 PITR 복구</span>
-                                                            <span style={{ display: 'block', fontSize: '9px', color: '#5b21b6', marginTop: '1px' }}>Point-in-Time 복구 활성화</span>
+                                                            <span style={{ display: 'block', fontSize: '9px', color: isSqlExist ? '#5b21b6' : '#64748b', marginTop: '1px' }}>
+                                                                {isSqlExist ? 'Point-in-Time 복구 활성화' : '미사용 (백업 대상 DB 없음)'}
+                                                            </span>
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: '11px', fontWeight: 800, color: sqlTot > 0 ? '#6d28d9' : '#64748b' }}>
-                                                            {sqlTot > 0 ? '활성화 (정상)' : '없음'}
+                                                        <span style={{ fontSize: '11px', fontWeight: 800, color: isSqlExist ? '#6d28d9' : '#64748b' }}>
+                                                            {isSqlExist ? '활성화 (정상)' : 'N/A'}
                                                         </span>
                                                     </div>
                                                 </div>

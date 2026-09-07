@@ -1,34 +1,34 @@
-# 🚀 대시보드 사이드바 미니 토글(Mini Sidebar Toggle) 및 반응형 레이아웃 구현 GSD 마스터플랜
+# 🚀 대시보드 지표 카드 0건/미사용 시 회색(비활성화) 조건부 스타일링 일관성 적용 GSD 마스터플랜
 
-본 문서는 Cloud Infra Admin 대시보드의 좌측 사이드바('Black Dashboard' 메뉴 영역)를 접고 펼칠 수 있는 토글(Toggle) 기능과 메인 화면의 유연한 반응형 확장을 구현하기 위한 실행 계획서입니다.
+본 문서는 Cloud Infra Admin 리포트 대시보드 화면(`GcpMonthlyReportViewPage.tsx`)의 핵심 지표 카드들(LB, GKE, Cloud Run, Cloud SQL, Cloud VPN, VPC) 중, 자원이 0개이거나 미사용(N/A) 상태일 때 모든 지표 카드가 일관되게 회색(비활성화) 테마로 렌더링되도록 표준화하기 위한 실행 계획서입니다.
 
 ---
 
 ## 📊 작업 의존성 로드맵 (Dependency Graph)
 
 ```
-[Phase 1: repomix 기반 프론트엔드 레이아웃 컴포넌트 탐색 및 구조 분석] (완료)
-  ├─ 1.1 frontend/index.html 스타일시트 및 CSS 변수/클래스 분석
-  ├─ 1.2 frontend/src/layouts/MainLayout.tsx DOM 구조 분석
-  └─ 1.3 미니 사이드바(80px) 축소형 아키텍처 및 듀얼 토글 UX 설계
+[Phase 1: repomix 기반 컴포넌트 로직 분석 및 차이 식별] (완료)
+  ├─ 1.1 LB/GKE 컴포넌트의 isLbExist / isGkeExist 조건부 회색 렌더링 패턴 분석
+  ├─ 1.2 Cloud Run / Cloud SQL / Cloud VPN / VPC의 하드코딩된 원색 스타일 결함 식별
+  └─ 1.3 표준 회색(비활성화) 디자인 토큰(#f8fafc, #e2e8f0, #94a3b8, #64748b) 규격화
                    │
                    ▼
-[Phase 2: 사이드바 토글 상태 연동 및 CSS 트랜지션 애니메이션 구현] (진행 중)
-  ├─ 2.1 MainLayout.tsx: isSidebarOpen (기본값 true) 상태 및 로컬스토리지 유지 로직 추가
-  ├─ 2.2 MainLayout.tsx: 상단 Navbar 헤더 햄버거 토글 버튼 및 사이드바 상단 닫기/열기 버튼 구현
-  ├─ 2.3 index.html / MainLayout.tsx: .sidebar-wrapper-panel.mini 및 .main-panel-content.expanded 스타일 정의
-  └─ 2.4 텍스트 페이드아웃, 아이콘 중앙 정렬, 부드러운 transition(0.3s) 애니메이션 적용
+[Phase 2: 전 지표 카드 조건부 회색 스타일링 일괄 적용] (진행 중)
+  ├─ 2.1 Cloud Run 핵심 지표: isCloudRunExist (총 서비스/Job > 0) 기준 3개 카드 회색 분기
+  ├─ 2.2 Cloud SQL 핵심 지표: isSqlExist (sqlTotal > 0) 기준 HA/DB엔진/백업 3개 카드 회색 분기
+  ├─ 2.3 Cloud VPN 핵심 지표: isVpnExist (displayTot > 0) 기준 총 수량/암호화/연결률 카드 회색 분기
+  └─ 2.4 VPC 핵심 지표: totalIp > 0 / totalFw > 0 기준 프로그레스바 및 레이블 회색 분기
                    │
                    ▼
-[Phase 3: UI 동작 및 E2E 반응형 검증 (playwright / Puppeteer)]
-  ├─ 3.1 프론트엔드/백엔드 로컬 서버 상태 점검
-  ├─ 3.2 Puppeteer / Chrome 자동화 스크립트 작성 및 렌더링/토글 클릭 시뮬레이션
-  ├─ 3.3 사이드바 폭(240px ➔ 80px) 및 메인 패널 폭/마진(280px ➔ 120px) 실측 검증
-  └─ 3.4 콘솔 에러 0건 및 반응형 레이아웃 정합성 확인
+[Phase 3: 프론트엔드 빌드 및 Playwright/Chrome CDP E2E 렌더링 검증]
+  ├─ 3.1 프론트엔드 TypeScript 컴파일 & Vite 빌드
+  ├─ 3.2 0건 자원(Cloud Run, Cloud SQL, Cloud VPN 등) mock 데이터 기반 DOM 실측
+  ├─ 3.3 회색 배경(#f8fafc), 회색 바(#94a3b8), N/A 뱃지 및 콘솔 에러 0건 확인
+  └─ 3.4 통합 패키징(bootJar) 및 8080 서버 재배포
                    │
                    ▼
 [Phase 4: GitHub 형상 관리 및 작업 이력 저장]
-  ├─ 4.1 feature/sidebar-toggle 브랜치 생성 및 변경 파일 커밋
+  ├─ 4.1 fix/empty-metric-gray-styles 브랜치 생성 및 상세 커밋
   ├─ 4.2 WORK_HISTORY.md 및 task-observer 자동 기록
   └─ 4.3 사용자 최종 완료 보고
 ```
@@ -37,33 +37,26 @@
 
 ## 🛠️ 세부 작업 분할 (Task Breakdown)
 
-### Task 1: `MainLayout.tsx` 사이드바 상태 및 토글 버튼 구현
+### Task 1: `GcpMonthlyReportViewPage.tsx` 조건부 회색 렌더링 일괄 적용
 - **수정 대상 파일:**
-  - `frontend/src/layouts/MainLayout.tsx`
+  - `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
 - **구현 세부사항:**
-  1. `isSidebarOpen` 상태 선언 (기본값: `localStorage.getItem('sidebar_open') !== 'false'`).
-  2. 토글 함수 `toggleSidebar()` 구현 및 로컬스토리지 동기화.
-  3. 사이드바 최상단 로고 영역에 미니 접기/펼치기 버튼 (`◀` / `▶` 아이콘) 추가.
-  4. 메인 패널 상단 Navbar 헤더 좌측에 햄버거 토글 버튼 (`☰` / `fas fa-bars`) 추가.
-  5. 사이드바가 미니 상태일 때 클래스 `.mini-sidebar` 조건부 부착 및 메인 패널에 `.expanded-panel` 조건부 부착.
+  1. **Cloud Run 핵심 지표:**
+     - `const isCrExist = (ingAll + ingInt + jobTot) > 0;` (또는 `reportData.cloudRunSummary?.totalServices > 0`)
+     - 배경색: `isCrExist ? '#fffbe6' : '#f8fafc'`, 보더: `isCrExist ? '#ffe58f' : '#e2e8f0'`, 좌측바: `isCrExist ? '#d97706' : '#94a3b8'`
+     - 아이콘 및 텍스트/수치: `isCrExist ? '#d97706' : '#64748b'`, 서브텍스트: `isCrExist ? ... : '미사용 (배포된 서비스 없음)'`
+     - 내부 접근 서비스 & Jobs 카드도 동일하게 `isCrExist` 기준으로 비활성화 회색 처리.
+  2. **Cloud SQL 핵심 지표:**
+     - `const isSqlExist = sqlTot > 0;`
+     - HA 구성 카드, DB 엔진 버전 카드, 자동 백업/PITR 카드 3종 모두 `isSqlExist`가 false일 때 `#f8fafc`, `#e2e8f0`, `#94a3b8`, `#64748b` 회색 적용 및 "미사용" 뱃지 표시.
+  3. **Cloud VPN 핵심 지표:**
+     - `const isVpnExist = displayTot > 0;`
+     - 상단 요약 카드: `isVpnExist ? '#fffbeb' : '#f8fafc'`, 좌측바: `isVpnExist ? '#f59e0b' : '#94a3b8'`, 아이콘: `isVpnExist ? '#d97706' : '#64748b'`, 우측 수치: `isVpnExist ? `${displayTot}개` : '0개 (N/A)'`
+     - 프로그레스 바: `isVpnExist ? '#0284c7' : '#cbd5e1'`, 텍스트: `isVpnExist ? ... : '#64748b'`
+  4. **VPC 핵심 지표:**
+     - IP 사용률 & 방화벽 로그율: `totalIp > 0`, `totalFw > 0`일 때만 강조색, 0일 때는 회색(`#64748b`, `#cbd5e1`) 렌더링.
 
-### Task 2: `index.html` CSS 스타일 및 애니메이션 정의
-- **수정 대상 파일:**
-  - `frontend/index.html`
-- **구현 세부사항:**
-  1. `.sidebar-wrapper-panel`: `transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);` 적용.
-  2. `.sidebar-wrapper-panel.mini-sidebar`:
-     - `width: 80px;` 로 축소.
-     - `.logo-text`, `.nav-header`, `.nav-link p`: `opacity: 0; visibility: hidden; width: 0; display: none;` 처리.
-     - `.nav-link`: `justify-content: center; padding: 12px 0; margin: 4px 10px;`로 아이콘 중심 정렬.
-     - `.nav-link i`: `margin-right: 0; font-size: 1.25rem;`
-     - `.logo`: `justify-content: center; padding: 20px 0; margin: 0 10px;`
-  3. `.main-panel-content`: `transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);` 적용.
-  4. `.main-panel-content.expanded-panel`:
-     - `margin-left: 120px;` 로 메인 영역 160px 대폭 확장.
-  5. 토글 버튼 호버 및 액티브 시 Black Dashboard 시그니처 글로우 효과 부여.
-
-### Task 3: 자동화 UI 검증 및 형상 관리
+### Task 2: 자동화 UI 실측 검증 및 형상 관리
 - **검증 및 커밋:**
-  - Puppeteer/Playwright로 토글 전/후 DOM boundingClientRect 실측
-  - `feature/sidebar-toggle` 브랜치에 커밋 및 `WORK_HISTORY.md` 기록
+  - Chrome CDP로 0건인 프로젝트/데이터 렌더링 시 background, border, color CSS 속성 실측 검증
+  - `fix/empty-metric-gray-styles` 브랜치 커밋 및 `WORK_HISTORY.md` 기록
