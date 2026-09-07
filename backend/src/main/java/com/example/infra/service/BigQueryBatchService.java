@@ -55,13 +55,12 @@ public class BigQueryBatchService {
     @Scheduled(cron = "0 0 2 * * ?")
     public void runDailySnapshotBatch() {
         log.info("Starting Daily Snapshot Batch for GCP Resources");
-
-        // Recommender 데이터는 히스토리 누적 없이 최신 상태만 유지(Overwrite)하므로 배치 시작 시 테이블을 1회 초기화(TRUNCATE)
-        // (자산/Jira/예약 등 타 배치는 기존대로 날짜별 누적 적재 유지)
-        truncateDailyRecommenderTable();
-
         List<InfraEnvironment> environments = environmentService.getAllEnvironments();
         String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+        // Recommender 데이터: 과거 월(8월 등) 데이터는 보존하고, 현재 진행 중인 당월(9월) 데이터만 매일 덮어쓰기(DELETE & INSERT)
+        // (자산/Jira/예약 등 타 배치는 기존대로 날짜별 누적 적재 유지)
+        deleteCurrentMonthDailyRecommenders(snapshotDate);
 
         for (InfraEnvironment env : environments) {
             if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
@@ -1168,18 +1167,43 @@ public class BigQueryBatchService {
     }
 
     /**
-     * Recommender 데이터 테이블 초기화 (TRUNCATE)
-     * - Recommender 데이터는 일별 누적 적재하지 않고 최신 상태(Latest Snapshot)만 유지하도록 덮어쓰기 처리
+     * 당월(YYYY-MM) Recommender 데이터 부분 삭제 (DELETE / CTAS)
+     * - 과거 월(예: 8월, 7월 등)의 마지막 스냅샷 데이터는 그대로 보존
+     * - 현재 진행 중인 당월(예: 9월)의 데이터만 덮어쓰기 위해 당월 기존 레코드를 선행 삭제
+     * - BigQuery Streaming Buffer DML 제한 회피를 위해 과거 월 데이터 보존 CTAS 쿼리 적용
      * - daily_asset_inventory, jira_issue_inventory, daily_reservation_inventory 등 타 배치에는 일절 영향 없음
      */
-    public void truncateDailyRecommenderTable() {
+    public void deleteCurrentMonthDailyRecommenders(String snapshotDate) {
         ensureDailyRecommenderTableExists();
+        if (snapshotDate == null || snapshotDate.length() < 7) {
+            log.warn("Invalid snapshotDate for deleteCurrentMonthDailyRecommenders: {}", snapshotDate);
+            return;
+        }
+        String yearMonthPrefix = snapshotDate.substring(0, 7); // "YYYY-MM"
         try {
-            String truncateSql = String.format("TRUNCATE TABLE `%s.%s.daily_recommender_inventory`", targetProjectId, datasetName);
-            bigQuery.query(QueryJobConfiguration.newBuilder(truncateSql).build());
-            log.info("Successfully truncated table {}.{}.daily_recommender_inventory for latest snapshot overwrite", targetProjectId, datasetName);
+            // BigQuery 스트리밍 버퍼(Streaming Buffer) DML 제한을 안전하게 회피하면서 과거 월 데이터는 온전히 보존하고 당월 데이터만 제거
+            String ctasSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_recommender_inventory` AS " +
+                "SELECT * FROM `%s.%s.daily_recommender_inventory` " +
+                "WHERE NOT STARTS_WITH(CAST(snapshot_date AS STRING), '%s')",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName,
+                yearMonthPrefix
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
+            log.info("Successfully cleaned existing recommender records for month prefix '{}' in {}.{}.daily_recommender_inventory (Past months preserved)", yearMonthPrefix, targetProjectId, datasetName);
         } catch (Exception e) {
-            log.error("Failed to truncate daily_recommender_inventory table: {}", e.getMessage(), e);
+            // 초기 빈 테이블 또는 CTAS 실패 시 DML DELETE Fallback
+            try {
+                String deleteSql = String.format(
+                    "DELETE FROM `%s.%s.daily_recommender_inventory` WHERE STARTS_WITH(CAST(snapshot_date AS STRING), '%s')",
+                    targetProjectId, datasetName, yearMonthPrefix
+                );
+                bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
+                log.info("Successfully cleaned existing recommender records for month prefix '{}' via DML fallback", yearMonthPrefix);
+            } catch (Exception fallbackEx) {
+                log.warn("Recommender month cleanup notice for '{}': {}", yearMonthPrefix, fallbackEx.getMessage());
+            }
         }
     }
 
