@@ -2248,26 +2248,31 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             <span><i className="fas fa-clipboard-list mr-2" style={{ color: '#2563eb' }}></i>정기 점검 권고 사항 (Recommendations - GCP Active Assist)</span>
                         </div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
-                            {/* 1. Security List Card */}
-                            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <div style={{ marginBottom: '12px' }}>
-                                    <span style={{ backgroundColor: '#ef4444', color: '#ffffff', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>보안 / 컴플라이언스</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
+                            {/* 1. Security List Card (Full Width Vertical) */}
+                            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderLeft: '4px solid #ef4444', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <span style={{ backgroundColor: '#ef4444', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <i className="fas fa-shield-alt"></i>보안 / 컴플라이언스
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 600 }}>
+                                        {reportData.recommendationsSecurityList ? `${reportData.recommendationsSecurityList.length}건 권고` : '0건'}
+                                    </span>
                                 </div>
                                 {isEditMode ? (
-                                    <textarea 
+                                    <textarea
                                         className="edit-textarea-field"
-                                        style={{ width: '100%', padding: '8px', flexGrow: 1 }}
-                                        rows={6}
+                                        style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                        rows={3}
                                         value={editRecSecurity}
                                         onChange={(e) => setEditRecSecurity(e.target.value)}
                                         placeholder="보안 권고사항을 줄바꿈 단위로 입력하세요..."
                                     />
                                 ) : (reportData.recommendationsSecurityList && reportData.recommendationsSecurityList.length > 0) ? (
-                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12px', color: '#334155' }}>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
                                         {reportData.recommendationsSecurityList.map((item, i) => (
-                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px', lineHeight: 1.5 }}>
-                                                <i className="fas fa-check-circle text-red-500" style={{ marginTop: '3px', fontSize: '10px' }}></i>
+                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
+                                                <i className="fas fa-check-circle text-red-500" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
                                                 {renderRecommendationItem(item)}
                                             </li>
                                         ))}
@@ -2280,25 +2285,30 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 )}
                             </div>
 
-                            {/* 2. Cost Optimization List Card */}
-                            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <div style={{ marginBottom: '12px' }}>
-                                    <span style={{ backgroundColor: '#2563eb', color: '#ffffff', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>비용 최적화</span>
+                            {/* 2. Cost Optimization List Card (Full Width Vertical) */}
+                            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderLeft: '4px solid #2563eb', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <span style={{ backgroundColor: '#2563eb', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <i className="fas fa-coins"></i>비용 최적화
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600 }}>
+                                        {reportData.recommendationsCostList ? `${reportData.recommendationsCostList.length}건 권고` : '0건'}
+                                    </span>
                                 </div>
                                 {isEditMode ? (
                                     <textarea
                                         className="edit-textarea-field"
-                                        style={{ width: '100%', padding: '8px', flexGrow: 1 }}
-                                        rows={6}
+                                        style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                        rows={3}
                                         value={editRecCost}
                                         onChange={(e) => setEditRecCost(e.target.value)}
                                         placeholder="비용 최적화 권고사항을 줄바꿈 단위로 입력하세요..."
                                     />
                                 ) : (reportData.recommendationsCostList && reportData.recommendationsCostList.length > 0) ? (
-                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12px', color: '#334155' }}>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
                                         {reportData.recommendationsCostList.map((item, i) => (
-                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px', lineHeight: 1.5 }}>
-                                                <i className="fas fa-check-circle text-blue-600" style={{ marginTop: '3px', fontSize: '10px' }}></i>
+                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
+                                                <i className="fas fa-check-circle text-blue-600" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
                                                 {renderRecommendationItem(item)}
                                             </li>
                                         ))}
@@ -2311,25 +2321,30 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 )}
                             </div>
 
-                            {/* 3. Performance List Card */}
-                            <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #d1fae5', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <div style={{ marginBottom: '12px' }}>
-                                    <span style={{ backgroundColor: '#10b981', color: '#ffffff', fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>성능 / 안정성</span>
+                            {/* 3. Performance List Card (Full Width Vertical) */}
+                            <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #d1fae5', borderLeft: '4px solid #10b981', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                    <span style={{ backgroundColor: '#10b981', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <i className="fas fa-tachometer-alt"></i>성능 / 안정성
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: '#065f46', fontWeight: 600 }}>
+                                        {reportData.recommendationsPerformanceList ? `${reportData.recommendationsPerformanceList.length}건 권고` : '0건'}
+                                    </span>
                                 </div>
                                 {isEditMode ? (
                                     <textarea
                                         className="edit-textarea-field"
-                                        style={{ width: '100%', padding: '8px', flexGrow: 1 }}
-                                        rows={6}
+                                        style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                        rows={3}
                                         value={editRecPerformance}
                                         onChange={(e) => setEditRecPerformance(e.target.value)}
                                         placeholder="성능/안정성 권고사항을 줄바꿈 단위로 입력하세요..."
                                     />
                                 ) : (reportData.recommendationsPerformanceList && reportData.recommendationsPerformanceList.length > 0) ? (
-                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12px', color: '#334155' }}>
+                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
                                         {reportData.recommendationsPerformanceList.map((item, i) => (
-                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '8px', lineHeight: 1.5 }}>
-                                                <i className="fas fa-check-circle text-emerald-500" style={{ marginTop: '3px', fontSize: '10px' }}></i>
+                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
+                                                <i className="fas fa-check-circle text-emerald-500" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
                                                 {renderRecommendationItem(item)}
                                             </li>
                                         ))}
