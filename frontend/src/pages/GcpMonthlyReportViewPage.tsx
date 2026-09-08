@@ -2158,9 +2158,12 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                    {/* Section 6: GCP Vertex AI & GenAI Operations Center (고객사별 동적 바인딩) */}
+                    {/* Section 6: GCP Vertex AI & GenAI Operations Center (고객사별 및 연월별 동적 바인딩) */}
                     <div style={{ marginTop: '20px' }}>
-                        <VertexAiOperationsPanel projectId={selectedProject || 'hcompany-485701'} />
+                        <VertexAiOperationsPanel
+                            projectId={selectedProject || 'hcompany-485701'}
+                            targetYearMonth={selectedYearMonth}
+                        />
                     </div>
 
                     {/* Section 7: Work Status Table (Jira Integrated + Editable) */}

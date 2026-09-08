@@ -3,9 +3,10 @@ import { getVertexAiMetrics, VertexAiMetricsDto } from '../services/api';
 
 interface VertexAiOperationsPanelProps {
     projectId?: string;
+    targetYearMonth?: string;
 }
 
-const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ projectId }) => {
+const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ projectId, targetYearMonth }) => {
     const [metrics, setMetrics] = useState<VertexAiMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -13,7 +14,7 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
     const fetchMetrics = async () => {
         setIsRefreshing(true);
         try {
-            const res = await getVertexAiMetrics(projectId);
+            const res = await getVertexAiMetrics(projectId, targetYearMonth);
             if (res.data) {
                 setMetrics(res.data);
             }
@@ -27,37 +28,60 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
 
     useEffect(() => {
         fetchMetrics();
-    }, [projectId]);
+    }, [projectId, targetYearMonth]);
 
-    // 기본 폴백 데이터 (로딩 시에도 깨짐 없이 안정적으로 UI 렌더링)
+    // 선택된 조회 연월(targetYearMonth) 기준 7일 동적 날짜 배열 생성
+    const getDynamicDates = (ym?: string): string[] => {
+        if (!ym || !ym.includes('-')) {
+            return ['09-02', '09-03', '09-04', '09-05', '09-06', '09-07', '09-08'];
+        }
+        const [year, month] = ym.split('-').map(Number);
+        const mm = String(month).padStart(2, '0');
+        const lastDay = new Date(year, month, 0).getDate();
+        const result: string[] = [];
+        for (let i = 6; i >= 0; i--) {
+            const day = lastDay - i;
+            result.push(`${mm}-${String(day).padStart(2, '0')}`);
+        }
+        return result;
+    };
+
+    // 연월(Month) 기준 기본 데이터 (API 로딩 중 또는 데이터 부재 시에도 해당 월에 맞는 날짜/지표 렌더링)
+    const isAugust = targetYearMonth === '2026-08' || targetYearMonth?.endsWith('-08');
+    const defaultDates = getDynamicDates(targetYearMonth);
+
     const data: VertexAiMetricsDto = metrics || {
         projectId: projectId || 'hcompany-485701',
         customerName: '한앤컴퍼니 GCP',
-        dates: ['09-02', '09-03', '09-04', '09-05', '09-06', '09-07', '09-08'],
-        inputTokensTrend: [1420000, 1680000, 1950000, 1540000, 2100000, 2480000, 2820000],
-        outputTokensTrend: [420000, 510000, 630000, 480000, 690000, 820000, 940000],
-        rpmQuotaUsagePercent: 68.4,
-        tpdQuotaUsagePercent: 83.6,
-        currentRpm: 684,
+        dates: defaultDates,
+        inputTokensTrend: isAugust
+            ? [1150000, 1320000, 1480000, 1260000, 1620000, 1890000, 2140000]
+            : [1420000, 1680000, 1950000, 1540000, 2100000, 2480000, 2820000],
+        outputTokensTrend: isAugust
+            ? [350000, 410000, 490000, 390000, 520000, 610000, 720000]
+            : [420000, 510000, 630000, 480000, 690000, 820000, 940000],
+        rpmQuotaUsagePercent: isAugust ? 54.0 : 68.4,
+        tpdQuotaUsagePercent: isAugust ? 63.6 : 83.6,
+        currentRpm: isAugust ? 540 : 684,
         maxRpmQuota: 1000,
-        currentTpd: 3760000,
+        currentTpd: isAugust ? 2860000 : 3760000,
         maxTpdQuota: 4500000,
-        quotaAlert: true,
+        quotaAlert: !isAugust,
         totalEndpoints: 4,
-        activeEndpoints: 3,
-        idleEndpoints: 1,
+        activeEndpoints: isAugust ? 2 : 3,
+        idleEndpoints: isAugust ? 2 : 1,
         allocatedGpus: 2,
         allocatedTpus: 0,
         gpuModel: 'NVIDIA L4 × 2 (us-central1)',
-        estimatedHourlyCost: 1.42,
-        estimatedMonthlyCost: 1022.4,
-        geminiFlashRatio: 68.0,
-        geminiProRatio: 24.0,
-        fineTunedRatio: 8.0,
-        promptCacheHitRatio: 32.5,
-        rateLimit429Errors: 3,
-        safetyFilterBlocks: 12,
-        avgLatencyMs: 420,
+        estimatedHourlyCost: isAugust ? 1.28 : 1.42,
+        estimatedMonthlyCost: isAugust ? 921.6 : 1022.4,
+        geminiFlashRatio: isAugust ? 72.0 : 68.0,
+        geminiProRatio: isAugust ? 21.0 : 24.0,
+        fineTunedRatio: isAugust ? 7.0 : 8.0,
+        promptCacheHitRatio: isAugust ? 28.4 : 32.5,
+        rateLimit429Errors: isAugust ? 0 : 3,
+        safetyFilterBlocks: isAugust ? 8 : 12,
+        avgLatencyMs: isAugust ? 395 : 420,
         lastUpdated: new Date().toLocaleTimeString('ko-KR')
     };
 

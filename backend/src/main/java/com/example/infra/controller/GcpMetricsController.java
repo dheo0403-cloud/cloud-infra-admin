@@ -27,12 +27,15 @@ public class GcpMetricsController {
     /**
      * GCP Vertex AI 및 GenAI 운영/비용 관제 메트릭 조회
      * @param projectId 타겟 고객사 GCP 프로젝트 ID (선택 사항)
+     * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
      * @return VertexAiMetricsDto
      */
     @GetMapping("/vertex-ai")
-    public ResponseEntity<VertexAiMetricsDto> getVertexAiMetrics(@RequestParam(required = false) String projectId) {
-        log.info("[API] Requesting GCP Vertex AI operations metrics for target projectId: {}", projectId);
-        VertexAiMetricsDto metrics = gcpVertexAiMetricsService.getVertexAiOperationsMetrics(projectId);
+    public ResponseEntity<VertexAiMetricsDto> getVertexAiMetrics(
+            @RequestParam(required = false) String projectId,
+            @RequestParam(required = false) String targetYearMonth) {
+        log.info("[API] Requesting GCP Vertex AI operations metrics for target projectId: {}, targetYearMonth: {}", projectId, targetYearMonth);
+        VertexAiMetricsDto metrics = gcpVertexAiMetricsService.getVertexAiOperationsMetrics(projectId, targetYearMonth);
         return ResponseEntity.ok(metrics);
     }
 }

@@ -135,7 +135,7 @@ export interface VertexAiMetricsDto {
     lastUpdated: string;
 }
 
-export const getVertexAiMetrics = (projectId?: string) =>
-    axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`, { params: { projectId } });
+export const getVertexAiMetrics = (projectId?: string, targetYearMonth?: string) =>
+    axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`, { params: { projectId, targetYearMonth } });
 
 
