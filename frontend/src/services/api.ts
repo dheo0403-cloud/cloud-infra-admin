@@ -103,4 +103,36 @@ export const getJiraIssues = (projectKey: string, days: number = 7) =>
         `${API_BASE_URL}/jira/issues`, { params: { projectKey, days } }
     );
 
+// Vertex AI & GenAI Metrics
+export interface VertexAiMetricsDto {
+    dates: string[];
+    inputTokensTrend: number[];
+    outputTokensTrend: number[];
+    rpmQuotaUsagePercent: number;
+    tpdQuotaUsagePercent: number;
+    currentRpm: number;
+    maxRpmQuota: number;
+    currentTpd: number;
+    maxTpdQuota: number;
+    quotaAlert: boolean;
+    totalEndpoints: number;
+    activeEndpoints: number;
+    idleEndpoints: number;
+    allocatedGpus: number;
+    allocatedTpus: number;
+    gpuModel: string;
+    estimatedHourlyCost: number;
+    estimatedMonthlyCost: number;
+    geminiFlashRatio: number;
+    geminiProRatio: number;
+    fineTunedRatio: number;
+    promptCacheHitRatio: number;
+    rateLimit429Errors: number;
+    safetyFilterBlocks: number;
+    avgLatencyMs: number;
+    lastUpdated: string;
+}
+
+export const getVertexAiMetrics = () => axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`);
+
 

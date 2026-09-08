@@ -2139,9 +2139,15 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        <span style={{ fontSize: '11px', fontWeight: 800, color: isSqlExist ? '#6d28d9' : '#64748b' }}>
-                                                            {isSqlExist ? '활성화 (정상)' : 'N/A'}
-                                                        </span>
+                                                        {isSqlExist ? (
+                                                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#6d28d9' }}>
+                                                                활성화 (정상)
+                                                            </span>
+                                                        ) : (
+                                                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
+                                                                N/A
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
