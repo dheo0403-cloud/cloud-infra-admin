@@ -85,6 +85,85 @@ public class GcpRecommenderService {
     }
 
     /**
+     * GCP Recommender API 응답 객체에서 IAM 대상 계정(Member/Principal) 또는 리소스 식별자 추출
+     */
+    public static String extractTargetAccountOrResource(JsonNode rec, String recommenderId, String desc) {
+        if (rec == null) return extractTargetFromDescription(desc);
+
+        // 1. IAM Policy Recommender 또는 IAM 관련 권고인 경우 -> 최우선으로 계정(user:xxx, serviceAccount:xxx) 추출
+        if (recommenderId != null && recommenderId.toLowerCase().contains("iam")) {
+            // 1-1. content.overview.member
+            JsonNode memberNode = rec.path("content").path("overview").path("member");
+            if (!memberNode.isMissingNode() && !memberNode.asText().trim().isEmpty()) {
+                return memberNode.asText().trim();
+            }
+
+            // 1-2. content.operationGroups[].operations[] 내부 pathFilters / valueMatcher / value
+            JsonNode opGroups = rec.path("content").path("operationGroups");
+            if (opGroups.isArray()) {
+                for (JsonNode og : opGroups) {
+                    JsonNode ops = og.path("operations");
+                    if (ops.isArray()) {
+                        for (JsonNode op : ops) {
+                            JsonNode pathFilters = op.path("pathFilters");
+                            if (pathFilters.isObject()) {
+                                for (java.util.Iterator<String> it = pathFilters.fieldNames(); it.hasNext(); ) {
+                                    String fName = it.next();
+                                    if (fName.contains("members")) {
+                                        String val = pathFilters.get(fName).asText("");
+                                        if (!val.isEmpty()) return val.trim();
+                                    }
+                                }
+                            }
+                            String vm = op.path("valueMatcher").path("matchesPattern").asText("");
+                            if (!vm.isEmpty()) return vm.trim();
+
+                            String val = op.path("value").asText("");
+                            if (val.startsWith("user:") || val.startsWith("serviceAccount:") || val.startsWith("group:")) {
+                                return val.trim();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 1-3. Description 정규식 fallback (user:xxx@domain.com, serviceAccount:xxx)
+            if (desc != null && !desc.isEmpty()) {
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?:user|serviceAccount):[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}|serviceAccount:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(desc);
+                if (m.find()) {
+                    return m.group(0).trim();
+                }
+            }
+        }
+
+        // 2. 일반 리소스 (targetResources 배열 -> operations[].resource -> description fallback)
+        JsonNode targetResArr = rec.path("targetResources");
+        if (targetResArr.isArray() && targetResArr.size() > 0) {
+            String extracted = extractResourceName(targetResArr.get(0).asText(""));
+            if (extracted.matches("^\\d{10,14}$")) {
+                String descTarget = extractTargetFromDescription(desc);
+                if (!descTarget.isEmpty()) return descTarget;
+            }
+            if (!extracted.isEmpty()) return extracted;
+        }
+
+        JsonNode opGroups = rec.path("content").path("operationGroups");
+        if (opGroups.isArray() && opGroups.size() > 0) {
+            JsonNode ops = opGroups.get(0).path("operations");
+            if (ops.isArray() && ops.size() > 0) {
+                String extracted = extractResourceName(ops.get(0).path("resource").asText(""));
+                if (extracted.matches("^\\d{10,14}$")) {
+                    String descTarget = extractTargetFromDescription(desc);
+                    if (!descTarget.isEmpty()) return descTarget;
+                }
+                if (!extracted.isEmpty()) return extracted;
+            }
+        }
+
+        return extractTargetFromDescription(desc);
+    }
+
+    /**
      * 영문/한글 설명 텍스트에서 대상 리소스 식별자(인스턴스명, IP, 이메일 등) 추출 Fallback
      */
     public static String extractTargetFromDescription(String desc) {
@@ -222,24 +301,8 @@ public class GcpRecommenderService {
                                             priority = "LOW";
                                         }
 
-                                        // 2. Target Resource 추출 (targetResources 배열 -> operations[].resource -> description fallback)
-                                        String targetResource = "";
-                                        JsonNode targetResArr = rec.path("targetResources");
-                                        if (targetResArr.isArray() && targetResArr.size() > 0) {
-                                            targetResource = extractResourceName(targetResArr.get(0).asText(""));
-                                        }
-                                        if (targetResource.isEmpty()) {
-                                            JsonNode opGroups = rec.path("content").path("operationGroups");
-                                            if (opGroups.isArray() && opGroups.size() > 0) {
-                                                JsonNode ops = opGroups.get(0).path("operations");
-                                                if (ops.isArray() && ops.size() > 0) {
-                                                    targetResource = extractResourceName(ops.get(0).path("resource").asText(""));
-                                                }
-                                            }
-                                        }
-                                        if (targetResource.isEmpty()) {
-                                            targetResource = extractTargetFromDescription(desc);
-                                        }
+                                        // 2. Target Resource & IAM Account 추출 (content.overview.member -> operations[].pathFilters -> targetResources -> description)
+                                        String targetResource = extractTargetAccountOrResource(rec, recommenderId, desc);
 
                                         String koreanDesc = translateRecommendationToKorean(desc);
                                         String formatted = formatRecommendationText(priority, targetResource, koreanDesc);

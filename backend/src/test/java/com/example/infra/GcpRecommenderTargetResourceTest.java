@@ -63,4 +63,43 @@ public class GcpRecommenderTargetResourceTest {
         String dedupeFormatted = GcpRecommenderService.formatRecommendationText("CRITICAL", "sa-batch@valofe.com", "[CRITICAL] 관찰 기간 동안 사용되지 않은 IAM 역할입니다.");
         assertEquals("[CRITICAL] [대상: sa-batch@valofe.com] 관찰 기간 동안 사용되지 않은 IAM 역할입니다.", dedupeFormatted);
     }
+
+    @Test
+    @DisplayName("GCP IAM Recommender JSON 응답(content.overview.member 등)에서 대상 계정 추출 검증")
+    public void testExtractIamAccountFromOverviewAndOperations() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+
+        // 1. content.overview.member 가 있는 경우
+        String json1 = "{" +
+                "  \"name\": \"projects/659624710484/locations/global/recommenders/google.iam.policy.Recommender/recommendations/rec-1\"," +
+                "  \"description\": \"Remove unused role from user\"," +
+                "  \"content\": {" +
+                "    \"overview\": {" +
+                "      \"member\": \"user:hong@megazone.com\"," +
+                "      \"role\": \"roles/editor\"" +
+                "    }" +
+                "  }," +
+                "  \"targetResources\": [\"//cloudresourcemanager.googleapis.com/projects/659624710484\"]" +
+                "}";
+        com.fasterxml.jackson.databind.JsonNode rec1 = mapper.readTree(json1);
+        String target1 = GcpRecommenderService.extractTargetAccountOrResource(rec1, "google.iam.policy.Recommender", "Remove unused role");
+        assertEquals("user:hong@megazone.com", target1);
+
+        // 2. operations pathFilters 에 계정이 있는 경우
+        String json2 = "{" +
+                "  \"name\": \"projects/659624710484/locations/global/recommenders/google.iam.policy.Recommender/recommendations/rec-2\"," +
+                "  \"content\": {" +
+                "    \"operationGroups\": [{" +
+                "      \"operations\": [{" +
+                "        \"resource\": \"//cloudresourcemanager.googleapis.com/projects/659624710484\"," +
+                "        \"pathFilters\": {\"/iamPolicy/bindings/*/members/*\": \"serviceAccount:deployer@my-proj.iam.gserviceaccount.com\"}" +
+                "      }]" +
+                "    }]" +
+                "  }," +
+                "  \"targetResources\": [\"//cloudresourcemanager.googleapis.com/projects/659624710484\"]" +
+                "}";
+        com.fasterxml.jackson.databind.JsonNode rec2 = mapper.readTree(json2);
+        String target2 = GcpRecommenderService.extractTargetAccountOrResource(rec2, "google.iam.policy.Recommender", "");
+        assertEquals("serviceAccount:deployer@my-proj.iam.gserviceaccount.com", target2);
+    }
 }
