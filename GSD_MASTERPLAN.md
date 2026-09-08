@@ -127,9 +127,16 @@
   ├─ 5.2 WORK_HISTORY.md 및 task-observer 자동 기록 - [완료]
   └─ 5.3 최종 완료 보고 - [완료]
 
-[Wave 6: 보고서 차트 Y축 최솟값 0 고정 및 바닥 앵커링 교정] (진행 중)
-  ├─ 6.1 GcpMonthlyReportViewPage.tsx 내 Compute VM 및 7대 바 차트 Y-min=0 & flexGrow 바닥 앵커링 일괄 수정
-  ├─ 6.2 프론트엔드/백엔드 재빌드 및 서버 재기동
-  ├─ 6.3 Chrome CDP / Playwright 기반 X축 기준선 및 막대 바닥 밀착 실측 검증
-  └─ 6.4 fix/chart-y-axis-minimum 브랜치 커밋 및 히스토리 기록
+[Wave 6: 보고서 차트 Y축 최솟값 0 고정 및 바닥 앵커링 교정] (완료)
+  ├─ 6.1 GcpMonthlyReportViewPage.tsx 내 Compute VM 및 7대 바 차트 Y-min=0 & flexGrow 바닥 앵커링 일괄 수정 - [완료]
+  ├─ 6.2 프론트엔드/백엔드 재빌드 및 서버 재기동 - [완료]
+  ├─ 6.3 Chrome CDP / Playwright 기반 X축 기준선 및 막대 바닥 밀착 실측 검증 - [완료]
+  └─ 6.4 fix/chart-y-axis-minimum 브랜치 커밋 및 히스토리 기록 - [완료]
+
+[Wave 7: AI 수집 로직 타겟 프로젝트 ID 명시적 주입 및 고객사 데이터 재적재] (진행 중)
+  ├─ 7.1 GcpMetricsController, GcpVertexAiMetricsService, VertexAiMetricsDto에 targetProjectId 매개변수 명시적 주입
+  ├─ 7.2 BigQuery 조회 쿼리에 WHERE project_id = @targetProjectId 조건 필터링 적용
+  ├─ 7.3 run_ai_batch_fix.py: 호스트 프로젝트('mzc-gcp-managed') 오적재 데이터 DELETE 및 등록된 고객사 프로젝트별 AI 데이터 재수집/적재
+  ├─ 7.4 BigQuery SELECT 쿼리로 고객사 project_id 무결성 검증 후 스크립트 완전 파기
+  ├─ 7.5 통합 빌드/재배포 및 fix/ai-batch-target-project-id 브랜치 커밋
 ```

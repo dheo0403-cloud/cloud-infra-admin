@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springframework.web.bind.annotation.RequestParam;
+
 /**
  * GCP 클라우드 지표 및 Vertex AI / 생성형 AI 관제 컨트롤러 API
  */
@@ -24,12 +26,13 @@ public class GcpMetricsController {
 
     /**
      * GCP Vertex AI 및 GenAI 운영/비용 관제 메트릭 조회
+     * @param projectId 타겟 고객사 GCP 프로젝트 ID (선택 사항)
      * @return VertexAiMetricsDto
      */
     @GetMapping("/vertex-ai")
-    public ResponseEntity<VertexAiMetricsDto> getVertexAiMetrics() {
-        log.info("[API] Requesting GCP Vertex AI operations metrics");
-        VertexAiMetricsDto metrics = gcpVertexAiMetricsService.getVertexAiOperationsMetrics();
+    public ResponseEntity<VertexAiMetricsDto> getVertexAiMetrics(@RequestParam(required = false) String projectId) {
+        log.info("[API] Requesting GCP Vertex AI operations metrics for target projectId: {}", projectId);
+        VertexAiMetricsDto metrics = gcpVertexAiMetricsService.getVertexAiOperationsMetrics(projectId);
         return ResponseEntity.ok(metrics);
     }
 }

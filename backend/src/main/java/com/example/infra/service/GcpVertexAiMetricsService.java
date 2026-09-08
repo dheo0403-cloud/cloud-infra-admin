@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * GCP Vertex AI & 생성형 AI 관제 메트릭 수집 및 집계 서비스
- * BigQuery daily_vertex_ai_metrics 테이블의 최신 실데이터를 실시간 조회 및 연동합니다.
+ * BigQuery daily_vertex_ai_metrics 테이블의 타겟 고객사 프로젝트 실데이터를 실시간 조회 및 연동합니다.
  */
 @Slf4j
 @Service
@@ -28,7 +28,7 @@ public class GcpVertexAiMetricsService {
     private final BigQuery bigQuery;
 
     @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
-    private String defaultProjectId;
+    private String hostProjectId;
 
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
@@ -36,18 +36,24 @@ public class GcpVertexAiMetricsService {
     private static final String TABLE_NAME = "daily_vertex_ai_metrics";
 
     /**
-     * Vertex AI 및 GenAI 운영 관제 메트릭 조회
-     * 1) BigQuery daily_vertex_ai_metrics 테이블의 최근 7일 실데이터 우선 조회
-     * 2) 장애 또는 빈 테이블 시 견고한 기본 텔레메트리 데이터 폴백
+     * 타겟 고객사 프로젝트의 Vertex AI 및 GenAI 운영 관제 메트릭 조회
+     * @param targetProjectId 조회 대상 고객사 GCP 프로젝트 ID (null/empty일 경우 최신 적재된 고객사 프로젝트 자동 선택)
      */
-    public VertexAiMetricsDto getVertexAiOperationsMetrics() {
-        log.info("[VERTEX-AI-METRICS] Fetching GenAI operations metrics from BigQuery {}.{}.{}", defaultProjectId, datasetName, TABLE_NAME);
+    public VertexAiMetricsDto getVertexAiOperationsMetrics(String targetProjectId) {
+        String effectiveProjectId = (targetProjectId != null && !targetProjectId.trim().isEmpty())
+                ? targetProjectId.trim()
+                : "hcompany-485701"; // 기본 고객사 프로젝트
+
+        log.info("[VERTEX-AI-METRICS] Fetching GenAI operations metrics for target project `{}` from BigQuery {}.{}.{}",
+                effectiveProjectId, hostProjectId, datasetName, TABLE_NAME);
 
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
         try {
+            // 1. 타겟 프로젝트 ID 기준 최근 7일 스냅샷 쿼리
             String query = String.format(
                 "SELECT " +
+                "  project_id, " +
                 "  CAST(snapshot_date AS STRING) AS sdate, " +
                 "  input_tokens, output_tokens, current_rpm, max_rpm_quota, " +
                 "  current_tpd, max_tpd_quota, total_endpoints, active_endpoints, " +
@@ -56,9 +62,10 @@ public class GcpVertexAiMetricsService {
                 "  fine_tuned_ratio, prompt_cache_hit_ratio, rate_limit_429_errors, " +
                 "  safety_filter_blocks, avg_latency_ms " +
                 "FROM `%s.%s.%s` " +
+                "WHERE project_id = '%s' " +
                 "ORDER BY snapshot_date ASC " +
                 "LIMIT 7",
-                defaultProjectId, datasetName, TABLE_NAME
+                hostProjectId, datasetName, TABLE_NAME, effectiveProjectId
             );
 
             TableResult result = bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
@@ -67,22 +74,45 @@ public class GcpVertexAiMetricsService {
                 rows.add(row);
             }
 
+            // 2. 지정된 프로젝트 데이터가 없을 경우 전체 최신 프로젝트로 폴백 조회
+            if (rows.isEmpty()) {
+                String fallbackQuery = String.format(
+                    "SELECT " +
+                    "  project_id, " +
+                    "  CAST(snapshot_date AS STRING) AS sdate, " +
+                    "  input_tokens, output_tokens, current_rpm, max_rpm_quota, " +
+                    "  current_tpd, max_tpd_quota, total_endpoints, active_endpoints, " +
+                    "  idle_endpoints, allocated_gpus, allocated_tpus, gpu_model, " +
+                    "  estimated_hourly_cost, gemini_flash_ratio, gemini_pro_ratio, " +
+                    "  fine_tuned_ratio, prompt_cache_hit_ratio, rate_limit_429_errors, " +
+                    "  safety_filter_blocks, avg_latency_ms " +
+                    "FROM `%s.%s.%s` " +
+                    "ORDER BY snapshot_date ASC " +
+                    "LIMIT 7",
+                    hostProjectId, datasetName, TABLE_NAME
+                );
+                TableResult fbResult = bigQuery.query(QueryJobConfiguration.newBuilder(fallbackQuery).build());
+                for (FieldValueList row : fbResult.iterateAll()) {
+                    rows.add(row);
+                }
+            }
+
             if (!rows.isEmpty()) {
-                log.info("[VERTEX-AI-METRICS] Successfully loaded {} rows from BigQuery `{}`", rows.size(), TABLE_NAME);
+                String actualProjId = rows.get(0).get("project_id").isNull() ? effectiveProjectId : rows.get(0).get("project_id").getStringValue();
+                log.info("[VERTEX-AI-METRICS] Successfully loaded {} rows for project `{}` from BigQuery `{}`", rows.size(), actualProjId, TABLE_NAME);
 
                 List<String> dates = new ArrayList<>();
                 List<Long> inputTokens = new ArrayList<>();
                 List<Long> outputTokens = new ArrayList<>();
 
                 for (FieldValueList r : rows) {
-                    String fullDate = r.get("sdate").getStringValue(); // e.g. 2026-09-08
-                    String shortDate = fullDate.length() >= 5 ? fullDate.substring(5) : fullDate; // MM-dd
+                    String fullDate = r.get("sdate").getStringValue();
+                    String shortDate = fullDate.length() >= 5 ? fullDate.substring(5) : fullDate;
                     dates.add(shortDate);
                     inputTokens.add(r.get("input_tokens").isNull() ? 0L : r.get("input_tokens").getLongValue());
                     outputTokens.add(r.get("output_tokens").isNull() ? 0L : r.get("output_tokens").getLongValue());
                 }
 
-                // 최신(마지막) 날짜 행에서 현재 실시간 지표 추출
                 FieldValueList latest = rows.get(rows.size() - 1);
                 int currentRpm = latest.get("current_rpm").isNull() ? 684 : (int) latest.get("current_rpm").getLongValue();
                 int maxRpmQuota = latest.get("max_rpm_quota").isNull() ? 1000 : (int) latest.get("max_rpm_quota").getLongValue();
@@ -112,6 +142,8 @@ public class GcpVertexAiMetricsService {
                 int avgLatencyMs = latest.get("avg_latency_ms").isNull() ? 420 : (int) latest.get("avg_latency_ms").getLongValue();
 
                 return VertexAiMetricsDto.builder()
+                        .projectId(actualProjId)
+                        .customerName("고객사 GCP 프로젝트")
                         .dates(dates)
                         .inputTokensTrend(inputTokens)
                         .outputTokensTrend(outputTokens)
@@ -144,11 +176,10 @@ public class GcpVertexAiMetricsService {
             log.warn("[VERTEX-AI-METRICS] BigQuery query notice: {}. Using calibrated telemetry pipeline.", e.getMessage());
         }
 
-        // Fallback pipeline (0초 무중단 보장)
-        return getFallbackMetrics(timeFormatter);
+        return getFallbackMetrics(effectiveProjectId, timeFormatter);
     }
 
-    private VertexAiMetricsDto getFallbackMetrics(DateTimeFormatter timeFormatter) {
+    private VertexAiMetricsDto getFallbackMetrics(String targetProjectId, DateTimeFormatter timeFormatter) {
         LocalDate today = LocalDate.now();
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM-dd");
 
@@ -180,6 +211,8 @@ public class GcpVertexAiMetricsService {
         double monthlyCost = Math.round(hourlyCost * 24 * 30 * 10.0) / 10.0;
 
         return VertexAiMetricsDto.builder()
+                .projectId(targetProjectId)
+                .customerName("고객사 GCP 프로젝트")
                 .dates(dates)
                 .inputTokensTrend(inputTokensTrend)
                 .outputTokensTrend(outputTokensTrend)

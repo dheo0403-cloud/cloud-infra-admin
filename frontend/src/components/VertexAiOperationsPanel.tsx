@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { getVertexAiMetrics, VertexAiMetricsDto } from '../services/api';
 
-const VertexAiOperationsPanel: React.FC = () => {
+interface VertexAiOperationsPanelProps {
+    projectId?: string;
+}
+
+const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ projectId }) => {
     const [metrics, setMetrics] = useState<VertexAiMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -9,7 +13,7 @@ const VertexAiOperationsPanel: React.FC = () => {
     const fetchMetrics = async () => {
         setIsRefreshing(true);
         try {
-            const res = await getVertexAiMetrics();
+            const res = await getVertexAiMetrics(projectId);
             if (res.data) {
                 setMetrics(res.data);
             }
@@ -23,10 +27,12 @@ const VertexAiOperationsPanel: React.FC = () => {
 
     useEffect(() => {
         fetchMetrics();
-    }, []);
+    }, [projectId]);
 
     // 기본 폴백 데이터 (로딩 시에도 깨짐 없이 UI 렌더링)
     const data: VertexAiMetricsDto = metrics || {
+        projectId: projectId || 'hcompany-485701',
+        customerName: '한앤컴퍼니 GCP',
         dates: ['09-02', '09-03', '09-04', '09-05', '09-06', '09-07', '09-08'],
         inputTokensTrend: [1420000, 1680000, 1950000, 1540000, 2100000, 2480000, 2820000],
         outputTokensTrend: [420000, 510000, 630000, 480000, 690000, 820000, 940000],
@@ -77,6 +83,9 @@ const VertexAiOperationsPanel: React.FC = () => {
                     </h3>
                 </div>
                 <div className="d-flex align-items-center gap-2 mt-2 mt-sm-0">
+                    <span className="badge badge-bd-blue mr-2" style={{ fontSize: '11px', padding: '5px 10px' }}>
+                        <i className="fab fa-google mr-1 text-info"></i> Project: <strong>{data.projectId || 'hcompany-485701'}</strong>
+                    </span>
                     <span className="badge badge-bd-pink mr-2" style={{ fontSize: '11px', padding: '5px 10px' }}>
                         <i className="fas fa-satellite-dish mr-1 text-danger"></i> Live Telemetry
                     </span>

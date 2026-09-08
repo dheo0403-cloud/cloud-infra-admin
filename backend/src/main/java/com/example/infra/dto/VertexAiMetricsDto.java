@@ -16,6 +16,10 @@ import java.util.List;
 @AllArgsConstructor
 public class VertexAiMetricsDto {
 
+    // 0. 타겟 고객사 및 프로젝트 정보
+    private String projectId;              // 타겟 GCP 프로젝트 ID (예: hcompany-485701)
+    private String customerName;           // 고객사명 (예: 한앤컴퍼니)
+
     // 1. 일별 토큰 사용량 트렌드 (최근 7일)
     private List<String> dates;
     private List<Long> inputTokensTrend;

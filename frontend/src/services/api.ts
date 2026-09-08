@@ -105,6 +105,8 @@ export const getJiraIssues = (projectKey: string, days: number = 7) =>
 
 // Vertex AI & GenAI Metrics
 export interface VertexAiMetricsDto {
+    projectId?: string;
+    customerName?: string;
     dates: string[];
     inputTokensTrend: number[];
     outputTokensTrend: number[];
@@ -133,6 +135,7 @@ export interface VertexAiMetricsDto {
     lastUpdated: string;
 }
 
-export const getVertexAiMetrics = () => axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`);
+export const getVertexAiMetrics = (projectId?: string) =>
+    axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`, { params: { projectId } });
 
 
