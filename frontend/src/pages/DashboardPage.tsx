@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getCustomers, getUpcomingExpiryReservations, InfraCustomer, ReservationDto } from '../services/api';
-import VertexAiOperationsPanel from '../components/VertexAiOperationsPanel';
 
 const DashboardPage: React.FC = () => {
     const [customers, setCustomers] = useState<InfraCustomer[]>([]);
@@ -370,9 +369,6 @@ const DashboardPage: React.FC = () => {
                     </div>
                 </div>
             </div>
-
-            {/* 4. GCP Vertex AI & GenAI Operations Center Panel */}
-            <VertexAiOperationsPanel />
         </div>
     );
 };

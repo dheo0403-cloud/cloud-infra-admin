@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCustomers, InfraCustomer } from '../services/api';
+import VertexAiOperationsPanel from '../components/VertexAiOperationsPanel';
 
 interface CudCommitment {
     name: string;
@@ -2157,7 +2158,12 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                    {/* Section 6: Work Status Table (Jira Integrated + Editable) */}
+                    {/* Section 6: GCP Vertex AI & GenAI Operations Center (고객사별 동적 바인딩) */}
+                    <div style={{ marginTop: '20px' }}>
+                        <VertexAiOperationsPanel projectId={selectedProject || 'hcompany-485701'} />
+                    </div>
+
+                    {/* Section 7: Work Status Table (Jira Integrated + Editable) */}
                     <div className="report-card" style={{ borderTop: '4px solid #0b4885', marginTop: '20px', marginBottom: 0 }}>
                         <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span><i className="fas fa-tasks mr-2" style={{ color: '#2563eb' }}></i>업무 현황 (기술 지원 및 운영 업무 내역)</span>

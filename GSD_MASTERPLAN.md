@@ -133,10 +133,17 @@
   ├─ 6.3 Chrome CDP / Playwright 기반 X축 기준선 및 막대 바닥 밀착 실측 검증 - [완료]
   └─ 6.4 fix/chart-y-axis-minimum 브랜치 커밋 및 히스토리 기록 - [완료]
 
-[Wave 7: AI 수집 로직 타겟 프로젝트 ID 명시적 주입 및 고객사 데이터 재적재] (진행 중)
-  ├─ 7.1 GcpMetricsController, GcpVertexAiMetricsService, VertexAiMetricsDto에 targetProjectId 매개변수 명시적 주입
-  ├─ 7.2 BigQuery 조회 쿼리에 WHERE project_id = @targetProjectId 조건 필터링 적용
-  ├─ 7.3 run_ai_batch_fix.py: 호스트 프로젝트('mzc-gcp-managed') 오적재 데이터 DELETE 및 등록된 고객사 프로젝트별 AI 데이터 재수집/적재
-  ├─ 7.4 BigQuery SELECT 쿼리로 고객사 project_id 무결성 검증 후 스크립트 완전 파기
-  ├─ 7.5 통합 빌드/재배포 및 fix/ai-batch-target-project-id 브랜치 커밋
+[Wave 7: AI 수집 로직 타겟 프로젝트 ID 명시적 주입 및 고객사 데이터 재적재] (완료)
+  ├─ 7.1 GcpMetricsController, GcpVertexAiMetricsService, VertexAiMetricsDto에 targetProjectId 매개변수 명시적 주입 - [완료]
+  ├─ 7.2 BigQuery 조회 쿼리에 WHERE project_id = @targetProjectId 조건 필터링 적용 - [완료]
+  ├─ 7.3 run_ai_batch_fix.py: 호스트 프로젝트('mzc-gcp-managed') 오적재 데이터 DELETE 및 등록된 고객사 프로젝트별 AI 데이터 재수집/적재 - [완료]
+  ├─ 7.4 BigQuery SELECT 쿼리로 고객사 project_id 무결성 검증 후 스크립트 완전 파기 - [완료]
+  └─ 7.5 통합 빌드/재배포 및 fix/ai-batch-target-project-id 브랜치 커밋 - [완료]
+
+[Wave 8: AI 관제 패널의 메인 대시보드 -> GCP 월간 보고서 화면 마이그레이션] (진행 중)
+  ├─ 8.1 DashboardPage.tsx에서 VertexAiOperationsPanel Import 및 렌더링 구문 완전 삭제
+  ├─ 8.2 GcpMonthlyReportViewPage.tsx Section 5(7대 인프라) 직후에 Section 6으로 VertexAiOperationsPanel 마운트
+  ├─ 8.3 selectedProject 상태를 VertexAiOperationsPanel의 projectId Prop으로 동적 바인딩
+  ├─ 8.4 프론트엔드/백엔드 재빌드 및 메인 대시보드(부재) & GCP 보고서(동적 렌더링) 실측 검증
+  └─ 8.5 refactor/move-ai-panel-to-gcp-report 브랜치 커밋 및 작업 히스토리 기록
 ```
