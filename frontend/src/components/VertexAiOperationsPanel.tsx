@@ -93,8 +93,13 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
     // 차트 최대값 계산
     const maxTokenValue = Math.max(...data.inputTokensTrend, ...data.outputTokensTrend, 3000000);
 
+    // 데이터 부재 여부 판별 (토큰 트렌드가 모두 0이고, 엔드포인트/RPM이 0인 경우)
+    const isAiEmpty = (totalInputTokens + totalOutputTokens === 0) &&
+        (data.totalEndpoints === 0) &&
+        (data.currentRpm === 0);
+
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+        <div className={isAiEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             {/* Left Card: Vertex AI Token Usage & Quota Trend (2-Column Standard Report Card) */}
             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div className="report-card-title">

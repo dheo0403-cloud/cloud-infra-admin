@@ -639,6 +639,15 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         break-inside: avoid !important;
                         page-break-inside: avoid !important;
                     }
+                    .print-hide-empty {
+                        display: none !important;
+                        height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        visibility: hidden !important;
+                        opacity: 0 !important;
+                        border: none !important;
+                    }
                 }
 
                 .header-logo-text { text-align: right; }
@@ -1222,12 +1231,43 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     </div>
 
                     {/* Section 5: Compute VM, VPC, LB, GKE, Cloud Run, Storage, SQL */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        
-                        {/* Row 1: Compute VM Split (Placed right between IAM and VPC Network) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            {/* Left Box: Compute VM Trend Chart */}
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    {(() => {
+                        const isVmEmpty = (reportData.vmTotal || 0) === 0 &&
+                            (!reportData.vmTotalTrend || reportData.vmTotalTrend.every(v => v === 0)) &&
+                            ((reportData.vmSummary?.running || 0) + (reportData.vmSummary?.stopped || 0) === 0);
+
+                        const isVpcEmpty = (!reportData.vpcTrend || reportData.vpcTrend.every(v => v === 0)) &&
+                            (!reportData.vpcSubnetTrend || reportData.vpcSubnetTrend.every(v => v === 0)) &&
+                            ((reportData.ipSummary?.externalUsed || 0) + (reportData.ipSummary?.externalUnused || 0) === 0) &&
+                            ((reportData.fwSummary?.totalRules || 0) === 0);
+
+                        const isLbEmpty = (reportData.lbTotal || 0) === 0 &&
+                            (!reportData.lbTrend || reportData.lbTrend.every(v => v === 0)) &&
+                            ((reportData.lbSummary?.total || 0) === 0);
+
+                        const isGkeEmpty = (reportData.gkeTotal || 0) === 0 &&
+                            (!reportData.gkeNodeTrend || reportData.gkeNodeTrend.every(v => v === 0)) &&
+                            ((reportData.gkeNodeTotal || 0) === 0);
+
+                        const isCloudRunEmpty = (!reportData.serverlessTrend || reportData.serverlessTrend.every(v => v === 0)) &&
+                            ((reportData.cloudRunSummary?.totalServices || 0) === 0) &&
+                            ((reportData.cloudRunSummary?.jobTotal || 0) === 0);
+
+                        const isDiskVpnEmpty = (reportData.diskTotal || 0) === 0 &&
+                            (!reportData.diskTrend || reportData.diskTrend.every(v => v === 0)) &&
+                            (!reportData.snapshotTrend || reportData.snapshotTrend.every(v => v === 0)) &&
+                            (reportData.vpnTotal || 0) === 0 &&
+                            ((reportData.vpnSummary?.totalTunnels || 0) === 0);
+
+                        const isSqlEmpty = (reportData.sqlTotal || 0) === 0 &&
+                            (!reportData.sqlTotalTrend || reportData.sqlTotalTrend.every(v => v === 0));
+
+                        return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {/* Row 1: Compute VM Split (Placed right between IAM and VPC Network) */}
+                                <div className={isVmEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    {/* Left Box: Compute VM Trend Chart */}
+                                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-server mr-2" style={{ color: '#2563eb' }}></i>Compute VM 수량</span>
                                 </div>
@@ -1367,7 +1407,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         </div>
 
                         {/* Row 2: VPC Network */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div className={isVpcEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-project-diagram mr-2" style={{ color: '#0284c7' }}></i>VPC Network & Subnet 수량</span>
@@ -1476,8 +1516,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Row 2: Load Balancing */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        {/* Row 3: Load Balancing */}
+                        <div className={isLbEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-network-wired mr-2" style={{ color: '#0d9488' }}></i>Load Balancing 수량</span>
@@ -1615,8 +1655,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Row 3: GKE Cluster */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        {/* Row 4: GKE Cluster */}
+                        <div className={isGkeEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 수량</span>
@@ -1693,8 +1733,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Row 4: Cloud Run */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        {/* Row 5: Cloud Run */}
+                        <div className={isCloudRunEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-bolt mr-2" style={{ color: '#d97706' }}></i>Cloud Run 서비스 수량</span>
@@ -1854,8 +1894,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Row 5: Persistent Disk (Left) & Cloud VPN (Right) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        {/* Row 6: Persistent Disk (Left) & Cloud VPN (Right) */}
+                        <div className={isDiskVpnEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             {/* Left Box: Persistent Disk */}
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
@@ -1992,8 +2032,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Row 6: Cloud SQL Split (2-Column Grid) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        {/* Row 7: Cloud SQL Split (2-Column Grid) */}
+                        <div className={isSqlEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             {/* Left Box: Cloud SQL Trend Chart */}
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
@@ -2157,6 +2197,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 </div>
                             </div>
                         </div>
+                    );
+                })()}
 
                     {/* Section 6: GCP Vertex AI & GenAI Operations Center (고객사별 및 연월별 동적 바인딩) */}
                     <div style={{ marginTop: '20px' }}>
