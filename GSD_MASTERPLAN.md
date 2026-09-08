@@ -79,7 +79,25 @@
 
 ---
 
-## 📊 3. 실행 로드맵 및 진행 현황 (Execution Waves - ALL COMPLETED)
+---
+
+## 📌 과제 3: 보고서 차트 Y축 최솟값 0 고정 및 바닥 밀착 레이아웃 교정 (Chart Y-Axis Minimum & Alignment Fix)
+
+### 1. 현황 및 결함 원인 분석
+* **위치:** `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
+* **문제점:**
+  - `Compute VM 수량` 차트의 좌측 카드가 우측 3대 서브카드(~210px)의 확장 높이를 따라가지 못하고 `height: '115px'`로 상단에 고정되어 X축 점선 기준선 및 막대그래프가 차트 중간에 붕 뜨는 현상 발생.
+  - 모든 막대 차트에 대해 Y축 0 기준점 스케일링(`val === 0 ? 0 : Math.max(12, Math.round((val / maxV) * 100))`) 및 `flexGrow: 1` 바닥 밀착 정렬 일괄 적용 필요.
+
+### 2. 조치 계획 (전체 7대 리소스 바 차트 일괄 적용)
+1. **부모 카드:** `display: 'flex', flexDirection: 'column', justifyContent: 'space-between'` 적용.
+2. **차트 래퍼:** `flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '120px'` 적용.
+3. **바 컨테이너:** `display: 'flex', flexGrow: 1, minHeight: '75px', alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px'` 적용.
+4. **Y축 0 고정:** 0 수치는 정확히 0으로 바닥에 붙고, 양수 값은 0 기준점 대비 비율로 스케일링.
+
+---
+
+## 📊 3. 실행 로드맵 및 진행 현황 (Execution Waves)
 
 ```
 [Wave 1: Cloud SQL 핵심 지표 N/A 뱃지 스타일링 보정] (완료)
@@ -101,11 +119,17 @@
 
 [Wave 4: 빌드 & Chrome CDP 실측 렌더링 검증] (완료)
   ├─ 4.1 npm run build (tsc && vite build) & gradle clean bootJar - [완료]
-  ├─ 4.2 start_backend_server.bat 백엔드 재기동 (PID 35668) - [완료]
+  ├─ 4.2 start_backend_server.bat 백엔드 재기동 (PID 4456) - [완료]
   └─ 4.3 Chrome CDP Headless 기반 Cloud SQL N/A 뱃지 및 AI 패널 실측 검증 - [완료]
 
 [Wave 5: 형상 관리 및 커밋] (완료)
   ├─ 5.1 feat/vertex-ai-operations-panel 브랜치 커밋 - [완료]
   ├─ 5.2 WORK_HISTORY.md 및 task-observer 자동 기록 - [완료]
   └─ 5.3 최종 완료 보고 - [완료]
+
+[Wave 6: 보고서 차트 Y축 최솟값 0 고정 및 바닥 앵커링 교정] (진행 중)
+  ├─ 6.1 GcpMonthlyReportViewPage.tsx 내 Compute VM 및 7대 바 차트 Y-min=0 & flexGrow 바닥 앵커링 일괄 수정
+  ├─ 6.2 프론트엔드/백엔드 재빌드 및 서버 재기동
+  ├─ 6.3 Chrome CDP / Playwright 기반 X축 기준선 및 막대 바닥 밀착 실측 검증
+  └─ 6.4 fix/chart-y-axis-minimum 브랜치 커밋 및 히스토리 기록
 ```
