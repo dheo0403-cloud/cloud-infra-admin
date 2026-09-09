@@ -1115,10 +1115,10 @@ public class BigQueryBatchService {
             }
         }
 
-        // 과거 월 Vertex AI 데이터 정리 (당월 데이터는 일별 누적 유지, 이전 달 데이터는 월별 마지막 1건만 보존)
-        cleanPastMonthlyVertexAiSnapshots(snapshotDate);
+        // 과거 월(Past Months) 전체 데이터 스냅샷 일괄 정리 (자산, 예약, Recommender, Vertex AI 등 일원화)
+        cleanAllPastMonthlySnapshots(snapshotDate);
 
-        log.info("Finished Daily Snapshot Batch (including Reservations and Vertex AI Metrics)");
+        log.info("Finished Daily Snapshot Batch (including Reservations, Vertex AI Metrics, and All Monthly Snapshot Cleanups)");
     }
 
     private void insertDailyAssetBatch(String snapshotDate, String projectId, String customerName, String resourceType, int count) {
@@ -1284,6 +1284,129 @@ public class BigQueryBatchService {
     }
 
     /**
+     * 전체 BigQuery 테이블 대상 과거 월 스냅샷 통합 정리 (자산, 예약, Recommender, Vertex AI 일원화)
+     * - 당월(Current Month) 데이터: 일별 누적 또는 최신 상태 보존
+     * - 과거 월(Past Months) 데이터: (project_id 또는 customer_name, YYYY-MM) 기준 MAX(snapshot_date) 1건(1일치)만 보존하고 나머지 삭제
+     */
+    public void cleanAllPastMonthlySnapshots(String snapshotDate) {
+        log.info("=== 🧹 Starting Unified Past Monthly Snapshots Cleanup for All BigQuery Tables (snapshotDate: {}) ===", snapshotDate);
+        cleanPastMonthlyAssetSnapshots(snapshotDate);
+        cleanPastMonthlyReservationSnapshots(snapshotDate);
+        cleanPastMonthlyRecommenderSnapshots(snapshotDate);
+        cleanPastMonthlyVertexAiSnapshots(snapshotDate);
+        log.info("=== 🏁 Completed Unified Past Monthly Snapshots Cleanup for All BigQuery Tables ===");
+    }
+
+    /**
+     * 과거 월(Past Months) Asset 데이터 정리 (스냅샷 정책)
+     * - 당월(Current Month) 데이터: 일별로 계속 누적 보존
+     * - 이전 달(Past Months) 데이터: 각 프로젝트/월별 가장 늦은 날짜(MAX snapshot_date) 1일치만 남기고 나머지 일자 데이터는 모두 삭제
+     */
+    public void cleanPastMonthlyAssetSnapshots(String snapshotDate) {
+        if (snapshotDate == null || snapshotDate.length() < 7) return;
+        String currentYearMonth = snapshotDate.substring(0, 7); // "YYYY-MM"
+        try {
+            String ctasSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_asset_inventory` AS " +
+                "SELECT * FROM `%s.%s.daily_asset_inventory` " +
+                "WHERE ( " +
+                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
+                "  OR " +
+                "  CONCAT(project_id, '#', CAST(snapshot_date AS STRING)) IN ( " +
+                "    SELECT CONCAT(project_id, '#', CAST(MAX(snapshot_date) AS STRING)) " +
+                "    FROM `%s.%s.daily_asset_inventory` " +
+                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
+                "    GROUP BY project_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
+                "  ) " +
+                ")",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName,
+                currentYearMonth,
+                targetProjectId, datasetName,
+                currentYearMonth
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
+            log.info("Successfully cleaned past monthly Asset records before '{}' in {}.{}.daily_asset_inventory",
+                    currentYearMonth, targetProjectId, datasetName);
+        } catch (Exception e) {
+            log.warn("Past monthly Asset cleanup notice for '{}': {}", currentYearMonth, e.getMessage());
+        }
+    }
+
+    /**
+     * 과거 월(Past Months) Reservation 데이터 정리 (스냅샷 정책)
+     * - 당월(Current Month) 데이터: 일별로 계속 누적 보존
+     * - 이전 달(Past Months) 데이터: 각 고객사/Provider/월별 가장 늦은 날짜(MAX snapshot_date) 1일치만 남기고 나머지 일자 데이터는 모두 삭제
+     */
+    public void cleanPastMonthlyReservationSnapshots(String snapshotDate) {
+        if (snapshotDate == null || snapshotDate.length() < 7) return;
+        String currentYearMonth = snapshotDate.substring(0, 7); // "YYYY-MM"
+        try {
+            String ctasSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_reservation_inventory` AS " +
+                "SELECT * FROM `%s.%s.daily_reservation_inventory` " +
+                "WHERE ( " +
+                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
+                "  OR " +
+                "  CONCAT(COALESCE(customer_name, ''), '#', COALESCE(provider, ''), '#', CAST(snapshot_date AS STRING)) IN ( " +
+                "    SELECT CONCAT(COALESCE(customer_name, ''), '#', COALESCE(provider, ''), '#', CAST(MAX(snapshot_date) AS STRING)) " +
+                "    FROM `%s.%s.daily_reservation_inventory` " +
+                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
+                "    GROUP BY customer_name, provider, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
+                "  ) " +
+                ")",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName,
+                currentYearMonth,
+                targetProjectId, datasetName,
+                currentYearMonth
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
+            log.info("Successfully cleaned past monthly Reservation records before '{}' in {}.{}.daily_reservation_inventory",
+                    currentYearMonth, targetProjectId, datasetName);
+        } catch (Exception e) {
+            log.warn("Past monthly Reservation cleanup notice for '{}': {}", currentYearMonth, e.getMessage());
+        }
+    }
+
+    /**
+     * 과거 월(Past Months) Recommender 데이터 정리 (스냅샷 정책)
+     * - 당월(Current Month) 데이터: deleteCurrentMonthDailyRecommenders에 의해 최신 1일치 유지
+     * - 이전 달(Past Months) 데이터: 각 프로젝트/월별 가장 늦은 날짜(MAX snapshot_date) 1일치만 남기고 나머지 일자 데이터는 모두 삭제
+     */
+    public void cleanPastMonthlyRecommenderSnapshots(String snapshotDate) {
+        ensureDailyRecommenderTableExists();
+        if (snapshotDate == null || snapshotDate.length() < 7) return;
+        String currentYearMonth = snapshotDate.substring(0, 7); // "YYYY-MM"
+        try {
+            String ctasSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_recommender_inventory` AS " +
+                "SELECT * FROM `%s.%s.daily_recommender_inventory` " +
+                "WHERE ( " +
+                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
+                "  OR " +
+                "  CONCAT(project_id, '#', CAST(snapshot_date AS STRING)) IN ( " +
+                "    SELECT CONCAT(project_id, '#', CAST(MAX(snapshot_date) AS STRING)) " +
+                "    FROM `%s.%s.daily_recommender_inventory` " +
+                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
+                "    GROUP BY project_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
+                "  ) " +
+                ")",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName,
+                currentYearMonth,
+                targetProjectId, datasetName,
+                currentYearMonth
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
+            log.info("Successfully cleaned past monthly Recommender records before '{}' in {}.{}.daily_recommender_inventory",
+                    currentYearMonth, targetProjectId, datasetName);
+        } catch (Exception e) {
+            log.warn("Past monthly Recommender cleanup notice for '{}': {}", currentYearMonth, e.getMessage());
+        }
+    }
+
+    /**
      * 과거 월(Month) Vertex AI 데이터 정리 (스냅샷 정책)
      * - 당월(Current Month) 데이터: 일별로 계속 누적 보존
      * - 이전 달(Past Months) 데이터: 각 프로젝트/월별 가장 늦은 날짜(MAX snapshot_date) 1건만 남기고 나머지 일자 데이터는 모두 삭제
@@ -1295,21 +1418,17 @@ public class BigQueryBatchService {
         try {
             String ctasSql = String.format(
                 "CREATE OR REPLACE TABLE `%s.%s.daily_vertex_ai_metrics` AS " +
-                "SELECT * EXCEPT(row_num) " +
-                "FROM ( " +
-                "  SELECT *, " +
-                "    ROW_NUMBER() OVER( " +
-                "      PARTITION BY project_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
-                "      ORDER BY snapshot_date DESC " +
-                "    ) as row_num " +
-                "  FROM `%s.%s.daily_vertex_ai_metrics` " +
-                "  WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
-                ") " +
-                "WHERE row_num = 1 " +
-                "UNION ALL " +
-                "SELECT * " +
-                "FROM `%s.%s.daily_vertex_ai_metrics` " +
-                "WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s'",
+                "SELECT * FROM `%s.%s.daily_vertex_ai_metrics` " +
+                "WHERE ( " +
+                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
+                "  OR " +
+                "  CONCAT(project_id, '#', CAST(snapshot_date AS STRING)) IN ( " +
+                "    SELECT CONCAT(project_id, '#', CAST(MAX(snapshot_date) AS STRING)) " +
+                "    FROM `%s.%s.daily_vertex_ai_metrics` " +
+                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
+                "    GROUP BY project_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
+                "  ) " +
+                ")",
                 targetProjectId, datasetName,
                 targetProjectId, datasetName,
                 currentYearMonth,

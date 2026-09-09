@@ -34,37 +34,25 @@ public class BigQueryVerificationTest {
         String[] tables = {
                 "daily_asset_inventory",
                 "daily_recommender_inventory",
-                "daily_reservation_inventory"
+                "daily_reservation_inventory",
+                "daily_vertex_ai_metrics"
         };
 
         for (String table : tables) {
             try {
-                String countSql = String.format(
-                        "SELECT COUNT(*) as cnt FROM `%s.%s.%s` WHERE snapshot_date = '%s'",
-                        TARGET_PROJECT, DATASET, table, TARGET_DATE
+                String monthlySql = String.format(
+                        "SELECT SUBSTR(CAST(snapshot_date AS STRING), 1, 7) as ym, COUNT(*) as cnt, COUNT(DISTINCT snapshot_date) as distinct_dates " +
+                        "FROM `%s.%s.%s` " +
+                        "GROUP BY ym ORDER BY ym ASC",
+                        TARGET_PROJECT, DATASET, table
                 );
-                TableResult countResult = bigQuery.query(QueryJobConfiguration.newBuilder(countSql).build());
-                long count = 0;
-                for (FieldValueList row : countResult.iterateAll()) {
-                    count = row.get("cnt").getLongValue();
-                }
-                System.out.println(String.format("✅ [%s] 2026-09-07 적재 건수: %d건", table, count));
-
-                // 프로젝트별 수집 건수 요약
-                if (count > 0) {
-                    String groupSql = String.format(
-                            "SELECT project_id, count(*) as p_cnt FROM `%s.%s.%s` WHERE snapshot_date = '%s' GROUP BY project_id ORDER BY p_cnt DESC",
-                            TARGET_PROJECT, DATASET, table, TARGET_DATE
-                    );
-                    TableResult groupResult = bigQuery.query(QueryJobConfiguration.newBuilder(groupSql).build());
-                    System.out.print("   ↳ 프로젝트별 분포: ");
-                    StringBuilder sb = new StringBuilder();
-                    for (FieldValueList row : groupResult.iterateAll()) {
-                        sb.append(row.get("project_id").getStringValue()).append(" (").append(row.get("p_cnt").getLongValue()).append("건), ");
-                    }
-                    String summary = sb.toString();
-                    if (summary.endsWith(", ")) summary = summary.substring(0, summary.length() - 2);
-                    System.out.println(summary);
+                TableResult monthlyResult = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+                System.out.println(String.format("📊 [%s] 월별 데이터 건수 및 일자 수:", table));
+                for (FieldValueList row : monthlyResult.iterateAll()) {
+                    String ym = row.get("ym").isNull() ? "NULL" : row.get("ym").getStringValue();
+                    long count = row.get("cnt").getLongValue();
+                    long dates = row.get("distinct_dates").getLongValue();
+                    System.out.println(String.format("   📅 %s월: %d건 (%d개 일자)", ym, count, dates));
                 }
             } catch (Exception e) {
                 System.out.println(String.format("⚠️ [%s] 조회 중 예외: %s", table, e.getMessage()));

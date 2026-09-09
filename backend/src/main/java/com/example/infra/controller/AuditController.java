@@ -347,4 +347,19 @@ public class AuditController {
             return ResponseEntity.status(500).body("Error: " + e.getMessage());
         }
     }
+
+    /**
+     * BigQuery past monthly snapshots cleanup manual trigger API
+     */
+    @PostMapping("/trigger-monthly-cleanup")
+    public ResponseEntity<String> triggerMonthlyCleanup(@RequestParam(required = false) String snapshotDate) {
+        try {
+            String date = (snapshotDate != null && !snapshotDate.isEmpty()) ? snapshotDate : java.time.LocalDate.now().toString();
+            bigQueryBatchService.cleanAllPastMonthlySnapshots(date);
+            return ResponseEntity.ok("Past monthly snapshot cleanup executed successfully for " + date);
+        } catch (Exception e) {
+            log.error("Failed to trigger monthly snapshot cleanup manually", e);
+            return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
+    }
 }
