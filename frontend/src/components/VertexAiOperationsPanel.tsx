@@ -9,10 +9,8 @@ interface VertexAiOperationsPanelProps {
 const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ projectId, targetYearMonth }) => {
     const [metrics, setMetrics] = useState<VertexAiMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
-    const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
     const fetchMetrics = async () => {
-        setIsRefreshing(true);
         try {
             const res = await getVertexAiMetrics(projectId, targetYearMonth);
             if (res.data) {
@@ -22,7 +20,6 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
             console.error('Failed to fetch Vertex AI operations metrics:', err);
         } finally {
             setLoading(false);
-            setIsRefreshing(false);
         }
     };
 
@@ -86,32 +83,6 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                         <i className="fas fa-brain mr-2" style={{ color: '#2563eb' }}></i>
                         Vertex AI 토큰 및 Quota 트렌드
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '10px', color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', fontWeight: 600 }}>
-                            {data.projectId || 'N/A'}
-                        </span>
-                        <button
-                            onClick={fetchMetrics}
-                            disabled={isRefreshing}
-                            title="지표 새로고침"
-                            style={{
-                                border: '1px solid #cbd5e1',
-                                backgroundColor: '#ffffff',
-                                color: '#64748b',
-                                borderRadius: '4px',
-                                padding: '2px 8px',
-                                fontSize: '11px',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                transition: 'all 0.2s ease'
-                            }}
-                        >
-                            <i className={`fas fa-sync-alt ${isRefreshing ? 'fa-spin' : ''}`}></i>
-                            새로고침
-                        </button>
-                    </div>
                 </div>
 
                 <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>

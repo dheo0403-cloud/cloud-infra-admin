@@ -1,0 +1,51 @@
+# 작업 이력 (WORK_HISTORY.md)
+
+## [2026-09-16] Vertex AI 새로고침 버튼 제거, 일일 수집 배치 영구 수정 및 BQ 데이터 적재 경로 점검
+
+### 1. 작업 목적 및 개요
+- **Vertex AI UI 컴포넌트 정제:** `VertexAiOperationsPanel.tsx`에서 고객사명 뱃지 및 '새로고침' 버튼 UI를 완전히 삭제하고, 연관된 `isRefreshing` 상태 및 핸들러 함수를 제거하여 대시보드 UI를 간결하고 안정적인 뷰로 정제.
+- **BigQuery 적재 경로 및 일일 수집 배치 검증:** `mzc-gcp-managed.infra_admin_dataset` 내 `daily_vertex_ai_metrics`, `daily_asset_inventory`, `daily_recommender_inventory`, `daily_reservation_inventory` 테이블의 적재 경로를 추적 및 규명하고, 일일 배치(`BigQueryBatchService.java`)의 고객사별 순회 수집 및 당일 선행 삭제(멱등성 보장) 로직이 영구 반영되었음을 검증.
+
+### 2. 수정된 파일 목록
+1. `frontend/src/components/VertexAiOperationsPanel.tsx`:
+   - 고객사명 뱃지 및 새로고침 버튼 UI 제거
+   - `isRefreshing` 상태 및 `setIsRefreshing` 로직 완전 제거
+2. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`:
+   - 일일 배치 파이프라인(`runDailySnapshotBatch`) 내 고객사별 순회 수집, 당일 멱등성 보장(`deleteDailyVertexAiMetrics`), 과거 월 1건 스냅샷 압축(`cleanAllPastMonthlySnapshots`) 로직 영구 검증
+3. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java`:
+   - Project ID 누락 시 명시적 빈 데이터 DTO 반환
+
+### 3. 검증 결과
+- **전체 빌드:** `./gradlew clean bootJar` (TypeScript + Vite + Spring Boot bootJar 패키징) 100% 빌드 성공 (1m 5s)
+- **GitHub 배포:** `git push origin main`
+
+---
+
+## [2026-09-16] GCP 멀티 테넌트 데이터 정합성 보정 및 LB 500 에러 과대계상 필터 교정
+
+### 1. 작업 목적 및 개요
+- **LB HTTP 500 에러 불일치 해결:** Cloud Monitoring API 및 Cloud Logging 쿼리에서 `response_code_class = "500"`(5XX 전체)으로 집계되어 502/503/504 에러까지 중복 과대 계상되던 문제를 `metric.label.response_code = "500"` 및 `httpRequest.status = 500`으로 교정하고 UI 표기를 `HTTP 500`으로 일관되게 정렬.
+- **7월 데이터 누락 보정 (Backfill):** BigQuery `daily_asset_inventory` 테이블의 7월 누락 데이터(IAM 주체별 변동, Compute VM, Persistent Disk 등)를 8월 최신 스냅샷 기반으로 `2026-07-31`자 데이터로 백필하는 스크립트 실행 및 정합성 확보.
+- **AI 데이터 교차 오염(Data Leakage) 차단:** 타겟 프로젝트 미지정 시 특정 고객사(`hcompany-485701`)로 fallback되던 결함을 제거하고 빈 데이터(0값)를 명시적으로 반환하도록 수정하여 멀티 테넌트 격리 보장 및 BQ 데이터 전량 재수집.
+- **Recommender 데이터 부재 원인 규명:** 특정 고객사의 추천 데이터 부재는 배치 실패가 아닌 GCP Active Assist에서 진단한 최적화 대상(유휴 자원/보안 취약점)이 0건인 정상/우수 상태임을 분석 규명.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java`:
+   - Cloud Logging: `httpRequest.status=500` 정밀 필터 적용
+   - Cloud Monitoring: `metric.label.response_code = "500"` 정밀 필터 적용 (5XX 전체 클래스 과대 계상 원천 차단)
+2. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java`:
+   - `targetProjectId` 누락 시 특정 테넌트(`hcompany-485701`)로 fallback하던 로직 제거 및 빈 데이터 DTO 반환
+3. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`:
+   - 7월 자산 데이터 백필(`backfillJulyAssetData`), AI 데이터 BQ 전량 초기화 및 고객사별 독립 재수집(`cleanAndResyncAllVertexAiMetrics`), LB HTTP 500 에러 교정 필터 재수집(`resyncLbHttp500Metrics`) 파이프라인 탑재
+4. `frontend/src/components/VertexAiOperationsPanel.tsx`:
+   - 하드코딩된 fallback 테넌트 ID 제거
+5. `frontend/src/pages/GcpMonthlyReportViewPage.tsx`:
+   - UI 상의 `5XX` 혼재 표기를 `HTTP 500`으로 일관성 있게 정렬
+
+### 3. 검증 결과
+- **단위 테스트:** `GcpLbErrorCountTest`, `LBAuditTest` 100% 통과
+- **전체 빌드:** `./gradlew clean bootJar` (TypeScript + Vite + Spring Boot bootJar 패키징) 100% 빌드 성공 (41s)
+- **GitHub 배포:** `git push origin main` (커밋 해시: `8857c4d`) 푸시 완료
+
+### 4. 후속 할 일 (Next Tasks)
+- GCP 실시간 운영 배치 모니터링 및 주기적 헬스체크
