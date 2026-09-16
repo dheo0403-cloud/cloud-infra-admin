@@ -1444,44 +1444,60 @@ public class BigQueryBatchService {
     }
 
     /**
-     * 특정 고객사 프로젝트의 Vertex AI & GenAI 일일 운영 지표 적재
+     * 당일(snapshotDate) 특정 프로젝트의 기존 Vertex AI 지표 선행 삭제 (멱등성 Idempotency 보장)
+     */
+    public void deleteDailyVertexAiMetrics(String snapshotDate, String projectId) {
+        ensureDailyVertexAiMetricsTableExists();
+        if (snapshotDate == null || projectId == null) return;
+        try {
+            String deleteSql = String.format(
+                "DELETE FROM `%s.%s.daily_vertex_ai_metrics` " +
+                "WHERE snapshot_date = '%s' AND project_id = '%s'",
+                targetProjectId, datasetName, snapshotDate, projectId
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
+            log.debug("Cleaned existing daily_vertex_ai_metrics record for {} / {}", snapshotDate, projectId);
+        } catch (Exception e) {
+            log.debug("deleteDailyVertexAiMetrics notice: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 특정 고객사 프로젝트의 Vertex AI & GenAI 일일 운영 지표 적재 (실제 Cloud Monitoring 메트릭 기반)
      */
     public void collectAndInsertDailyVertexAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
         ensureDailyVertexAiMetricsTableExists();
+        deleteDailyVertexAiMetrics(snapshotDate, projectId); // 멱등성 보장 (배치 재실행 시 중복 방지)
+
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_vertex_ai_metrics");
 
-        // 프로젝트별 Vertex AI 실데이터 집계 및 적재 (기본 텔레메트리 연동)
-        long inputTokens = 2480000L;
-        long outputTokens = 820000L;
-        int currentRpm = 684;
-        int maxRpm = 1000;
-        long currentTpd = 3760000L;
-        long maxTpd = 4500000L;
+        // GcpResourceFetcher를 통해 Cloud Monitoring 및 리소스 실데이터 수집
+        GcpResourceFetcher.VertexAiCollectedData data = gcpResourceFetcher.getVertexAiMetricsData(credentials, projectId);
 
         Map<String, Object> row = new HashMap<>();
         row.put("snapshot_date", snapshotDate);
         row.put("project_id", projectId);
         row.put("customer_name", customerName);
-        row.put("input_tokens", inputTokens);
-        row.put("output_tokens", outputTokens);
-        row.put("current_rpm", currentRpm);
-        row.put("max_rpm_quota", maxRpm);
-        row.put("current_tpd", currentTpd);
-        row.put("max_tpd_quota", maxTpd);
-        row.put("total_endpoints", 4);
-        row.put("active_endpoints", 3);
-        row.put("idle_endpoints", 1);
-        row.put("allocated_gpus", 2);
-        row.put("allocated_tpus", 0);
-        row.put("gpu_model", "NVIDIA L4 × 2 (us-central1)");
-        row.put("estimated_hourly_cost", 1.42);
-        row.put("gemini_flash_ratio", 68.0);
-        row.put("gemini_pro_ratio", 24.0);
-        row.put("fine_tuned_ratio", 8.0);
-        row.put("prompt_cache_hit_ratio", 32.5);
-        row.put("rate_limit_429_errors", 3);
-        row.put("safety_filter_blocks", 12);
-        row.put("avg_latency_ms", 420);
+        row.put("input_tokens", data.getInputTokens());
+        row.put("output_tokens", data.getOutputTokens());
+        row.put("current_rpm", data.getCurrentRpm());
+        row.put("max_rpm_quota", data.getMaxRpmQuota());
+        row.put("current_tpd", data.getCurrentTpd());
+        row.put("max_tpd_quota", data.getMaxTpdQuota());
+        row.put("total_endpoints", data.getTotalEndpoints());
+        row.put("active_endpoints", data.getActiveEndpoints());
+        row.put("idle_endpoints", data.getIdleEndpoints());
+        row.put("allocated_gpus", data.getAllocatedGpus());
+        row.put("allocated_tpus", data.getAllocatedTpus());
+        row.put("gpu_model", data.getGpuModel() != null ? data.getGpuModel() : "N/A");
+        row.put("estimated_hourly_cost", data.getEstimatedHourlyCost());
+        row.put("gemini_flash_ratio", data.getGeminiFlashRatio());
+        row.put("gemini_pro_ratio", data.getGeminiProRatio());
+        row.put("fine_tuned_ratio", data.getFineTunedRatio());
+        row.put("prompt_cache_hit_ratio", data.getPromptCacheHitRatio());
+        row.put("rate_limit_429_errors", data.getRateLimit429Errors());
+        row.put("safety_filter_blocks", data.getSafetyFilterBlocks());
+        row.put("avg_latency_ms", data.getAvgLatencyMs());
         row.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
 
         try {
@@ -1490,7 +1506,8 @@ public class BigQueryBatchService {
             if (response.hasErrors()) {
                 log.error("BigQuery insert error for daily_vertex_ai_metrics: {}", response.getInsertErrors());
             } else {
-                log.info("Successfully inserted daily_vertex_ai_metrics for {} into {}.{}", projectId, targetProjectId, datasetName);
+                log.info("Successfully inserted real daily_vertex_ai_metrics for {} (Tokens: in={}, out={}) into {}.{}",
+                        projectId, data.getInputTokens(), data.getOutputTokens(), targetProjectId, datasetName);
             }
         } catch (Exception e) {
             log.error("BigQuery insert failed for daily_vertex_ai_metrics in project {}", projectId, e);

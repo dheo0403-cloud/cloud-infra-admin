@@ -56,7 +56,7 @@ public class GcpVertexAiMetricsService {
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
         try {
-            // 1. 타겟 프로젝트 ID 및 지정 연월 기준 스냅샷 쿼리 (WHERE 절 월별 필터링)
+            // 1. 타겟 프로젝트 ID 및 지정 연월 기준 스냅샷 쿼리 (날짜별 최신 레코드 ROW_NUMBER() 필터링으로 중복 100% 방지)
             String query = String.format(
                 "SELECT " +
                 "  project_id, " +
@@ -67,11 +67,16 @@ public class GcpVertexAiMetricsService {
                 "  estimated_hourly_cost, gemini_flash_ratio, gemini_pro_ratio, " +
                 "  fine_tuned_ratio, prompt_cache_hit_ratio, rate_limit_429_errors, " +
                 "  safety_filter_blocks, avg_latency_ms " +
-                "FROM `%s.%s.%s` " +
-                "WHERE project_id = '%s' " +
-                "  AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                "FROM (" +
+                "  SELECT *, " +
+                "    ROW_NUMBER() OVER(PARTITION BY snapshot_date ORDER BY created_at DESC) AS rn " +
+                "  FROM `%s.%s.%s` " +
+                "  WHERE project_id = '%s' " +
+                "    AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                ") " +
+                "WHERE rn = 1 " +
                 "ORDER BY snapshot_date ASC " +
-                "LIMIT 7",
+                "LIMIT 31",
                 hostProjectId, datasetName, TABLE_NAME, effectiveProjectId, effectiveYearMonth
             );
 
