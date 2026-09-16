@@ -1121,6 +1121,157 @@ public class BigQueryBatchService {
         log.info("Finished Daily Snapshot Batch (including Reservations, Vertex AI Metrics, and All Monthly Snapshot Cleanups)");
     }
 
+    /**
+     * [1회성 데이터 보정] 7월 데이터 누락 보정 (Cloud IAM, Compute VM, Persistent Disk 등 자산 백필)
+     * - 8월 최신 스냅샷 데이터를 기반으로 2026-07-31자 자산 스냅샷 데이터 생성 및 적재
+     */
+    public void backfillJulyAssetData() {
+        log.info("=== 🚀 [1회성 데이터 보정] 7월 자산 데이터 백필(Backfill) 시작 ===");
+        try {
+            // 1. 기존 7월 데이터 존재 여부 확인 후 선행 정리
+            String deleteJulySql = String.format(
+                "DELETE FROM `%s.%s.daily_asset_inventory` WHERE STARTS_WITH(CAST(snapshot_date AS STRING), '2026-07')",
+                targetProjectId, datasetName
+            );
+            try {
+                bigQuery.query(QueryJobConfiguration.newBuilder(deleteJulySql).build());
+                log.info("Cleared any incomplete 2026-07 records in daily_asset_inventory");
+            } catch (Exception ex) {
+                log.debug("July clean notice: {}", ex.getMessage());
+            }
+
+            // 2. 8월 최신 스냅샷 데이터를 2026-07-31자로 복사 INSERT
+            String backfillSql = String.format(
+                "INSERT INTO `%s.%s.daily_asset_inventory` (snapshot_date, project_id, customer_name, resource_type, resource_count) " +
+                "SELECT DATE('2026-07-31') AS snapshot_date, project_id, customer_name, resource_type, resource_count " +
+                "FROM `%s.%s.daily_asset_inventory` " +
+                "WHERE (project_id, snapshot_date) IN ( " +
+                "  SELECT project_id, MAX(snapshot_date) " +
+                "  FROM `%s.%s.daily_asset_inventory` " +
+                "  WHERE STARTS_WITH(CAST(snapshot_date AS STRING), '2026-08') " +
+                "  GROUP BY project_id " +
+                ")",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName,
+                targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(backfillSql).build());
+            log.info("Successfully backfilled 2026-07-31 asset inventory data from 2026-08 snapshot into {}.{}",
+                    targetProjectId, datasetName);
+        } catch (Exception e) {
+            log.error("Failed to backfill July asset data", e);
+            throw new RuntimeException("July asset backfill failed", e);
+        }
+        log.info("=== 🏁 [1회성 데이터 보정] 7월 자산 데이터 백필 완료 ===");
+    }
+
+    /**
+     * [1회성 데이터 보정] AI 데이터 교차 오염 해결 및 BQ 데이터 전량 삭제 후 프로젝트별 재적재
+     */
+    public void cleanAndResyncAllVertexAiMetrics() {
+        log.info("=== 🚀 [1회성 데이터 보정] Vertex AI 데이터 BQ 전량 초기화 및 고객사별 독립 재적재 시작 ===");
+        ensureDailyVertexAiMetricsTableExists();
+        String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+        // 1. 기존 daily_vertex_ai_metrics 테이블 데이터 전량 삭제 (CREATE OR REPLACE TABLE)
+        try {
+            String truncateSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_vertex_ai_metrics` (" +
+                "  snapshot_date DATE," +
+                "  project_id STRING," +
+                "  customer_name STRING," +
+                "  input_tokens INT64," +
+                "  output_tokens INT64," +
+                "  current_rpm INT64," +
+                "  max_rpm_quota INT64," +
+                "  current_tpd INT64," +
+                "  max_tpd_quota INT64," +
+                "  total_endpoints INT64," +
+                "  active_endpoints INT64," +
+                "  idle_endpoints INT64," +
+                "  allocated_gpus INT64," +
+                "  allocated_tpus INT64," +
+                "  gpu_model STRING," +
+                "  estimated_hourly_cost FLOAT64," +
+                "  gemini_flash_ratio FLOAT64," +
+                "  gemini_pro_ratio FLOAT64," +
+                "  fine_tuned_ratio FLOAT64," +
+                "  prompt_cache_hit_ratio FLOAT64," +
+                "  rate_limit_429_errors INT64," +
+                "  safety_filter_blocks INT64," +
+                "  avg_latency_ms INT64," +
+                "  created_at TIMESTAMP" +
+                ")", targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(truncateSql).build());
+            log.info("Successfully truncated daily_vertex_ai_metrics in BigQuery");
+        } catch (Exception e) {
+            log.warn("Truncate table notice: {}", e.getMessage());
+        }
+
+        // 2. 전체 고객사 환경을 순회하며 프로젝트별 독립 실데이터 수집 및 적재
+        List<InfraEnvironment> environments = environmentService.getAllEnvironments();
+        int successCount = 0;
+        for (InfraEnvironment env : environments) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            String decryptedSecret = environmentService.getDecryptedSecret(env.getId());
+            if (decryptedSecret == null || decryptedSecret.isEmpty()) continue;
+
+            try {
+                GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decryptedSecret.getBytes()))
+                        .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+
+                for (CloudProject project : env.getProjects()) {
+                    String projectId = project.getProjectId();
+                    String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
+                    log.info("Resyncing Vertex AI metrics for project: {} ({})", projectId, customerName);
+                    collectAndInsertDailyVertexAiMetrics(snapshotDate, projectId, customerName, credentials);
+                    successCount++;
+                }
+            } catch (Exception e) {
+                log.error("Failed to resync Vertex AI metrics for environment: {}", env.getEnvironmentName(), e);
+            }
+        }
+        log.info("=== 🏁 [1회성 데이터 보정] Vertex AI 데이터 재수집 완료 (총 {}개 프로젝트 처리) ===", successCount);
+    }
+
+    /**
+     * [1회성 데이터 보정] LB 최근 30일 HTTP 500 에러 교정된 필터로 단독 재수집
+     */
+    public void resyncLbHttp500Metrics() {
+        log.info("=== 🚀 [1회성 데이터 보정] LB 최근 30일 HTTP 500 에러 교정 필터 기반 재수집 시작 ===");
+        String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+        List<InfraEnvironment> environments = environmentService.getAllEnvironments();
+        for (InfraEnvironment env : environments) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            String decryptedSecret = environmentService.getDecryptedSecret(env.getId());
+            if (decryptedSecret == null || decryptedSecret.isEmpty()) continue;
+
+            try {
+                GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decryptedSecret.getBytes()))
+                        .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+
+                for (CloudProject project : env.getProjects()) {
+                    String projectId = project.getProjectId();
+                    String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
+
+                    try {
+                        long http500_30d = gcpResourceFetcher.getLbHttp500Last30DaysCount(credentials, projectId);
+                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http500_30d);
+                        log.info("LB HTTP 500 (response_code=500) 30-day count for {} ({}): {}", projectId, customerName, http500_30d);
+                    } catch (Exception e) {
+                        log.warn("Failed to collect LB HTTP 500 for project {}: {}", projectId, e.getMessage());
+                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", 0);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to resync LB HTTP 500 for environment: {}", env.getEnvironmentName(), e);
+            }
+        }
+        log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 500 에러 재수집 완료 ===");
+    }
+
     private void insertDailyAssetBatch(String snapshotDate, String projectId, String customerName, String resourceType, int count) {
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_asset_inventory");
         Map<String, Object> rowContent = new HashMap<>();

@@ -42,9 +42,12 @@ public class GcpVertexAiMetricsService {
      * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
      */
     public VertexAiMetricsDto getVertexAiOperationsMetrics(String targetProjectId, String targetYearMonth) {
-        String effectiveProjectId = (targetProjectId != null && !targetProjectId.trim().isEmpty())
-                ? targetProjectId.trim()
-                : "hcompany-485701"; // 기본 고객사 프로젝트
+        if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
+            log.info("[VERTEX-AI-METRICS] Project ID is null or empty. Returning empty metrics.");
+            return createEmptyMetrics("", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        }
+
+        String effectiveProjectId = targetProjectId.trim();
 
         String effectiveYearMonth = (targetYearMonth != null && targetYearMonth.matches("^\\d{4}-\\d{2}$"))
                 ? targetYearMonth.trim()

@@ -34,7 +34,7 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
 
     // 기본 데이터 (데이터가 없을 때는 0으로 초기화)
     const data: VertexAiMetricsDto = metrics || {
-        projectId: projectId || 'hcompany-485701',
+        projectId: projectId || '',
         customerName: '고객사 GCP 프로젝트',
         dates: [],
         inputTokensTrend: [],
@@ -88,7 +88,7 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '10px', color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #e2e8f0', fontWeight: 600 }}>
-                            {data.projectId || 'hcompany-485701'}
+                            {data.projectId || 'N/A'}
                         </span>
                         <button
                             onClick={fetchMetrics}

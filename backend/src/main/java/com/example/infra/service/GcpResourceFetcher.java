@@ -1005,9 +1005,9 @@ public class GcpResourceFetcher {
                     .getService();
 
             String thirtyDaysAgoIso = java.time.Instant.now().minus(30, java.time.temporal.ChronoUnit.DAYS).toString();
-            // HTTP 301/302 리다이렉트를 제외한 실제 5XX 에러 및 HTTPS/백엔드 응답 기준 필터링
+            // HTTP 301/302 리다이렉트를 제외한 실제 HTTP 500 에러 및 HTTPS/백엔드 응답 기준 필터링 (status=500 정확 필터링)
             String logFilter = "(resource.type=\"http_load_balancer\" OR resource.type=\"http_external_lb_rule\" OR resource.type=\"https_lb_rule\") " +
-                    "AND httpRequest.status>=500 AND httpRequest.status<600 AND timestamp>=\"" + thirtyDaysAgoIso + "\"";
+                    "AND httpRequest.status=500 AND timestamp>=\"" + thirtyDaysAgoIso + "\"";
 
             com.google.api.gax.paging.Page<com.google.cloud.logging.LogEntry> entries = logging.listLogEntries(
                     com.google.cloud.logging.Logging.EntryListOption.filter(logFilter),
@@ -1047,8 +1047,8 @@ public class GcpResourceFetcher {
                         .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
                         .build();
 
-                // 5XX 에러 응답 코드(500, 502, 503, 504 등) 대상
-                String filter = "metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code_class = \"500\"";
+                // 정확한 HTTP 500 에러 응답 코드(response_code = 500) 대상 필터링 (5XX 과대 계상 방지)
+                String filter = "metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code = \"500\"";
 
                 // 1일(86400초) 단위 ALIGN_SUM 정렬 설정
                 com.google.monitoring.v3.Aggregation aggregation = com.google.monitoring.v3.Aggregation.newBuilder()

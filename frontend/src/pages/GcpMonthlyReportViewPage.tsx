@@ -1584,7 +1584,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 HTTP 500 에러</span>
                                                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
-                                                            {isLbExist ? (http500Count > 0 ? `최근 30일간 5XX 에러 ${http500Count}건 감지됨` : 'HTTP 5XX 서버 응답 트래픽 정상') : '연결된 로드밸런서 타겟 없음'}
+                                                            {isLbExist ? (http500Count > 0 ? `최근 30일간 HTTP 500 에러 ${http500Count}건 감지됨` : 'HTTP 500 서버 응답 트래픽 정상') : '연결된 로드밸런서 타겟 없음'}
                                                         </span>
                                                     </div>
                                                 </div>
