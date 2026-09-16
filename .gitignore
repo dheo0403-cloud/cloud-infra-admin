@@ -28,6 +28,8 @@ Thumbs.db
 
 # JAR
 *.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+!**/gradle-wrapper.jar
 
 # Environment & Secrets
 .env
