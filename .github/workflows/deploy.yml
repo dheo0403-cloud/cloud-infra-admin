@@ -1,0 +1,184 @@
+name: Deploy Cloud Infra Admin to Azure Storage & AKS
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'fix/**'
+      - 'feat/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    name: Build JAR, Upload ./dist to Azure Storage, Push ACR & Rollout AKS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Node.js 20 for Frontend Build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: 3. Set up JDK 17 (Eclipse Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: 4. Grant Execute Permission for Gradle Wrapper
+        run: |
+          chmod +x ./backend/gradlew
+
+      - name: 5. Build Spring Boot & React Integrated JAR
+        run: |
+          echo "📦 [Build] Spring Boot + React 프론트엔드 통합 bootJar 빌드 시작..."
+          cd backend
+          ./gradlew clean bootJar --no-daemon -x test
+          cd ..
+          echo "✅ [Build] Spring Boot JAR 파일 빌드 완료:"
+          ls -lh backend/build/libs/
+
+      - name: 6. Package Production Artifacts into ./dist
+        run: |
+          echo "📦 [Packaging] 배포용 ./dist 디렉토리 패키징 시작..."
+          rm -rf ./dist
+          mkdir -p ./dist
+
+          # 1) Dockerfile 복사
+          cp -f Dockerfile ./dist/ 2>/dev/null || true
+          cp -f .dockerignore ./dist/ 2>/dev/null || true
+
+          # 2) 빌드된 Spring Boot Fat JAR 복사
+          cp -f backend/build/libs/*.jar ./dist/ 2>/dev/null || true
+
+          echo "✅ [Packaging] 배포용 ./dist 번들 구성 완료:"
+          ls -la ./dist
+
+      - name: 7. Azure Login via OIDC (Passwordless Federated Credentials)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: 8. Clean Old Files & Upload ./dist to Azure File Share (portal-cloudshell)
+        run: |
+          STORAGE_ACCOUNT="${{ secrets.AZURE_STORAGE_ACCOUNT }}"
+          SHARE_NAME="${{ secrets.AZURE_STORAGE_CONTAINER }}"
+          TARGET_PATH="deploy/cloud-infra-admin"
+
+          echo "📂 [Azure File Share] 파일 공유(File Share) 업로드 준비: $STORAGE_ACCOUNT / $SHARE_NAME / $TARGET_PATH..."
+
+          # 스토리지 계정 키 획득 시도 (파일 공유 전용 안전 인증)
+          ACCOUNT_KEY=$(az storage account keys list --account-name "$STORAGE_ACCOUNT" --query "[0].value" -o tsv 2>/dev/null || true)
+
+          if [ -n "$ACCOUNT_KEY" ]; then
+            echo "🔑 [Azure File Share] Storage Account Key를 사용하여 파일 공유 접근..."
+
+            # 대상 디렉토리 생성
+            az storage directory create \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$ACCOUNT_KEY" \
+              --share-name "$SHARE_NAME" \
+              --name "deploy" || true
+
+            az storage directory create \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$ACCOUNT_KEY" \
+              --share-name "$SHARE_NAME" \
+              --name "$TARGET_PATH" || true
+
+            echo "🧹 [Azure File Share] 기존 구버전 파일 일괄 삭제 중..."
+            az storage file delete-batch \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$ACCOUNT_KEY" \
+              --source "$SHARE_NAME" \
+              --pattern "$TARGET_PATH/*" || true
+
+            echo "🚀 [Azure File Share] 최신 ./dist 폴더의 모든 내용 파일 공유로 일괄 업로드 중..."
+            az storage file upload-batch \
+              --account-name "$STORAGE_ACCOUNT" \
+              --account-key "$ACCOUNT_KEY" \
+              --destination "$SHARE_NAME" \
+              --destination-path "$TARGET_PATH" \
+              --source ./dist \
+              --pattern "*"
+          else
+            echo "🔑 [Azure File Share] OIDC 로그인 모드를 사용하여 파일 공유 접근..."
+
+            az storage directory create \
+              --account-name "$STORAGE_ACCOUNT" \
+              --share-name "$SHARE_NAME" \
+              --name "$TARGET_PATH" \
+              --auth-mode login || true
+
+            echo "🧹 [Azure File Share] 기존 구버전 파일 일괄 삭제 중..."
+            az storage file delete-batch \
+              --account-name "$STORAGE_ACCOUNT" \
+              --source "$SHARE_NAME" \
+              --pattern "$TARGET_PATH/*" \
+              --auth-mode login || true
+
+            echo "🚀 [Azure File Share] 최신 ./dist 폴더의 모든 내용 파일 공유로 일괄 업로드 중..."
+            az storage file upload-batch \
+              --account-name "$STORAGE_ACCOUNT" \
+              --destination "$SHARE_NAME" \
+              --destination-path "$TARGET_PATH" \
+              --source ./dist \
+              --pattern "*" \
+              --auth-mode login
+          fi
+
+          echo "✅ [Azure File Share] 파일 공유 업로드 완료: $SHARE_NAME/$TARGET_PATH"
+
+      - name: 9. Log in to Azure Container Registry (ACR)
+        run: |
+          echo "🔑 [ACR Login] Logging in to ${{ secrets.AZURE_ACR_NAME }}..."
+          az acr login --name ${{ secrets.AZURE_ACR_NAME }}
+
+      - name: 10. Build and Push Docker Image (cloud-infra-admin) to ACR
+        run: |
+          ACR_REGISTRY="${{ secrets.AZURE_ACR_NAME }}.azurecr.io"
+          IMAGE_NAME="cloud-infra-admin"
+          COMMIT_TAG="${{ github.sha }}"
+
+          echo "🐳 [Docker Build] 이미지 빌드 시작: $ACR_REGISTRY/$IMAGE_NAME:latest 및 :$COMMIT_TAG..."
+          docker build \
+            -t $ACR_REGISTRY/$IMAGE_NAME:latest \
+            -t $ACR_REGISTRY/$IMAGE_NAME:$COMMIT_TAG \
+            ./dist
+
+          echo "📤 [Docker Push] ACR 레지스트리로 이미지 푸시..."
+          docker push $ACR_REGISTRY/$IMAGE_NAME:latest
+          docker push $ACR_REGISTRY/$IMAGE_NAME:$COMMIT_TAG
+          echo "✅ [ACR Push] 도커 이미지 푸시 완료: $ACR_REGISTRY/$IMAGE_NAME"
+
+      - name: 11. Set up Kubectl and Connect to AKS Cluster
+        uses: azure/aks-set-context@v4
+        with:
+          cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
+          resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
+
+      - name: 12. Rollout Restart AKS Deployment (cloud-infra-admin)
+        run: |
+          DEPLOYMENT_NAME="cloud-infra-admin"
+          echo "🚀 [AKS Rollout] deployment/$DEPLOYMENT_NAME 무중단 롤아웃 재시작 실행..."
+          if kubectl get deployment $DEPLOYMENT_NAME -n mzc-apps >/dev/null 2>&1; then
+            kubectl rollout restart deployment/$DEPLOYMENT_NAME -n mzc-apps
+            kubectl rollout status deployment/$DEPLOYMENT_NAME -n mzc-apps --timeout=180s
+          else
+            kubectl rollout restart deployment/$DEPLOYMENT_NAME
+            kubectl rollout status deployment/$DEPLOYMENT_NAME --timeout=180s
+          fi
+          echo "🎉 [AKS Deployment] $DEPLOYMENT_NAME 서비스 무중단 배포가 성공적으로 완료되었습니다."
