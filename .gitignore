@@ -29,6 +29,12 @@ Thumbs.db
 # JAR
 *.jar
 
-# Environment
+# Environment & Secrets
 .env
 .env.local
+*gcp-credentials.json
+*credentials*.json
+*.key
+backend/bin/
+backend/src/main/resources/gcp-credentials.json
+backend/bin/main/gcp-credentials.json
