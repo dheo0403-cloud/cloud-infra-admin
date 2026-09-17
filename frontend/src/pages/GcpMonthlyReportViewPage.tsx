@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getCustomers, InfraCustomer } from '../services/api';
 import VertexAiOperationsPanel from '../components/VertexAiOperationsPanel';
+import VertexEndpointOperationsPanel from '../components/VertexEndpointOperationsPanel';
 
 interface CudCommitment {
     name: string;
@@ -2241,6 +2242,14 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     {/* Section 6: GCP Vertex AI & GenAI Operations Center (고객사별 및 연월별 동적 바인딩) */}
                     <div style={{ marginTop: '20px' }}>
                         <VertexAiOperationsPanel
+                            projectId={selectedProject || 'hcompany-485701'}
+                            targetYearMonth={selectedYearMonth}
+                        />
+                    </div>
+
+                    {/* Section 6-2: GCP Vertex AI Endpoint Online Prediction Operations Panel */}
+                    <div>
+                        <VertexEndpointOperationsPanel
                             projectId={selectedProject || 'hcompany-485701'}
                             targetYearMonth={selectedYearMonth}
                         />

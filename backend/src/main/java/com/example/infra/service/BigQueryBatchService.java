@@ -1398,6 +1398,40 @@ public class BigQueryBatchService {
         }
     }
 
+    private void ensureDailyVertexEndpointMetricsTableExists() {
+        try {
+            String createTableDdl = String.format(
+                "CREATE TABLE IF NOT EXISTS `%s.%s.daily_vertex_endpoint_metrics` (" +
+                "  snapshot_date DATE," +
+                "  project_id STRING," +
+                "  customer_name STRING," +
+                "  endpoint_id STRING," +
+                "  endpoint_name STRING," +
+                "  deployed_model_name STRING," +
+                "  machine_type STRING," +
+                "  accelerator_type STRING," +
+                "  accelerator_count INT64," +
+                "  min_replica_count INT64," +
+                "  max_replica_count INT64," +
+                "  active_replica_count INT64," +
+                "  total_predict_requests INT64," +
+                "  avg_latency_ms INT64," +
+                "  p95_latency_ms INT64," +
+                "  error_count_4xx INT64," +
+                "  error_count_5xx INT64," +
+                "  gpu_utilization_percent FLOAT64," +
+                "  cpu_utilization_percent FLOAT64," +
+                "  estimated_hourly_cost FLOAT64," +
+                "  status STRING," +
+                "  created_at TIMESTAMP" +
+                ")", targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
+        } catch (Exception e) {
+            log.debug("Check/Create daily_vertex_endpoint_metrics table skipped: {}", e.getMessage());
+        }
+    }
+
     private void ensureDailyVertexAiMetricsTableExists() {
         try {
             String createTableDdl = String.format(

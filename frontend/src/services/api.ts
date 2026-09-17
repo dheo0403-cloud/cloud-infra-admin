@@ -138,4 +138,45 @@ export interface VertexAiMetricsDto {
 export const getVertexAiMetrics = (projectId?: string, targetYearMonth?: string) =>
     axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`, { params: { projectId, targetYearMonth } });
 
+// Vertex AI Endpoint Online Prediction Metrics
+export interface EndpointItemDto {
+    endpointId: string;
+    endpointName: string;
+    deployedModelName: string;
+    machineType: string;
+    acceleratorType: string;
+    acceleratorCount: number;
+    minReplicaCount: number;
+    maxReplicaCount: number;
+    activeReplicaCount: number;
+    totalPredictRequests: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    gpuUtilizationPercent: number;
+    cpuUtilizationPercent: number;
+    estimatedHourlyCost: number;
+    status: string;
+}
+
+export interface VertexEndpointMetricsDto {
+    projectId?: string;
+    customerName?: string;
+    totalPredictRequests7d: number;
+    avgLatencyMs: number;
+    p95LatencyMs: number;
+    successRatePercent: number;
+    totalEndpoints: number;
+    activeEndpoints: number;
+    totalEstimatedHourlyCost: number;
+    totalEstimatedMonthlyCost: number;
+    dates: string[];
+    dailyRequestsTrend: number[];
+    dailyLatencyTrend: number[];
+    endpoints: EndpointItemDto[];
+}
+
+export const getVertexEndpointMetrics = (projectId?: string, targetYearMonth?: string) =>
+    axios.get<VertexEndpointMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-endpoints`, { params: { projectId, targetYearMonth } });
+
+
 

@@ -1,6 +1,7 @@
 package com.example.infra.service;
 
 import com.example.infra.dto.VertexAiMetricsDto;
+import com.example.infra.dto.VertexEndpointMetricsDto;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.FieldValueList;
 import com.google.cloud.bigquery.QueryJobConfiguration;
@@ -210,6 +211,161 @@ public class GcpVertexAiMetricsService {
                 .safetyFilterBlocks(0)
                 .avgLatencyMs(0)
                 .lastUpdated(LocalDateTime.now().format(timeFormatter))
+                .build();
+    }
+
+    private static final String ENDPOINT_TABLE_NAME = "daily_vertex_endpoint_metrics";
+
+    /**
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Vertex AI Endpoint 온라인 예측 지표 및 인프라 관제 조회
+     */
+    public VertexEndpointMetricsDto getVertexEndpointOperationsMetrics(String targetProjectId, String targetYearMonth) {
+        if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
+            return createEmptyEndpointMetrics("");
+        }
+
+        String effectiveProjectId = targetProjectId.trim();
+        String effectiveYearMonth = (targetYearMonth != null && targetYearMonth.matches("^\\d{4}-\\d{2}$"))
+                ? targetYearMonth.trim()
+                : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+
+        log.info("[VERTEX-ENDPOINT-METRICS] Fetching endpoint metrics for project `{}` and month `{}`",
+                effectiveProjectId, effectiveYearMonth);
+
+        try {
+            // 1. 일별 집계 쿼리 (날짜별 총 예측 요청수, 평균 지연시간)
+            String dailySql = String.format(
+                "SELECT " +
+                "  CAST(snapshot_date AS STRING) AS sdate, " +
+                "  SUM(total_predict_requests) AS daily_requests, " +
+                "  AVG(avg_latency_ms) AS daily_avg_latency " +
+                "FROM `%s.%s.%s` " +
+                "WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                "GROUP BY snapshot_date " +
+                "ORDER BY snapshot_date ASC",
+                hostProjectId, datasetName, ENDPOINT_TABLE_NAME, effectiveProjectId, effectiveYearMonth
+            );
+
+            TableResult dailyRes = bigQuery.query(QueryJobConfiguration.newBuilder(dailySql).build());
+            List<String> dates = new ArrayList<>();
+            List<Long> dailyRequests = new ArrayList<>();
+            List<Integer> dailyLatencies = new ArrayList<>();
+
+            for (FieldValueList row : dailyRes.iterateAll()) {
+                String sdate = row.get("sdate").getStringValue();
+                dates.add(sdate.length() >= 10 ? sdate.substring(5).replace("-", ".") : sdate);
+                dailyRequests.add(row.get("daily_requests").getLongValue());
+                dailyLatencies.add((int) row.get("daily_avg_latency").getDoubleValue());
+            }
+
+            // 2. 최신 스냅샷 기준 개별 엔드포인트 목록 쿼리
+            String endpointSql = String.format(
+                "SELECT * FROM (" +
+                "  SELECT *, ROW_NUMBER() OVER(PARTITION BY endpoint_id ORDER BY snapshot_date DESC, created_at DESC) as rn " +
+                "  FROM `%s.%s.%s` " +
+                "  WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                ") WHERE rn = 1 ORDER BY endpoint_name ASC",
+                hostProjectId, datasetName, ENDPOINT_TABLE_NAME, effectiveProjectId, effectiveYearMonth
+            );
+
+            TableResult epRes = bigQuery.query(QueryJobConfiguration.newBuilder(endpointSql).build());
+            List<VertexEndpointMetricsDto.EndpointItemDto> endpointItems = new ArrayList<>();
+            String customerName = "고객사 GCP 프로젝트";
+            long totalRequests7d = 0;
+            long weightedLatencySum = 0;
+            int maxP95 = 0;
+            double totalHourlyCost = 0.0;
+            int activeCount = 0;
+            long error4xxSum = 0;
+            long error5xxSum = 0;
+
+            for (FieldValueList row : epRes.iterateAll()) {
+                if (!row.get("customer_name").isNull()) {
+                    customerName = row.get("customer_name").getStringValue();
+                }
+                long reqs = row.get("total_predict_requests").getLongValue();
+                int avgLat = (int) row.get("avg_latency_ms").getLongValue();
+                int p95Lat = (int) row.get("p95_latency_ms").getLongValue();
+                double hourlyCost = row.get("estimated_hourly_cost").getDoubleValue();
+                String status = row.get("status").getStringValue();
+                if ("ACTIVE".equalsIgnoreCase(status)) activeCount++;
+
+                totalRequests7d += reqs;
+                weightedLatencySum += (reqs * avgLat);
+                if (p95Lat > maxP95) maxP95 = p95Lat;
+                totalHourlyCost += hourlyCost;
+                error4xxSum += row.get("error_count_4xx").getLongValue();
+                error5xxSum += row.get("error_count_5xx").getLongValue();
+
+                endpointItems.add(VertexEndpointMetricsDto.EndpointItemDto.builder()
+                        .endpointId(row.get("endpoint_id").getStringValue())
+                        .endpointName(row.get("endpoint_name").getStringValue())
+                        .deployedModelName(row.get("deployed_model_name").getStringValue())
+                        .machineType(row.get("machine_type").getStringValue())
+                        .acceleratorType(row.get("accelerator_type").getStringValue())
+                        .acceleratorCount((int) row.get("accelerator_count").getLongValue())
+                        .minReplicaCount((int) row.get("min_replica_count").getLongValue())
+                        .maxReplicaCount((int) row.get("max_replica_count").getLongValue())
+                        .activeReplicaCount((int) row.get("active_replica_count").getLongValue())
+                        .totalPredictRequests(reqs)
+                        .avgLatencyMs(avgLat)
+                        .p95LatencyMs(p95Lat)
+                        .gpuUtilizationPercent(row.get("gpu_utilization_percent").getDoubleValue())
+                        .cpuUtilizationPercent(row.get("cpu_utilization_percent").getDoubleValue())
+                        .estimatedHourlyCost(hourlyCost)
+                        .status(status)
+                        .build());
+            }
+
+            if (endpointItems.isEmpty()) {
+                return createEmptyEndpointMetrics(effectiveProjectId);
+            }
+
+            int overallAvgLatency = totalRequests7d > 0 ? (int) (weightedLatencySum / totalRequests7d) : 0;
+            double successRate = totalRequests7d > 0
+                ? Math.round((1.0 - ((double)(error4xxSum + error5xxSum) / totalRequests7d)) * 10000.0) / 100.0
+                : 100.0;
+            double monthlyCost = Math.round(totalHourlyCost * 730.0 * 10.0) / 10.0;
+
+            return VertexEndpointMetricsDto.builder()
+                    .projectId(effectiveProjectId)
+                    .customerName(customerName)
+                    .totalPredictRequests7d(dailyRequests.stream().mapToLong(Long::longValue).sum())
+                    .avgLatencyMs(overallAvgLatency)
+                    .p95LatencyMs(maxP95)
+                    .successRatePercent(successRate)
+                    .totalEndpoints(endpointItems.size())
+                    .activeEndpoints(activeCount)
+                    .totalEstimatedHourlyCost(Math.round(totalHourlyCost * 100.0) / 100.0)
+                    .totalEstimatedMonthlyCost(monthlyCost)
+                    .dates(dates)
+                    .dailyRequestsTrend(dailyRequests)
+                    .dailyLatencyTrend(dailyLatencies)
+                    .endpoints(endpointItems)
+                    .build();
+
+        } catch (Exception e) {
+            log.warn("[VERTEX-ENDPOINT-METRICS] Notice querying endpoint metrics: {}", e.getMessage());
+            return createEmptyEndpointMetrics(effectiveProjectId);
+        }
+    }
+
+    private VertexEndpointMetricsDto createEmptyEndpointMetrics(String targetProjectId) {
+        return VertexEndpointMetricsDto.builder()
+                .projectId(targetProjectId)
+                .customerName("고객사 GCP 프로젝트")
+                .totalPredictRequests7d(0L)
+                .avgLatencyMs(0)
+                .p95LatencyMs(0)
+                .successRatePercent(100.0)
+                .totalEndpoints(0)
+                .activeEndpoints(0)
+                .totalEstimatedHourlyCost(0.0)
+                .totalEstimatedMonthlyCost(0.0)
+                .dates(new ArrayList<>())
+                .dailyRequestsTrend(new ArrayList<>())
+                .dailyLatencyTrend(new ArrayList<>())
+                .endpoints(new ArrayList<>())
                 .build();
     }
 }

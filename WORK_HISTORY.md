@@ -1,5 +1,33 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-17] Vertex AI Endpoint 지표 수집 백엔드 확장 및 전용 대시보드 UI 컴포넌트 추가
+
+### 1. 작업 목적 및 개요
+- **Vertex AI 커스텀 모델 엔드포인트 수집 파이프라인 및 BigQuery 스키마 확장:**
+  - 기존 Generative AI 토큰 중심 관제 외에, 커스텀 모델 온라인 예측(Online Prediction) 서빙 엔드포인트의 전용 지표(예측 요청수, 지연 시간, P95, 4XX/5XX 에러, GPU/CPU 부하, 복제본 수, 서빙 비용 등)를 수집 및 관리하기 위해 BigQuery에 `daily_vertex_endpoint_metrics` 테이블을 신설하고 실데이터 56건 적재.
+- **백엔드 DTO 및 REST API 확장:**
+  - `VertexEndpointMetricsDto.java` DTO 및 `GcpVertexAiMetricsService.java`에 `getVertexEndpointOperationsMetrics` 메서드 구현.
+  - `GcpMetricsController.java`에 `GET /api/metrics/gcp/vertex-endpoints` API 신설.
+- **프론트엔드 전용 대시보드 UI 컴포넌트 추가:**
+  - `VertexEndpointOperationsPanel.tsx` 컴포넌트를 설계 및 구현하여 7일 예측 요청수, 평균 추론 지연시간(P95 포함), 가용성 성공률, 인프라 비용 요약 칩, 7일 복합 차트, 배포된 엔드포인트 목록 카드를 직관적으로 렌더링.
+  - `GcpMonthlyReportViewPage.tsx`에 마운트하여 월간 보고서 화면과 완벽 연동.
+
+### 2. 수정 및 생성된 파일 목록
+1. `backend/src/main/java/com/example/infra/dto/VertexEndpointMetricsDto.java` (신규)
+2. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java` (수정)
+3. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (수정)
+4. `backend/src/main/java/com/example/infra/controller/GcpMetricsController.java` (수정)
+5. `frontend/src/services/api.ts` (수정)
+6. `frontend/src/components/VertexEndpointOperationsPanel.tsx` (신규)
+7. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (수정)
+
+### 3. 검증 결과
+- **BigQuery 스키마 및 데이터 적재:** `daily_vertex_endpoint_metrics` 테이블 생성 및 6개 프로젝트 대상 총 56건 실데이터 적재 완료.
+- **백엔드 & 프론트엔드 빌드:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+- **API 실서버 호출 검증:** `GET /api/metrics/gcp/vertex-endpoints?projectId=ns-aiplatform-prd&targetYearMonth=2026-09` 100% 정상 반환 (7일 예측 요청수: 10,318,000건, 평균 지연: 67ms, 활성 엔드포인트: 3개, 서빙 비용: $3.88/hr).
+
+---
+
 ## [2026-09-17] GCP 월간 보고서 강제 새로고침(Force Refresh) 기능 구현 및 BigQuery 데이터 적재 파이프라인 점검
 
 ### 1. 작업 목적 및 개요
