@@ -106,19 +106,28 @@ public class MonthlyReportService {
     }
 
     public MonthlyReportDto generateMonthlyReport(String customerName, String projectId, String targetYearMonth) {
+        return generateMonthlyReport(customerName, projectId, targetYearMonth, false);
+    }
+
+    public MonthlyReportDto generateMonthlyReport(String customerName, String projectId, String targetYearMonth, boolean forceRefresh) {
         long startTime = System.currentTimeMillis();
-        log.info("[REPORT-PERF] ① 요청 수신: customer={}, project={}, yearMonth={}", customerName, projectId, targetYearMonth);
-        
+        log.info("[REPORT-PERF] ① 요청 수신: customer={}, project={}, yearMonth={}, forceRefresh={}", customerName, projectId, targetYearMonth, forceRefresh);
+
         if (targetYearMonth == null || targetYearMonth.isEmpty()) {
             targetYearMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
         }
 
         String cacheKey = (projectId != null ? projectId : "unknown") + "_" + targetYearMonth;
-        CachedReport cached = reportCache.get(cacheKey);
-        if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
-            log.info("[REPORT-PERF] ⚡ 캐시 적중 (Cache Hit): project={}, yearMonth={}, 즉시 반환 (소요시간: {}ms)", 
-                    projectId, targetYearMonth, System.currentTimeMillis() - startTime);
-            return cached.dto;
+        if (forceRefresh) {
+            log.info("[REPORT-PERF] 🔄 강제 새로고침(Force Refresh) 요청 - 캐시 우회 및 BigQuery 실시간 재조회 실행: project={}, yearMonth={}", projectId, targetYearMonth);
+            reportCache.remove(cacheKey);
+        } else {
+            CachedReport cached = reportCache.get(cacheKey);
+            if (cached != null && (System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS)) {
+                log.info("[REPORT-PERF] ⚡ 캐시 적중 (Cache Hit): project={}, yearMonth={}, 즉시 반환 (소요시간: {}ms)",
+                        projectId, targetYearMonth, System.currentTimeMillis() - startTime);
+                return cached.dto;
+            }
         }
 
         LocalDate targetDate;

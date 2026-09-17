@@ -1,5 +1,33 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-17] GCP 월간 보고서 강제 새로고침(Force Refresh) 기능 구현 및 BigQuery 데이터 적재 파이프라인 점검
+
+### 1. 작업 목적 및 개요
+- **보고서 강제 새로고침(Force Refresh) 기능 추가:**
+  - `MonthlyReportService`의 30분 TTL 인메모리 캐시(`reportCache`)로 인해 DB 데이터 갱신 후에도 과거 데이터가 출력되던 문제를 해결.
+  - 프론트엔드(`GcpMonthlyReportViewPage.tsx`)에 '데이터 새로 고침'(`btn-refresh`) 버튼을 추가하고, 클릭 시 `forceRefresh=true` 파라미터를 전송하여 캐시를 무시하고 BigQuery에서 실시간 Direct Fetch 후 캐시를 갱신하는 파이프라인 구축.
+- **BigQuery 인증 및 팩트 체크:**
+  - 갱신된 `gcp-credentials.json`(`mzc-monitoring@mzc-gcp-managed.iam.gserviceaccount.com`)을 적용하여 `mzc-gcp-managed.infra_admin_dataset` 10개 전체 테이블 접근 확인.
+  - 7월 자산 누락(VM 0개, Disk 0개) 및 Vertex AI 동일값 복제 현황을 BigQuery 쿼리를 통해 실측 검증.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/controller/MonthlyReportController.java`:
+   - `@RequestParam(required = false, defaultValue = "false") boolean forceRefresh` 및 `force_refresh` 수신 처리.
+   - `monthlyReportService.generateMonthlyReport(customerName, projectId, targetYearMonth, isForceRefresh)` 호출.
+2. `backend/src/main/java/com/example/infra/service/MonthlyReportService.java`:
+   - `generateMonthlyReport` 오버로딩 및 `forceRefresh=true` 시 `reportCache.remove(cacheKey)` 및 BigQuery 실시간 재조회 로직 구현.
+3. `frontend/src/pages/GcpMonthlyReportViewPage.tsx`:
+   - '보고서 생성' 버튼 옆에 '데이터 새로 고침' 버튼 신설.
+   - `fetchReport(true)` 호출 시 `&forceRefresh=true` 동봉 및 `refreshing` 스피너 상태 처리.
+   - `.btn-refresh` 스타일 추가 (초록색 톤 #059669).
+
+### 3. 검증 결과
+- **백엔드 빌드:** `./gradlew clean bootJar` 100% 빌드 성공.
+- **프론트엔드 빌드:** `npm run build` (TypeScript + Vite) 100% 성공.
+- **API 실서버 호출 검증:** `http://localhost:8080/api/reports/gcp/monthly?projectId=ns-aiplatform-prd&targetYearMonth=2026-08&forceRefresh=true` 호출 시 BigQuery 5개 쿼리 병렬 비동기 조회 및 DTO 100% 정상 반환 (소요시간 11.4초).
+
+---
+
 ## [2026-09-16] Vertex AI 새로고침 버튼 제거, 일일 수집 배치 영구 수정 및 BQ 데이터 적재 경로 점검
 
 ### 1. 작업 목적 및 개요

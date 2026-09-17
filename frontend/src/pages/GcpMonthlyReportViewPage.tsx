@@ -145,6 +145,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
     const [selectedYearMonth, setSelectedYearMonth] = useState<string>(getCurrentYearMonth());
     const [reportData, setReportData] = useState<MonthlyReportData | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
+    const [refreshing, setRefreshing] = useState<boolean>(false);
     const [isEditMode, setIsEditMode] = useState<boolean>(false);
     const [reportDuration, setReportDuration] = useState<number | null>(null);
 
@@ -288,15 +289,19 @@ const GcpMonthlyReportViewPage: React.FC = () => {
         fetchCustomers();
     }, []);
 
-    const fetchReport = async () => {
+    const fetchReport = async (forceRefresh: boolean = false) => {
         if (!selectedProject) return;
-        setLoading(true);
+        if (forceRefresh) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
         const startTime = performance.now();
         const customerName = selectedCustomer ? selectedCustomer.name : 'MegazoneCloud Customer';
         const reqTimeStr = new Date().toLocaleTimeString();
-        console.log(`[REPORT] 🚀 보고서 생성 시작 - 고객사: ${customerName}, 프로젝트: ${selectedProject}, 연월: ${selectedYearMonth}, 시작시각: ${reqTimeStr}`);
+        console.log(`[REPORT] 🚀 보고서 ${forceRefresh ? '강제 새로고침(Force Refresh)' : '생성'} 시작 - 고객사: ${customerName}, 프로젝트: ${selectedProject}, 연월: ${selectedYearMonth}, 시작시각: ${reqTimeStr}`);
         try {
-            const url = `/api/reports/gcp/monthly?customerName=${encodeURIComponent(customerName)}&projectId=${encodeURIComponent(selectedProject)}&targetYearMonth=${selectedYearMonth}`;
+            const url = `/api/reports/gcp/monthly?customerName=${encodeURIComponent(customerName)}&projectId=${encodeURIComponent(selectedProject)}&targetYearMonth=${selectedYearMonth}${forceRefresh ? '&forceRefresh=true' : ''}`;
             const res = await fetch(url);
             if (res.ok) {
                 const data: MonthlyReportData = await res.json();
@@ -319,16 +324,17 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                 setEditExecPerformance(data.customExecPerformance || '');
 
                 setEditWorkLogs(data.workLogs && data.workLogs.length > 0 ? data.workLogs : []);
-                
+
                 const elapsedMs = performance.now() - startTime;
                 const durationSec = Math.round((elapsedMs / 1000) * 10) / 10;
                 setReportDuration(data.generationDurationSeconds || durationSec);
-                console.log(`[REPORT] ✅ 보고서 생성 및 화면 렌더링 완료! 총 소요 시간: ${durationSec}초 (${Math.round(elapsedMs)}ms, 서버 처리: ${data.generationDurationSeconds || 'N/A'}초)`);
+                console.log(`[REPORT] ✅ 보고서 ${forceRefresh ? '강제 새로고침' : '생성'} 및 화면 렌더링 완료! 총 소요 시간: ${durationSec}초 (${Math.round(elapsedMs)}ms, 서버 처리: ${data.generationDurationSeconds || 'N/A'}초)`);
             }
         } catch (e) {
             console.error("Failed to fetch monthly report data", e);
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
@@ -528,6 +534,28 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                 }
                 .btn-generate:disabled {
                     background-color: #64748b;
+                    cursor: not-allowed;
+                }
+
+                .btn-refresh {
+                    background-color: #059669;
+                    color: #ffffff;
+                    font-size: 12px;
+                    font-weight: 700;
+                    padding: 6px 14px;
+                    border-radius: 6px;
+                    border: none;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    transition: background-color 0.2s;
+                }
+                .btn-refresh:hover {
+                    background-color: #047857;
+                }
+                .btn-refresh:disabled {
+                    background-color: #94a3b8;
                     cursor: not-allowed;
                 }
 
@@ -774,13 +802,23 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
 
 
-                        <button 
+                        <button
                             className="btn-generate"
-                            onClick={fetchReport}
-                            disabled={!selectedProject || loading}
+                            onClick={() => fetchReport(false)}
+                            disabled={!selectedProject || loading || refreshing}
                         >
                             <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-file-invoice'}`}></i>
                             {loading ? '보고서 생성 중...' : '보고서 생성'}
+                        </button>
+
+                        <button
+                            className="btn-refresh"
+                            onClick={() => fetchReport(true)}
+                            disabled={!selectedProject || loading || refreshing}
+                            title="캐시를 우회하여 DB에서 최신 데이터를 강제로 새로 가져옵니다."
+                        >
+                            <i className={`fas ${refreshing ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+                            {refreshing ? '데이터 갱신 중...' : '데이터 새로 고침'}
                         </button>
                     </div>
 

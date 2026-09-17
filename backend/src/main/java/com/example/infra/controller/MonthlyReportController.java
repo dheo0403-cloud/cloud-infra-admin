@@ -60,26 +60,36 @@ public class MonthlyReportController {
             @RequestParam(required = false, defaultValue = "MegazoneCloud Customer") String customerName,
             @RequestParam(required = false) String projectId,
             @RequestParam(required = false) String targetYearMonth,
-            @RequestBody(required = false) Map<String, String> body) {
-        
+            @RequestParam(required = false, defaultValue = "false") boolean forceRefresh,
+            @RequestParam(required = false) Boolean force_refresh,
+            @RequestBody(required = false) Map<String, Object> body) {
+
+        boolean isForceRefresh = forceRefresh || Boolean.TRUE.equals(force_refresh);
+
         if (body != null && !body.isEmpty()) {
             if (body.containsKey("customerName") && body.get("customerName") != null) {
-                customerName = body.get("customerName");
+                customerName = String.valueOf(body.get("customerName"));
             }
             if (body.containsKey("projectId") && body.get("projectId") != null) {
-                projectId = body.get("projectId");
+                projectId = String.valueOf(body.get("projectId"));
             }
             if (body.containsKey("targetYearMonth") && body.get("targetYearMonth") != null) {
-                targetYearMonth = body.get("targetYearMonth");
+                targetYearMonth = String.valueOf(body.get("targetYearMonth"));
+            }
+            if (body.containsKey("forceRefresh") && body.get("forceRefresh") != null) {
+                isForceRefresh = isForceRefresh || Boolean.parseBoolean(String.valueOf(body.get("forceRefresh")));
+            }
+            if (body.containsKey("force_refresh") && body.get("force_refresh") != null) {
+                isForceRefresh = isForceRefresh || Boolean.parseBoolean(String.valueOf(body.get("force_refresh")));
             }
         }
 
         long reqStart = System.currentTimeMillis();
-        log.info("[REPORT-API] 📥 보고서 생성 요청 수신 (GET/POST) - customer: {}, project: {}, yearMonth: {}", customerName, projectId, targetYearMonth);
-        MonthlyReportDto report = monthlyReportService.generateMonthlyReport(customerName, projectId, targetYearMonth);
+        log.info("[REPORT-API] 📥 보고서 생성 요청 수신 (GET/POST) - customer: {}, project: {}, yearMonth: {}, forceRefresh: {}", customerName, projectId, targetYearMonth, isForceRefresh);
+        MonthlyReportDto report = monthlyReportService.generateMonthlyReport(customerName, projectId, targetYearMonth, isForceRefresh);
         long reqElapsed = System.currentTimeMillis() - reqStart;
-        log.info("[REPORT-API] 📤 보고서 응답 완료 - project: {}, 총 소요시간: {}초 ({}ms)", 
-                projectId, String.format("%.1f", reqElapsed / 1000.0), reqElapsed);
+        log.info("[REPORT-API] 📤 보고서 응답 완료 - project: {}, forceRefresh: {}, 총 소요시간: {}초 ({}ms)",
+                projectId, isForceRefresh, String.format("%.1f", reqElapsed / 1000.0), reqElapsed);
         return ResponseEntity.ok(report);
     }
 
