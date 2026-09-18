@@ -992,6 +992,14 @@ public class BigQueryBatchService {
                     } catch (Exception e) {
                         log.error("Batch failed for Vertex AI Metrics in project {}", projectId, e);
                     }
+
+                    // 21-2. GCP Vertex AI Endpoint Metrics Collection (전체 고객사 프로젝트 순회)
+                    try {
+                        collectAndInsertDailyVertexEndpointMetrics(snapshotDate, projectId, customerName, credentials);
+                        log.info("GCP Vertex AI Endpoint Metrics: successfully collected for project {}", projectId);
+                    } catch (Exception e) {
+                        log.error("Batch failed for Vertex AI Endpoint Metrics in project {}", projectId, e);
+                    }
                 }
             } catch (Exception e) {
                 log.error("Failed to process GCP environment: {}", env.getEnvironmentName(), e);
@@ -1166,16 +1174,24 @@ public class BigQueryBatchService {
     }
 
     /**
-     * [1회성 데이터 보정] AI 데이터 교차 오염 해결 및 BQ 데이터 전량 삭제 후 프로젝트별 재적재
+     * [1회성 데이터 보정] AI 데이터 교차 오염 해결 및 BQ 데이터 전량 삭제 후 프로젝트별 재적재 (토큰 & 엔드포인트 동시)
      */
     public void cleanAndResyncAllVertexAiMetrics() {
-        log.info("=== 🚀 [1회성 데이터 보정] Vertex AI 데이터 BQ 전량 초기화 및 고객사별 독립 재적재 시작 ===");
+        cleanAndResyncAllVertexAiAndEndpointMetrics();
+    }
+
+    /**
+     * [1회성 데이터 보정] Vertex AI 토큰 & 엔드포인트 BQ 데이터 전량 초기화 및 전체 고객사 프로젝트별 독립 재적재
+     */
+    public void cleanAndResyncAllVertexAiAndEndpointMetrics() {
+        log.info("=== 🚀 [1회성 데이터 보정] Vertex AI 토큰 및 엔드포인트 BQ 전량 초기화 및 고객사별 독립 재적재 시작 ===");
         ensureDailyVertexAiMetricsTableExists();
+        ensureDailyVertexEndpointMetricsTableExists();
         String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
         // 1. 기존 daily_vertex_ai_metrics 테이블 데이터 전량 삭제 (CREATE OR REPLACE TABLE)
         try {
-            String truncateSql = String.format(
+            String truncateAiSql = String.format(
                 "CREATE OR REPLACE TABLE `%s.%s.daily_vertex_ai_metrics` (" +
                 "  snapshot_date DATE," +
                 "  project_id STRING," +
@@ -1203,15 +1219,50 @@ public class BigQueryBatchService {
                 "  created_at TIMESTAMP" +
                 ")", targetProjectId, datasetName
             );
-            bigQuery.query(QueryJobConfiguration.newBuilder(truncateSql).build());
+            bigQuery.query(QueryJobConfiguration.newBuilder(truncateAiSql).build());
             log.info("Successfully truncated daily_vertex_ai_metrics in BigQuery");
         } catch (Exception e) {
-            log.warn("Truncate table notice: {}", e.getMessage());
+            log.warn("Truncate daily_vertex_ai_metrics table notice: {}", e.getMessage());
         }
 
-        // 2. 전체 고객사 환경을 순회하며 프로젝트별 독립 실데이터 수집 및 적재
+        // 2. 기존 daily_vertex_endpoint_metrics 테이블 데이터 전량 삭제 (CREATE OR REPLACE TABLE)
+        try {
+            String truncateEpSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_vertex_endpoint_metrics` (" +
+                "  snapshot_date DATE," +
+                "  project_id STRING," +
+                "  customer_name STRING," +
+                "  endpoint_id STRING," +
+                "  endpoint_name STRING," +
+                "  deployed_model_name STRING," +
+                "  machine_type STRING," +
+                "  accelerator_type STRING," +
+                "  accelerator_count INT64," +
+                "  min_replica_count INT64," +
+                "  max_replica_count INT64," +
+                "  active_replica_count INT64," +
+                "  total_predict_requests INT64," +
+                "  avg_latency_ms INT64," +
+                "  p95_latency_ms INT64," +
+                "  error_count_4xx INT64," +
+                "  error_count_5xx INT64," +
+                "  gpu_utilization_percent FLOAT64," +
+                "  cpu_utilization_percent FLOAT64," +
+                "  estimated_hourly_cost FLOAT64," +
+                "  status STRING," +
+                "  created_at TIMESTAMP" +
+                ")", targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(truncateEpSql).build());
+            log.info("Successfully truncated daily_vertex_endpoint_metrics in BigQuery");
+        } catch (Exception e) {
+            log.warn("Truncate daily_vertex_endpoint_metrics table notice: {}", e.getMessage());
+        }
+
+        // 3. 전체 고객사 환경을 순회하며 프로젝트별 독립 실데이터 수집 및 적재
         List<InfraEnvironment> environments = environmentService.getAllEnvironments();
-        int successCount = 0;
+        int aiSuccessCount = 0;
+        int epSuccessCount = 0;
         for (InfraEnvironment env : environments) {
             if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
             String decryptedSecret = environmentService.getDecryptedSecret(env.getId());
@@ -1224,15 +1275,31 @@ public class BigQueryBatchService {
                 for (CloudProject project : env.getProjects()) {
                     String projectId = project.getProjectId();
                     String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
-                    log.info("Resyncing Vertex AI metrics for project: {} ({})", projectId, customerName);
-                    collectAndInsertDailyVertexAiMetrics(snapshotDate, projectId, customerName, credentials);
-                    successCount++;
+
+                    // 3-1. Vertex AI 토큰/Quota 수집
+                    try {
+                        log.info("Resyncing Vertex AI token metrics for project: {} ({})", projectId, customerName);
+                        collectAndInsertDailyVertexAiMetrics(snapshotDate, projectId, customerName, credentials);
+                        aiSuccessCount++;
+                    } catch (Exception ex) {
+                        log.error("Failed to resync Vertex AI token metrics for project {}: {}", projectId, ex.getMessage());
+                    }
+
+                    // 3-2. Vertex AI 엔드포인트 수집
+                    try {
+                        log.info("Resyncing Vertex AI endpoint metrics for project: {} ({})", projectId, customerName);
+                        collectAndInsertDailyVertexEndpointMetrics(snapshotDate, projectId, customerName, credentials);
+                        epSuccessCount++;
+                    } catch (Exception ex) {
+                        log.error("Failed to resync Vertex AI endpoint metrics for project {}: {}", projectId, ex.getMessage());
+                    }
                 }
             } catch (Exception e) {
                 log.error("Failed to resync Vertex AI metrics for environment: {}", env.getEnvironmentName(), e);
             }
         }
-        log.info("=== 🏁 [1회성 데이터 보정] Vertex AI 데이터 재수집 완료 (총 {}개 프로젝트 처리) ===", successCount);
+        log.info("=== 🏁 [1회성 데이터 보정] Vertex AI 데이터 재수집 완료 (토큰: {}개 프로젝트, 엔드포인트: {}개 프로젝트 처리) ===",
+                aiSuccessCount, epSuccessCount);
     }
 
     /**
@@ -1479,6 +1546,7 @@ public class BigQueryBatchService {
         cleanPastMonthlyReservationSnapshots(snapshotDate);
         cleanPastMonthlyRecommenderSnapshots(snapshotDate);
         cleanPastMonthlyVertexAiSnapshots(snapshotDate);
+        cleanPastMonthlyVertexEndpointSnapshots(snapshotDate);
         log.info("=== 🏁 Completed Unified Past Monthly Snapshots Cleanup for All BigQuery Tables ===");
     }
 
@@ -1696,6 +1764,114 @@ public class BigQueryBatchService {
             }
         } catch (Exception e) {
             log.error("BigQuery insert failed for daily_vertex_ai_metrics in project {}", projectId, e);
+        }
+    }
+
+    /**
+     * 과거 월(Month) Vertex AI Endpoint 데이터 정리 (스냅샷 정책)
+     * - 당월(Current Month) 데이터: 일별로 계속 누적 보존
+     * - 이전 달(Past Months) 데이터: 각 프로젝트/엔드포인트/월별 가장 늦은 날짜(MAX snapshot_date) 1건만 남기고 나머지 일자 데이터는 모두 삭제
+     */
+    public void cleanPastMonthlyVertexEndpointSnapshots(String snapshotDate) {
+        ensureDailyVertexEndpointMetricsTableExists();
+        if (snapshotDate == null || snapshotDate.length() < 7) return;
+        String currentYearMonth = snapshotDate.substring(0, 7); // "YYYY-MM"
+        try {
+            String ctasSql = String.format(
+                "CREATE OR REPLACE TABLE `%s.%s.daily_vertex_endpoint_metrics` AS " +
+                "SELECT * FROM `%s.%s.daily_vertex_endpoint_metrics` " +
+                "WHERE ( " +
+                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
+                "  OR " +
+                "  CONCAT(project_id, '#', endpoint_id, '#', CAST(snapshot_date AS STRING)) IN ( " +
+                "    SELECT CONCAT(project_id, '#', endpoint_id, '#', CAST(MAX(snapshot_date) AS STRING)) " +
+                "    FROM `%s.%s.daily_vertex_endpoint_metrics` " +
+                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
+                "    GROUP BY project_id, endpoint_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
+                "  ) " +
+                ")",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName,
+                currentYearMonth,
+                targetProjectId, datasetName,
+                currentYearMonth
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
+            log.info("Successfully cleaned past monthly Vertex AI Endpoint records before '{}' in {}.{}.daily_vertex_endpoint_metrics",
+                    currentYearMonth, targetProjectId, datasetName);
+        } catch (Exception e) {
+            log.warn("Past monthly Vertex AI Endpoint cleanup notice for '{}': {}", currentYearMonth, e.getMessage());
+        }
+    }
+
+    /**
+     * 당일(snapshotDate) 특정 프로젝트의 기존 Vertex AI Endpoint 지표 선행 삭제 (멱등성 Idempotency 보장)
+     */
+    public void deleteDailyVertexEndpointMetrics(String snapshotDate, String projectId) {
+        ensureDailyVertexEndpointMetricsTableExists();
+        if (snapshotDate == null || projectId == null) return;
+        try {
+            String deleteSql = String.format(
+                "DELETE FROM `%s.%s.daily_vertex_endpoint_metrics` " +
+                "WHERE snapshot_date = '%s' AND project_id = '%s'",
+                targetProjectId, datasetName, snapshotDate, projectId
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
+            log.debug("Cleaned existing daily_vertex_endpoint_metrics record for {} / {}", snapshotDate, projectId);
+        } catch (Exception e) {
+            log.debug("deleteDailyVertexEndpointMetrics notice: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 특정 고객사 프로젝트의 Vertex AI Endpoint 일일 운영 지표 적재 (실제 Cloud Monitoring 메트릭 기반)
+     */
+    public void collectAndInsertDailyVertexEndpointMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
+        ensureDailyVertexEndpointMetricsTableExists();
+        deleteDailyVertexEndpointMetrics(snapshotDate, projectId); // 멱등성 보장 (배치 재실행 시 중복 방지)
+
+        TableId tableId = TableId.of(targetProjectId, datasetName, "daily_vertex_endpoint_metrics");
+
+        // GcpResourceFetcher를 통해 Cloud Monitoring 및 엔드포인트 실데이터 수집
+        List<GcpResourceFetcher.VertexEndpointItemCollectedData> endpointList = gcpResourceFetcher.getVertexEndpointMetricsData(credentials, projectId);
+
+        for (GcpResourceFetcher.VertexEndpointItemCollectedData ep : endpointList) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("snapshot_date", snapshotDate);
+            row.put("project_id", projectId);
+            row.put("customer_name", customerName);
+            row.put("endpoint_id", ep.getEndpointId());
+            row.put("endpoint_name", ep.getEndpointName());
+            row.put("deployed_model_name", ep.getDeployedModelName());
+            row.put("machine_type", ep.getMachineType());
+            row.put("accelerator_type", ep.getAcceleratorType());
+            row.put("accelerator_count", ep.getAcceleratorCount());
+            row.put("min_replica_count", ep.getMinReplicaCount());
+            row.put("max_replica_count", ep.getMaxReplicaCount());
+            row.put("active_replica_count", ep.getActiveReplicaCount());
+            row.put("total_predict_requests", ep.getTotalPredictRequests());
+            row.put("avg_latency_ms", ep.getAvgLatencyMs());
+            row.put("p95_latency_ms", ep.getP95LatencyMs());
+            row.put("error_count_4xx", ep.getErrorCount4xx());
+            row.put("error_count_5xx", ep.getErrorCount5xx());
+            row.put("gpu_utilization_percent", ep.getGpuUtilizationPercent());
+            row.put("cpu_utilization_percent", ep.getCpuUtilizationPercent());
+            row.put("estimated_hourly_cost", ep.getEstimatedHourlyCost());
+            row.put("status", ep.getStatus());
+            row.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
+
+            try {
+                InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId).addRow(row).build();
+                InsertAllResponse response = bigQuery.insertAll(insertRequest);
+                if (response.hasErrors()) {
+                    log.error("BigQuery insert error for daily_vertex_endpoint_metrics (endpoint={}): {}", ep.getEndpointId(), response.getInsertErrors());
+                } else {
+                    log.info("Successfully inserted daily_vertex_endpoint_metrics for {} / {} into {}.{}",
+                            projectId, ep.getEndpointId(), targetProjectId, datasetName);
+                }
+            } catch (Exception e) {
+                log.error("BigQuery insert failed for daily_vertex_endpoint_metrics in project {} / {}", projectId, ep.getEndpointId(), e);
+            }
         }
     }
 

@@ -31,20 +31,10 @@ public class BigQueryDataCorrectionExecutionTest {
         System.out.println("🚀 [프로덕션 BigQuery 데이터 보정 및 적재 실행 시작]");
         System.out.println("================================================================================");
 
-        // 1. 7월 자산 데이터 백필 실행
-        System.out.println("\n👉 [과업 1] 7월 IAM/VM/PD 자산 데이터 8월 스냅샷 기반 백필 실행...");
-        bigQueryBatchService.backfillJulyAssetData();
-        System.out.println("✅ [과업 1 완료] 7월 31일자 자산 데이터 백필 완료");
-
-        // 2. Vertex AI 데이터 기존 데이터 정리 후 프로젝트별 독립 재적재
-        System.out.println("\n👉 [과업 2] Vertex AI 데이터 BQ 삭제 및 고객사별 독립 재적재 실행...");
-        bigQueryBatchService.cleanAndResyncAllVertexAiMetrics();
-        System.out.println("✅ [과업 2 완료] Vertex AI 데이터 프로젝트별 재적재 완료");
-
-        // 3. LB 최근 30일 HTTP 500 에러 교정 필터 기반 재수집
-        System.out.println("\n👉 [과업 3] LB 최근 30일 HTTP 500 에러 교정 필터(response_code=500) 기반 재수집 실행...");
-        bigQueryBatchService.resyncLbHttp500Metrics();
-        System.out.println("✅ [과업 3 완료] LB HTTP 500 에러 재수집 완료");
+        // 2. Vertex AI 토큰 및 엔드포인트 데이터 기존 데이터 정리 후 프로젝트별 독립 재적재
+        System.out.println("\n👉 [과업 2] Vertex AI 토큰 & 엔드포인트 데이터 BQ 삭제 및 고객사별 독립 재적재 실행...");
+        bigQueryBatchService.cleanAndResyncAllVertexAiAndEndpointMetrics();
+        System.out.println("✅ [과업 2 완료] Vertex AI 토큰 및 엔드포인트 데이터 프로젝트별 재적재 완료");
 
         System.out.println("\n================================================================================");
         System.out.println("🔍 [검증] BigQuery 실제 적재 결과 확인");
@@ -99,6 +89,30 @@ public class BigQueryDataCorrectionExecutionTest {
             System.out.println(String.format("   📅 [%s] %s (%s) | Tokens: In=%,d, Out=%,d | RPM: %d", sdate, pid, cname, inTok, outTok, rpm));
         }
         System.out.println(String.format("👉 Vertex AI 총 적재 건수: %d건", viCount));
+
+        // 2-2. Vertex AI Endpoint 데이터 검증
+        String epSql = String.format(
+                "SELECT snapshot_date, project_id, customer_name, endpoint_id, endpoint_name, deployed_model_name, total_predict_requests, avg_latency_ms " +
+                "FROM `%s.%s.daily_vertex_endpoint_metrics` " +
+                "ORDER BY snapshot_date DESC, created_at DESC",
+                TARGET_PROJECT, DATASET
+        );
+        TableResult epRes = bigQuery.query(QueryJobConfiguration.newBuilder(epSql).build());
+        System.out.println("\n📊 [검증 2-2] Vertex AI Endpoint 데이터 적재 현황:");
+        int epCount = 0;
+        for (FieldValueList row : epRes.iterateAll()) {
+            epCount++;
+            String sdate = row.get("snapshot_date").getStringValue();
+            String pid = row.get("project_id").getStringValue();
+            String cname = row.get("customer_name").isNull() ? "N/A" : row.get("customer_name").getStringValue();
+            String epId = row.get("endpoint_id").getStringValue();
+            String epName = row.get("endpoint_name").getStringValue();
+            String model = row.get("deployed_model_name").getStringValue();
+            long reqs = row.get("total_predict_requests").getLongValue();
+            long lat = row.get("avg_latency_ms").getLongValue();
+            System.out.println(String.format("   📅 [%s] %s (%s) | EP: %s (%s) | Model: %s | Reqs: %,d | Latency: %dms", sdate, pid, cname, epName, epId, model, reqs, lat));
+        }
+        System.out.println(String.format("👉 Vertex AI Endpoint 총 적재 건수: %d건", epCount));
 
         // 3. LB 500 에러 검증
         String lbSql = String.format(

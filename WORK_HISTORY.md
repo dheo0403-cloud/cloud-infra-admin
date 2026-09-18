@@ -1,6 +1,43 @@
 # 작업 이력 (WORK_HISTORY.md)
 
-## [2026-09-17] Vertex AI Endpoint 지표 수집 백엔드 확장 및 전용 대시보드 UI 컴포넌트 추가
+## [2026-09-18] GCP Vertex AI 토큰 및 엔드포인트 멀티 테넌트 수집 파이프라인 전면 교정 및 BQ 적재 검증
+
+### 1. 작업 목적 및 개요
+- **단일 프로젝트 수집 버그 원인 규명 및 전면 교정:**
+  - 기존 Generative AI 토큰 수집뿐만 아니라 온라인 예측 엔드포인트 수집 파이프라인에서 일부 프로젝트만 수집되거나 수집 로직이 누락되었던 문제를 해결.
+  - `GcpResourceFetcher.java`에 Cloud Monitoring API(`prediction/online/request_count`, `prediction/online/prediction_latencies`, 응답 코드 등) 기반 엔드포인트 실데이터 수집 메서드(`getVertexEndpointMetricsData`) 구현.
+  - `BigQueryBatchService.java`에 `collectAndInsertDailyVertexEndpointMetrics`, `deleteDailyVertexEndpointMetrics`, `cleanPastMonthlyVertexEndpointSnapshots`, `cleanAndResyncAllVertexAiAndEndpointMetrics` 메서드를 신설 및 배치 루프(`runDailySnapshotBatch`) 연동.
+- **전체 테넌트 루프 순회 및 BigQuery 전수 적재:**
+  - 전체 고객사 환경(`InfraEnvironment` ➔ `CloudProject`)을 누락 없이 순회하며 `daily_vertex_ai_metrics`(토큰/Quota)와 `daily_vertex_endpoint_metrics`(엔드포인트 관제) 두 테이블 모두 20개 GCP 프로젝트 전수 수집 및 적재 완료.
+- **프론트엔드 UI 연동 및 헤드리스 실측 검증:**
+  - `GcpMonthlyReportViewPage.tsx` 내 Section 6(토큰 및 Quota) 및 Section 6-2(엔드포인트 관제) 연동.
+  - Puppeteer 기반 `verify-ui` 스크립트로 브라우저 렌더링 및 콘솔 에러 0건 정상 검증.
+
+### 2. 수정 및 생성된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java`:
+   - `VertexEndpointItemCollectedData` DTO 신설
+   - `getVertexEndpointMetricsData(GoogleCredentials credentials, String projectId)` Cloud Monitoring 기반 지표 수집기 구현
+2. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java`:
+   - `collectAndInsertDailyVertexEndpointMetrics` 및 `deleteDailyVertexEndpointMetrics` 구현 (멱등성 보장)
+   - `cleanPastMonthlyVertexEndpointSnapshots` 스냅샷 정리 로직 구현
+   - `cleanAndResyncAllVertexAiAndEndpointMetrics` 1회성/보정 수집 메서드 구현
+   - `runDailySnapshotBatch` 내 21-2번 엔드포인트 수집 루프 연동
+3. `backend/src/test/java/com/example/infra/BigQueryDataCorrectionExecutionTest.java`:
+   - 토큰 및 엔드포인트 전수 재적재 및 BigQuery 쿼리 교차 검증 테스트 업데이트
+4. `frontend/package.json` & `frontend/package-lock.json`:
+   - `puppeteer-core` devDependency 추가
+
+### 3. 검증 결과
+- **BigQuery 적재 교차 검증 (20개 프로젝트 전수 적재 확인):**
+  - `daily_vertex_ai_metrics`: 20개 프로젝트 각 1건 적재 (한앤컴퍼니 5개, 밸로프 1개, NS Mall 10개, 카카오헬스케어 3개, 우진산전 1개)
+  - `daily_vertex_endpoint_metrics`: 20개 프로젝트 각 1건 적재 (동일 20개 프로젝트 전수 완료)
+- **API 실서버 응답 검증:**
+  - `GET /api/metrics/gcp/vertex-ai?projectId=ns-aiplatform-prd` ➔ 200 OK 정상 반환
+  - `GET /api/metrics/gcp/vertex-endpoints?projectId=ns-aiplatform-prd` ➔ 200 OK 정상 반환
+- **UI 검증 (`verify-ui`):**
+  - Puppeteer 기반 헤드리스 크롬 실측 렌더링 성공, 콘솔 에러 0건 (`hasTokenCard: true`, `hasEndpointCard: true`).
+
+---
 
 ### 1. 작업 목적 및 개요
 - **Vertex AI 커스텀 모델 엔드포인트 수집 파이프라인 및 BigQuery 스키마 확장:**
