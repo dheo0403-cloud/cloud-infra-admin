@@ -1243,114 +1243,132 @@ public class GcpResourceFetcher {
                         .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
                         .build();
 
-                // 1. Token Count 메트릭 조회 (최근 24시간)
-                try {
-                    String tokenFilter = "metric.type = \"aiplatform.googleapis.com/publisher/token_count\" OR " +
-                            "metric.type = \"aiplatform.googleapis.com/prediction/online/token_count\"";
+                // 1. Token Count 메트릭 조회 (최근 24시간, 메트릭 타입별 분리 쿼리로 Cloud Monitoring OR 필터 제약 완벽 해결)
+                String[] tokenMetricTypes = {
+                        "aiplatform.googleapis.com/publisher/token_count",
+                        "aiplatform.googleapis.com/prediction/online/token_count"
+                };
 
-                    com.google.monitoring.v3.ListTimeSeriesRequest tokenReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
-                            .setName(projectName)
-                            .setFilter(tokenFilter)
-                            .setInterval(dailyInterval)
-                            .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
-                                    .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
-                                    .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
-                                    .build())
-                            .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
-                            .build();
+                for (String mType : tokenMetricTypes) {
+                    try {
+                        String tokenFilter = "metric.type = \"" + mType + "\"";
 
-                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(tokenReq).iterateAll()) {
-                        String tokenType = ts.getMetric().getLabelsOrDefault("token_type", "").toLowerCase();
-                        String modelName = ts.getResource().getLabelsOrDefault("model_id", "").toLowerCase();
+                        com.google.monitoring.v3.ListTimeSeriesRequest tokenReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                                .setName(projectName)
+                                .setFilter(tokenFilter)
+                                .setInterval(dailyInterval)
+                                .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
+                                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                                        .build())
+                                .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                                .build();
 
-                        long sum = 0L;
-                        for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
-                            if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
-                            else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                        for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(tokenReq).iterateAll()) {
+                            String tokenType = ts.getMetric().getLabelsOrDefault("token_type", "").toLowerCase();
+                            String modelName = ts.getResource().getLabelsOrDefault("model_id", "").toLowerCase();
+
+                            long sum = 0L;
+                            for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                                if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
+                                else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                            }
+
+                            if (tokenType.contains("prompt") || tokenType.contains("input") || tokenType.isEmpty()) {
+                                inputTokens += sum;
+                            } else {
+                                outputTokens += sum;
+                            }
+
+                            if (modelName.contains("flash")) {
+                                flashTokens += sum;
+                            } else if (modelName.contains("pro")) {
+                                proTokens += sum;
+                            } else if (modelName.contains("claude") || modelName.contains("anthropic")) {
+                                claudeTokens += sum;
+                            } else if (modelName.contains("custom") || modelName.contains("ft") || modelName.contains("tuned")) {
+                                customTokens += sum;
+                            }
                         }
-
-                        if (tokenType.contains("prompt") || tokenType.contains("input") || tokenType.isEmpty()) {
-                            inputTokens += sum;
-                        } else {
-                            outputTokens += sum;
-                        }
-
-                        if (modelName.contains("flash")) {
-                            flashTokens += sum;
-                        } else if (modelName.contains("pro")) {
-                            proTokens += sum;
-                        } else if (modelName.contains("claude") || modelName.contains("anthropic")) {
-                            claudeTokens += sum;
-                        } else if (modelName.contains("custom") || modelName.contains("ft") || modelName.contains("tuned")) {
-                            customTokens += sum;
-                        }
+                    } catch (Exception ex) {
+                        log.debug("Token count metric [{}] query skipped for project {}: {}", mType, projectId, ex.getMessage());
                     }
-                } catch (Exception ex) {
-                    log.debug("Token count monitoring query notice for project {}: {}", projectId, ex.getMessage());
                 }
 
                 // 2. Pretrained APIs (Vision, Speech, Translation, NLP) 메트릭 조회
-                try {
-                    String pretrainedFilter = "metric.type = \"serviceruntime.googleapis.com/api/request_count\" AND " +
-                            "(resource.labels.service = \"vision.googleapis.com\" OR " +
-                            " resource.labels.service = \"speech.googleapis.com\" OR " +
-                            " resource.labels.service = \"translate.googleapis.com\" OR " +
-                            " resource.labels.service = \"language.googleapis.com\")";
+                String[] pretrainedServices = {
+                        "vision.googleapis.com",
+                        "speech.googleapis.com",
+                        "translate.googleapis.com",
+                        "language.googleapis.com"
+                };
 
-                    com.google.monitoring.v3.ListTimeSeriesRequest preReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
-                            .setName(projectName)
-                            .setFilter(pretrainedFilter)
-                            .setInterval(dailyInterval)
-                            .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
-                                    .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
-                                    .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
-                                    .build())
-                            .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
-                            .build();
+                for (String srv : pretrainedServices) {
+                    try {
+                        String pretrainedFilter = "metric.type = \"serviceruntime.googleapis.com/api/request_count\" AND " +
+                                "resource.labels.service = \"" + srv + "\"";
 
-                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(preReq).iterateAll()) {
-                        String service = ts.getResource().getLabelsOrDefault("service", "").toLowerCase();
-                        long sum = 0L;
-                        for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
-                            if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
-                            else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                        com.google.monitoring.v3.ListTimeSeriesRequest preReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                                .setName(projectName)
+                                .setFilter(pretrainedFilter)
+                                .setInterval(dailyInterval)
+                                .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
+                                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                                        .build())
+                                .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                                .build();
+
+                        for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(preReq).iterateAll()) {
+                            long sum = 0L;
+                            for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                                if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
+                                else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                            }
+                            if (srv.contains("vision")) visionCalls += sum;
+                            else if (srv.contains("speech")) speechCalls += sum;
+                            else if (srv.contains("translate")) translationCalls += sum;
+                            else if (srv.contains("language")) nlpCalls += sum;
                         }
-                        if (service.contains("vision")) visionCalls += sum;
-                        else if (service.contains("speech")) speechCalls += sum;
-                        else if (service.contains("translate")) translationCalls += sum;
-                        else if (service.contains("language")) nlpCalls += sum;
+                    } catch (Exception ex) {
+                        log.debug("Pretrained API [{}] query skipped for project {}: {}", srv, projectId, ex.getMessage());
                     }
-                } catch (Exception ex) {
-                    log.debug("Pretrained API query notice for project {}: {}", projectId, ex.getMessage());
                 }
 
-                // 3. Request Count & RPM
-                try {
-                    String reqFilter = "metric.type = \"aiplatform.googleapis.com/publisher/request_count\"";
-                    com.google.monitoring.v3.ListTimeSeriesRequest reqListReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
-                            .setName(projectName)
-                            .setFilter(reqFilter)
-                            .setInterval(recentInterval)
-                            .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
-                                    .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(600).build())
-                                    .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
-                                    .build())
-                            .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
-                            .build();
+                // 3. Request Count & RPM (최근 10분 요청량)
+                String[] reqMetricTypes = {
+                        "aiplatform.googleapis.com/publisher/request_count",
+                        "aiplatform.googleapis.com/prediction/online/request_count"
+                };
 
-                    long totalRequests10m = 0L;
-                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(reqListReq).iterateAll()) {
-                        long sum = 0L;
-                        for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
-                            if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
-                            else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                long totalRequests10m = 0L;
+                for (String reqType : reqMetricTypes) {
+                    try {
+                        String reqFilter = "metric.type = \"" + reqType + "\"";
+                        com.google.monitoring.v3.ListTimeSeriesRequest reqListReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                                .setName(projectName)
+                                .setFilter(reqFilter)
+                                .setInterval(recentInterval)
+                                .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(600).build())
+                                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                                        .build())
+                                .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                                .build();
+
+                        for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(reqListReq).iterateAll()) {
+                            long sum = 0L;
+                            for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                                if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
+                                else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                            }
+                            totalRequests10m += sum;
                         }
-                        totalRequests10m += sum;
+                    } catch (Exception ex) {
+                        log.debug("Request count [{}] query skipped for project {}: {}", reqType, projectId, ex.getMessage());
                     }
-                    currentRpm = (int) (totalRequests10m / 10.0);
-                } catch (Exception ex) {
-                    log.debug("Request count monitoring query notice for project {}: {}", projectId, ex.getMessage());
                 }
+                currentRpm = (int) (totalRequests10m / 10.0);
             }
         } catch (Exception e) {
             log.warn("Cloud Monitoring client init or query notice for Direct AI in project {}: {}", projectId, e.getMessage());
