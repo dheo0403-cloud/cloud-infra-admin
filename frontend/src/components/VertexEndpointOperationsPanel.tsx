@@ -141,19 +141,30 @@ const VertexEndpointOperationsPanel: React.FC<VertexEndpointOperationsPanelProps
                                     <span style={{ fontSize: '9px', color: '#64748b' }}>최근 7일간 추이</span>
                                 </div>
 
-                                <div style={{ height: '110px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px' }}>
+                                <div style={{ height: '120px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px' }}>
                                     {data.dates.map((date, idx) => {
                                         const reqs = data.dailyRequestsTrend[idx] || 0;
                                         const lat = data.dailyLatencyTrend[idx] || 0;
-                                        const barHeightPercent = Math.max(16, Math.min(100, (reqs / maxRequestValue) * 100));
+                                        const barHeightPercent = Math.max(14, Math.min(80, (reqs / maxRequestValue) * 80));
+
+                                        const formatCallsLabel = (val: number) => {
+                                            if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                                            if (val >= 1000) return `${(val / 1000).toFixed(1)}K`;
+                                            return val > 0 ? `${val}` : '0';
+                                        };
 
                                         return (
                                             <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                <span style={{ fontSize: '8px', fontWeight: 700, color: '#059669', marginBottom: '2px' }}>
-                                                    {lat}ms
-                                                </span>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2px' }}>
+                                                    <span style={{ fontSize: '8px', fontWeight: 800, color: '#047857', lineHeight: 1.1 }}>
+                                                        {formatCallsLabel(reqs)}
+                                                    </span>
+                                                    <span style={{ fontSize: '7.5px', fontWeight: 600, color: '#0284c7', lineHeight: 1.1 }}>
+                                                        {lat}ms
+                                                    </span>
+                                                </div>
                                                 <div
-                                                    title={`${date} - 요청수: ${reqs.toLocaleString()}건, 평균지연: ${lat}ms`}
+                                                    title={`${date} - 예측 호출: ${reqs.toLocaleString()}건 (${formatCallsLabel(reqs)}), 평균 지연시간: ${lat}ms`}
                                                     style={{
                                                         width: '18px',
                                                         height: `${barHeightPercent}%`,

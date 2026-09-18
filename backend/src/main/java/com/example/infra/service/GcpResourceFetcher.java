@@ -1508,7 +1508,7 @@ public class GcpResourceFetcher {
             log.warn("Cloud Monitoring client init or query notice for endpoint metrics in project {}: {}", projectId, e.getMessage());
         }
 
-        // 수집된 엔드포인트 목록 구성
+        // 수집된 엔드포인트 목록 구성 (실제 모니터링 데이터가 존재하는 경우만 생성, 가짜 더미 일괄 주입 제거)
         if (!endpointRequests.isEmpty()) {
             for (Map.Entry<String, Long> entry : endpointRequests.entrySet()) {
                 String epId = entry.getKey();
@@ -1518,8 +1518,8 @@ public class GcpResourceFetcher {
                 String modelName = endpointModelNames.getOrDefault(epId, "gemini-1.5-pro");
 
                 List<Double> lats = endpointLatencies.getOrDefault(epId, Collections.emptyList());
-                int avgLat = 320;
-                int p95Lat = 580;
+                int avgLat = 0;
+                int p95Lat = 0;
                 if (!lats.isEmpty()) {
                     double sum = 0;
                     for (double d : lats) sum += d;
@@ -1550,31 +1550,9 @@ public class GcpResourceFetcher {
                         .status("ACTIVE")
                         .build());
             }
-        } else {
-            // 프로젝트별 표준 활성 엔드포인트 기본 레코드 (트래픽 모니터링 준비 상태)
-            endpointList.add(VertexEndpointItemCollectedData.builder()
-                    .endpointId("ep-" + projectId + "-llm-01")
-                    .endpointName("ep-" + projectId + "-genai-prod")
-                    .deployedModelName("gemini-1.5-flash-002")
-                    .machineType("g2-standard-4")
-                    .acceleratorType("NVIDIA_L4")
-                    .acceleratorCount(1)
-                    .minReplicaCount(1)
-                    .maxReplicaCount(3)
-                    .activeReplicaCount(1)
-                    .totalPredictRequests(12500L)
-                    .avgLatencyMs(240)
-                    .p95LatencyMs(450)
-                    .errorCount4xx(12L)
-                    .errorCount5xx(0L)
-                    .gpuUtilizationPercent(35.0)
-                    .cpuUtilizationPercent(22.0)
-                    .estimatedHourlyCost(0.48)
-                    .status("ACTIVE")
-                    .build());
         }
 
-        log.info("Collected {} Vertex AI endpoints for project `{}`", endpointList.size(), projectId);
+        log.info("Collected {} real Vertex AI endpoints for project `{}`", endpointList.size(), projectId);
         return endpointList;
     }
 }

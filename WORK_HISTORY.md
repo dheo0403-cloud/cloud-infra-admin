@@ -1,6 +1,32 @@
 # 작업 이력 (WORK_HISTORY.md)
 
-## [2026-09-18] GCP Vertex AI 토큰 및 엔드포인트 멀티 테넌트 수집 파이프라인 전면 교정 및 BQ 적재 검증
+## [2026-09-18] Vertex AI 고객사 간 데이터 교차 오염 버그 수정, 실제 배치 URL 트리거 및 차트 데이터 레이블 시각화
+
+### 1. 작업 목적 및 개요
+- **고객사 간 동일 수치 복제/교차 오염 버그 원인 규명 및 완벽 수정:**
+  - `GcpResourceFetcher.java`의 `getVertexEndpointMetricsData`에서 엔드포인트 미사용 프로젝트에 대해 고정된 12,500건 더미 데이터를 일괄 생성하던 `else` 분기를 완전히 제거.
+  - 실제 Cloud Monitoring API 쿼리 결과에 기반하여 실제 활성 엔드포인트가 존재하는 프로젝트만 적재하고, 미사용 프로젝트는 가짜 데이터 없이 정직하게 0건으로 처리하도록 격리 보장.
+- **BigQuery 기존 오염 데이터 초기화 및 실제 배치 URL(`POST /api/audit/trigger-daily-batch`) 트리거:**
+  - BigQuery `daily_vertex_ai_metrics` 및 `daily_vertex_endpoint_metrics` 테이블을 `CREATE OR REPLACE TABLE`로 완전 초기화.
+  - 프로덕션 스케줄러가 타는 실제 배치 API URL(`http://localhost:8080/api/audit/trigger-daily-batch`)을 직접 호출하여 전체 테넌트 순회 배치 파이프라인 가동.
+- **프론트엔드 차트 수치(Data Labels) 표출 및 UI 강화:**
+  - `VertexAiOperationsPanel.tsx`: 7일 토큰 트렌드 막대그래프 상단에 Input(파란색) 및 Output(초록색) 토큰 수치 레이블(예: 1.2M, 450K, 0)을 직접 표출.
+  - `VertexEndpointOperationsPanel.tsx`: 7일 예측 요청 막대 상단에 예측 호출 수(Calls)와 지연시간(ms)을 2단 수치 레이블(예: 12.5K Calls / 240ms)로 직접 렌더링.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java`:
+   - 엔드포인트 고정 더미값 주입 로직 제거 및 Cloud Monitoring 실측 데이터 기반 독립 수집기로 전면 교정.
+2. `frontend/src/components/VertexAiOperationsPanel.tsx`:
+   - 7일 트렌드 차트 막대 상단에 Input/Output 토큰 수치 레이블(Data Labels) 추가 및 차트 높이/스타일링 최적화.
+3. `frontend/src/components/VertexEndpointOperationsPanel.tsx`:
+   - 7일 트렌드 차트 막대 상단에 예측 호출수 및 추론 지연시간 2단 수치 레이블 추가 및 스타일링 개선.
+
+### 3. 검증 결과
+- **BigQuery 초기화 및 배치 파이프라인 트리거:** `POST /api/audit/trigger-daily-batch` 정상 호출 및 프로젝트별 순차 격리 적재 진행.
+- **UI 검증 (`verify-ui`):** Headless Chrome 기반 실측 검증 완료, 콘솔 에러 0건.
+- **빌드 상태:** `./gradlew.bat bootJar` 및 `npm run build` 100% 빌드 성공.
+
+---
 
 ### 1. 작업 목적 및 개요
 - **단일 프로젝트 수집 버그 원인 규명 및 전면 교정:**

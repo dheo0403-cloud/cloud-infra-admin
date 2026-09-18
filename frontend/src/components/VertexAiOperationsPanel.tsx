@@ -117,34 +117,46 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                                 </div>
                             </div>
 
-                            {/* 7-Day Trend Chart (Light Theme) */}
+                            {/* 7-Day Trend Chart (Light Theme with Data Labels) */}
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
-                                <div style={{ height: '90px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px' }}>
+                                <div style={{ height: '110px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px' }}>
                                     {data.dates.map((date, idx) => {
                                         const inTokens = data.inputTokensTrend[idx] || 0;
                                         const outTokens = data.outputTokensTrend[idx] || 0;
-                                        const inHeightPercent = Math.max(14, Math.min(100, (inTokens / maxTokenValue) * 100));
-                                        const outHeightPercent = Math.max(10, Math.min(100, (outTokens / maxTokenValue) * 100));
+                                        const inHeightPercent = Math.max(12, Math.min(85, (inTokens / maxTokenValue) * 85));
+                                        const outHeightPercent = Math.max(10, Math.min(85, (outTokens / maxTokenValue) * 85));
+
+                                        const formatTokenLabel = (val: number) => {
+                                            if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
+                                            if (val >= 1000) return `${(val / 1000).toFixed(0)}K`;
+                                            return val > 0 ? `${val}` : '0';
+                                        };
 
                                         return (
                                             <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', gap: '4px', fontSize: '8px', fontWeight: 700, marginBottom: '2px' }}>
+                                                    <span style={{ color: '#2563eb' }}>{formatTokenLabel(inTokens)}</span>
+                                                    <span style={{ color: '#059669' }}>{formatTokenLabel(outTokens)}</span>
+                                                </div>
                                                 <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '3px', height: '100%' }}>
                                                     <div
-                                                        title={`Input: ${(inTokens / 1000).toFixed(0)}K`}
+                                                        title={`Input Tokens: ${inTokens.toLocaleString()} (${formatTokenLabel(inTokens)})`}
                                                         style={{
-                                                            width: '9px',
+                                                            width: '10px',
                                                             height: `${inHeightPercent}%`,
                                                             backgroundColor: '#3b82f6',
-                                                            borderRadius: '3px 3px 0 0'
+                                                            borderRadius: '3px 3px 0 0',
+                                                            transition: 'height 0.3s'
                                                         }}
                                                     ></div>
                                                     <div
-                                                        title={`Output: ${(outTokens / 1000).toFixed(0)}K`}
+                                                        title={`Output Tokens: ${outTokens.toLocaleString()} (${formatTokenLabel(outTokens)})`}
                                                         style={{
-                                                            width: '9px',
+                                                            width: '10px',
                                                             height: `${outHeightPercent}%`,
                                                             backgroundColor: '#10b981',
-                                                            borderRadius: '3px 3px 0 0'
+                                                            borderRadius: '3px 3px 0 0',
+                                                            transition: 'height 0.3s'
                                                         }}
                                                     ></div>
                                                 </div>
