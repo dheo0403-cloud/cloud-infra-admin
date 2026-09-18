@@ -117,14 +117,14 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                                 </div>
                             </div>
 
-                            {/* 7-Day Trend Chart (Light Theme with Data Labels) */}
+                            {/* 7-Day Trend Chart (Light Theme with Precision Data Labels) */}
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', marginBottom: '10px' }}>
                                 <div style={{ height: '110px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px' }}>
                                     {data.dates.map((date, idx) => {
-                                        const inTokens = data.inputTokensTrend[idx] || 0;
-                                        const outTokens = data.outputTokensTrend[idx] || 0;
-                                        const inHeightPercent = Math.max(12, Math.min(85, (inTokens / maxTokenValue) * 85));
-                                        const outHeightPercent = Math.max(10, Math.min(85, (outTokens / maxTokenValue) * 85));
+                                        const inTokens = Number(data.inputTokensTrend[idx]) || 0;
+                                        const outTokens = Number(data.outputTokensTrend[idx]) || 0;
+                                        const inHeightPercent = inTokens > 0 ? Math.max(6, Math.min(80, (inTokens / maxTokenValue) * 80)) : 0;
+                                        const outHeightPercent = outTokens > 0 ? Math.max(6, Math.min(80, (outTokens / maxTokenValue) * 80)) : 0;
 
                                         const formatTokenLabel = (val: number) => {
                                             if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
@@ -132,11 +132,20 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                                             return val > 0 ? `${val}` : '0';
                                         };
 
+                                        const hasAnyToken = inTokens > 0 || outTokens > 0;
+
                                         return (
                                             <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                <div style={{ display: 'flex', gap: '4px', fontSize: '8px', fontWeight: 700, marginBottom: '2px' }}>
-                                                    <span style={{ color: '#2563eb' }}>{formatTokenLabel(inTokens)}</span>
-                                                    <span style={{ color: '#059669' }}>{formatTokenLabel(outTokens)}</span>
+                                                {/* Data Labels - 막대 바로 위에 위치 (0일 때는 작고 연하게 표시) */}
+                                                <div style={{ display: 'flex', gap: '3px', fontSize: '8px', fontWeight: 700, marginBottom: '2px' }}>
+                                                    {hasAnyToken ? (
+                                                        <>
+                                                            <span style={{ color: inTokens > 0 ? '#2563eb' : '#94a3b8' }}>{formatTokenLabel(inTokens)}</span>
+                                                            <span style={{ color: outTokens > 0 ? '#059669' : '#94a3b8' }}>{formatTokenLabel(outTokens)}</span>
+                                                        </>
+                                                    ) : (
+                                                        <span style={{ color: '#cbd5e1', fontSize: '7.5px' }}>-</span>
+                                                    )}
                                                 </div>
                                                 <div style={{ width: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '3px', height: '100%' }}>
                                                     <div
@@ -144,7 +153,7 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                                                         style={{
                                                             width: '10px',
                                                             height: `${inHeightPercent}%`,
-                                                            backgroundColor: '#3b82f6',
+                                                            backgroundColor: inTokens > 0 ? '#3b82f6' : 'transparent',
                                                             borderRadius: '3px 3px 0 0',
                                                             transition: 'height 0.3s'
                                                         }}
@@ -154,7 +163,7 @@ const VertexAiOperationsPanel: React.FC<VertexAiOperationsPanelProps> = ({ proje
                                                         style={{
                                                             width: '10px',
                                                             height: `${outHeightPercent}%`,
-                                                            backgroundColor: '#10b981',
+                                                            backgroundColor: outTokens > 0 ? '#10b981' : 'transparent',
                                                             borderRadius: '3px 3px 0 0',
                                                             transition: 'height 0.3s'
                                                         }}

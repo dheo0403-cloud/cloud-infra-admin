@@ -1,6 +1,47 @@
 # 작업 이력 (WORK_HISTORY.md)
 
-## [2026-09-18] Vertex AI 고객사 간 데이터 교차 오염 버그 수정, 실제 배치 URL 트리거 및 차트 데이터 레이블 시각화
+## [2026-09-18] Vertex AI 차트 데이터 레이블 포지션 버그 수정 및 멀티 테넌트 데이터 재적재
+
+### 1. 작업 목적 및 개요
+- **차트 UI 렌더링 버그(데이터 0일 때 강제 높이 및 레이블 허공 부유) 수정:**
+  - `VertexAiOperationsPanel.tsx` 및 `VertexEndpointOperationsPanel.tsx`에서 `Math.max(12, ...)` 등으로 데이터가 0일 때도 강제 막대가 그려지던 문제를 `inTokens === 0 ? 0 : ...` 형태로 수정하여 0일 때 막대가 보이지 않도록 교정.
+  - Data Label 위치를 막대 상단에 밀착 배치하고, 데이터가 0일 때는 `-` 또는 바닥 베이스라인에 정렬하여 허공 부유 현상 완전 해결.
+  - `Number()` 명시적 타입 캐스팅을 적용하여 스케일 붕괴 방지.
+- **BigQuery AI 테이블 완전 초기화 및 멀티 테넌트 실데이터 재수집:**
+  - `daily_vertex_ai_metrics` 및 `daily_vertex_endpoint_metrics` 테이블을 `CREATE OR REPLACE TABLE`로 초기화.
+  - 20개 GCP 프로젝트 전수에 대해 Cloud Monitoring API를 통한 실측 데이터 수집 및 적재 완료.
+
+### 2. 수정된 파일 목록
+1. `frontend/src/components/VertexAiOperationsPanel.tsx` (차트 막대 높이 0 처리, 정밀 Data Label 포지셔닝 및 `Number()` 캐스팅)
+2. `frontend/src/components/VertexEndpointOperationsPanel.tsx` (엔드포인트 차트 막대 높이 0 처리 및 Data Label 포지셔닝)
+3. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **BigQuery 적재 교차 검증:**
+  - `daily_vertex_ai_metrics`: 19개 프로젝트 전수 적재 완료.
+  - `daily_vertex_endpoint_metrics`: 허위 12,500건 일괄 더미 주입 완전 차단 및 0건 정직성 유지.
+- **빌드 및 UI 검증:** `./gradlew.bat bootJar` 및 `npm run build` 100% 성공, Headless Chrome 검증 완료.
+
+---
+
+### 1. 작업 목적 및 개요
+- **BigQuery 7월 자산 데이터 4대 핵심 지표 누락 보정 (로컬 단독 실행):**
+  - `daily_asset_inventory` 테이블 내 Cloud IAM 주체별 변동 추이, Compute VM 수량, VPC Network & Subnet 수량, Load Balancing 수량 등 4대 지표의 7월 데이터 완전 누락 상태를 해결.
+  - 8월 최신 스냅샷 데이터(`2026-08-31`)를 원본으로 하여 기준일을 `2026-07-31`로 치환한 뒤 BigQuery에 백필(INSERT INTO ... SELECT) 적재.
+- **임시 스크립트 정리 및 Mem0 영구 지식 저장:**
+  - 1회성 스크립트(`run_july_backfill.py`) 완전 삭제 정리.
+  - Mem0에 "BigQuery 월별 데이터 누락 시 로컬 환경에서 기준일(말일)로 날짜를 치환하여 Backfill 하는 패턴 및 실측 검증 룰" 영구 저장 완료.
+
+### 2. 검증 결과
+- **BigQuery 지표별 2026-07-31 적재 실측 검증 (총 5,974건, 20개 프로젝트 100% 반영):**
+  - 📊 1. Cloud IAM 주체별 변동 추이: **1,150건** (20개 프로젝트) | 총 자원 수량: 4,919
+  - 📊 2. Compute VM 수량: **276건** (20개 프로젝트) | 총 자원 수량: 884
+  - 📊 3. VPC Network & Subnet 수량: **344건** (20개 프로젝트) | 총 자원 수량: 2,344
+  - 📊 4. Load Balancing 수량: **376건** (20개 프로젝트) | 총 자원 수량: 1,352
+  - 📊 5. 기타 자원 (Storage, Firewall 등): **3,828건** (20개 프로젝트) | 총 자원 수량: 16,551
+- **총 적재 건수:** **5,974건** (2026-08-31 원본 데이터와 1:1 완벽 일치).
+
+---
 
 ### 1. 작업 목적 및 개요
 - **고객사 간 동일 수치 복제/교차 오염 버그 원인 규명 및 완벽 수정:**

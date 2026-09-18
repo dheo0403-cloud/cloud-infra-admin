@@ -143,9 +143,9 @@ const VertexEndpointOperationsPanel: React.FC<VertexEndpointOperationsPanelProps
 
                                 <div style={{ height: '120px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', borderBottom: '1px dashed #cbd5e1', paddingBottom: '4px' }}>
                                     {data.dates.map((date, idx) => {
-                                        const reqs = data.dailyRequestsTrend[idx] || 0;
-                                        const lat = data.dailyLatencyTrend[idx] || 0;
-                                        const barHeightPercent = Math.max(14, Math.min(80, (reqs / maxRequestValue) * 80));
+                                        const reqs = Number(data.dailyRequestsTrend[idx]) || 0;
+                                        const lat = Number(data.dailyLatencyTrend[idx]) || 0;
+                                        const barHeightPercent = reqs > 0 ? Math.max(6, Math.min(80, (reqs / maxRequestValue) * 80)) : 0;
 
                                         const formatCallsLabel = (val: number) => {
                                             if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`;
@@ -155,20 +155,23 @@ const VertexEndpointOperationsPanel: React.FC<VertexEndpointOperationsPanelProps
 
                                         return (
                                             <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                                                {/* Data Labels - 막대 상단 밀착 배치 */}
                                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2px' }}>
-                                                    <span style={{ fontSize: '8px', fontWeight: 800, color: '#047857', lineHeight: 1.1 }}>
-                                                        {formatCallsLabel(reqs)}
+                                                    <span style={{ fontSize: '8px', fontWeight: 800, color: reqs > 0 ? '#047857' : '#94a3b8', lineHeight: 1.1 }}>
+                                                        {reqs > 0 ? `${formatCallsLabel(reqs)} Calls` : '-'}
                                                     </span>
-                                                    <span style={{ fontSize: '7.5px', fontWeight: 600, color: '#0284c7', lineHeight: 1.1 }}>
-                                                        {lat}ms
-                                                    </span>
+                                                    {lat > 0 && (
+                                                        <span style={{ fontSize: '7.5px', fontWeight: 600, color: '#0284c7', lineHeight: 1.1 }}>
+                                                            {lat}ms
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div
                                                     title={`${date} - 예측 호출: ${reqs.toLocaleString()}건 (${formatCallsLabel(reqs)}), 평균 지연시간: ${lat}ms`}
                                                     style={{
                                                         width: '18px',
                                                         height: `${barHeightPercent}%`,
-                                                        backgroundColor: '#10b981',
+                                                        backgroundColor: reqs > 0 ? '#10b981' : 'transparent',
                                                         borderRadius: '4px 4px 0 0',
                                                         transition: 'height 0.3s'
                                                     }}
