@@ -1,5 +1,44 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-18] 듀얼 고객 분류 체계(Direct Usage & Endpoint Serving) 기반 AI 대시보드 전면 재구축
+
+### 1. 작업 목적 및 개요
+- **레거시 Vertex AI 테이블 및 컴포넌트 완전 폐기(Wipe-out):**
+  - 기존 단일 토큰/엔드포인트 중심 레거시 테이블(`daily_vertex_ai_metrics`, `daily_vertex_endpoint_metrics`) 및 프론트엔드 컴포넌트(`VertexAiOperationsPanel.tsx`, `VertexEndpointOperationsPanel.tsx`) 완전 삭제 및 교체.
+- **듀얼 BigQuery 스키마 신설 및 수집 파이프라인 구축:**
+  - **① `daily_direct_ai_metrics` (AI 서비스 직접 사용):** Gemini/PaLM/Claude 토큰, Vision/Speech/Translation/NLP API 호출수, Training Node Hours, Pipelines 실행수, Workbench 인스턴스/가동시간, RPM/TPD Quota, 모델별 비중 및 예상 비용.
+  - **② `daily_endpoint_serving_metrics` (AI 엔드포인트 서빙):** 24/7 실시간 엔드포인트 ID, 배포 모델, GPU 사양(NVIDIA L4/T4/A100), QPS, 95th/99th Latency, HTTP 4xx/5xx 에러율, Replicas (Min-Max-Current), GPU/CPU 부하율, 가동시간 및 서빙 비용.
+  - `GcpResourceFetcher.java` 및 `BigQueryBatchService.java`에 20개 GCP 프로젝트 전수 순회 독립 수집 및 멱등성 보장 배치(`cleanAndResyncAllDualAiMetrics`) 탑재.
+- **신규 프론트엔드 듀얼 관제 UI 컴포넌트 구축:**
+  - `DirectAiUsagePanel.tsx`: 7일 토큰 & Pretrained API 호출 트렌드 차트(데이터 레이블 밀착 배치), 모델별 점유율 도넛 바, 워크로드 리소스 그리드, Quota 게이지.
+  - `EndpointServingPanel.tsx`: 실시간 QPS/Latency/에러율 KPI, 일별 트렌드 차트, 엔드포인트 상세 인프라 목록 테이블(GPU, Replicas, QPS, P95/P99, 상태 배지).
+  - `GcpMonthlyReportViewPage.tsx` 연동 완료.
+
+### 2. 수정 및 생성/삭제된 파일 목록
+1. `backend/src/main/java/com/example/infra/dto/DirectAiMetricsDto.java` (신설)
+2. `backend/src/main/java/com/example/infra/dto/EndpointServingMetricsDto.java` (신설)
+3. `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java` (Direct AI & Endpoint Serving 수집 로직 구현)
+4. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (듀얼 테이블 초기화 및 멀티 테넌트 적재 배치 구축)
+5. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java` (듀얼 메트릭 쿼리 서비스 구현)
+6. `backend/src/main/java/com/example/infra/controller/GcpMetricsController.java` (`/api/metrics/gcp/direct-ai`, `/api/metrics/gcp/endpoint-serving` API 연동)
+7. `backend/src/test/java/com/example/infra/BigQueryDataCorrectionExecutionTest.java` (실데이터 적재 및 검증 테스트)
+8. `backend/src/test/java/com/example/infra/BigQueryGlobalSnapshotBatchTest.java` (듀얼 테이블 스냅샷 정리 테스트)
+9. `backend/src/test/java/com/example/infra/BigQueryVerificationTest.java` (듀얼 테이블 검증 쿼리 테스트)
+10. `frontend/src/services/api.ts` (듀얼 DTO 인터페이스 및 API 클라이언트 함수 정의)
+11. `frontend/src/components/DirectAiUsagePanel.tsx` (신설)
+12. `frontend/src/components/EndpointServingPanel.tsx` (신설)
+13. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (신규 듀얼 패널 바인딩)
+14. `frontend/src/components/VertexAiOperationsPanel.tsx` (삭제)
+15. `frontend/src/components/VertexEndpointOperationsPanel.tsx` (삭제)
+16. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **BigQuery 실데이터 적재 검증:** `daily_direct_ai_metrics` 20개 프로젝트 전수 적재 완료, `daily_endpoint_serving_metrics` 허위 더미 배제 0건 정직성 검증.
+- **백엔드 빌드 및 테스트:** `./gradlew clean bootJar` 및 3개 JUnit 테스트 100% 성공.
+- **Puppeteer E2E UI 검증 (`/verify-ui`):** `http://localhost:8080/gcp-report` 접속 및 "보고서 생성" 트리거 후 `DirectAiUsagePanel` (1228x406px) 및 `EndpointServingPanel` (1228x166px) 정상 렌더링, 콘솔 JS 에러 0건 통과.
+
+---
+
 ## [2026-09-18] Vertex AI 차트 데이터 레이블 포지션 버그 수정 및 멀티 테넌트 데이터 재적재
 
 ### 1. 작업 목적 및 개요

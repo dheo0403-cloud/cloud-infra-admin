@@ -50,12 +50,12 @@ public class BigQueryGlobalSnapshotBatchTest {
         String currentMonth = LocalDate.now().toString().substring(0, 7); // "2026-09"
 
         System.out.println("\n================================================================================");
-        System.out.println("🔍 [검증 1] Vertex AI 테이블 (`daily_vertex_ai_metrics`) 9월(당월) 데이터 인서트 및 건수 확인");
+        System.out.println("🔍 [검증 1] Direct AI 테이블 (`daily_direct_ai_metrics`) 9월(당월) 데이터 인서트 및 건수 확인");
         System.out.println("================================================================================");
 
         String vertexAiSql = String.format(
                 "SELECT project_id, CAST(snapshot_date AS STRING) as sdate, customer_name, input_tokens, output_tokens, current_rpm, created_at " +
-                "FROM `%s.%s.daily_vertex_ai_metrics` " +
+                "FROM `%s.%s.daily_direct_ai_metrics` " +
                 "WHERE STARTS_WITH(CAST(snapshot_date AS STRING), '%s') " +
                 "ORDER BY snapshot_date DESC, created_at DESC",
                 TARGET_PROJECT, DATASET, currentMonth
@@ -74,8 +74,8 @@ public class BigQueryGlobalSnapshotBatchTest {
             System.out.println(String.format("  [%d] 날짜: %s | 프로젝트: %s (%s) | InputTokens: %,d | OutputTokens: %,d | RPM: %d",
                     vertexCount, sdate, pid, cname, inTok, outTok, rpm));
         }
-        System.out.println(String.format("👉 9월 Vertex AI 데이터 총 건수: %d건 적재 확인 완료!", vertexCount));
-        assertTrue(vertexCount > 0, "Vertex AI 9월 데이터가 반드시 1건 이상 존재해야 합니다.");
+        System.out.println(String.format("👉 9월 Direct AI 데이터 총 건수: %d건 적재 확인 완료!", vertexCount));
+        assertTrue(vertexCount > 0, "Direct AI 9월 데이터가 반드시 1건 이상 존재해야 합니다.");
 
         System.out.println("\n================================================================================");
         System.out.println("🔍 [검증 2] 과거 데이터 정리 쿼리 검증 (과거 5, 6, 7, 8월 월별 1개 일자 보존 & 당월 일별 누적)");
@@ -85,7 +85,8 @@ public class BigQueryGlobalSnapshotBatchTest {
                 "daily_asset_inventory",
                 "daily_reservation_inventory",
                 "daily_recommender_inventory",
-                "daily_vertex_ai_metrics"
+                "daily_direct_ai_metrics",
+                "daily_endpoint_serving_metrics"
         };
 
         for (String table : tables) {

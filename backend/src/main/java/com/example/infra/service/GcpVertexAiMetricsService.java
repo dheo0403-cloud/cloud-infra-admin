@@ -1,5 +1,7 @@
 package com.example.infra.service;
 
+import com.example.infra.dto.DirectAiMetricsDto;
+import com.example.infra.dto.EndpointServingMetricsDto;
 import com.example.infra.dto.VertexAiMetricsDto;
 import com.example.infra.dto.VertexEndpointMetricsDto;
 import com.google.cloud.bigquery.BigQuery;
@@ -18,9 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * GCP Vertex AI & 생성형 AI 관제 메트릭 수집 및 집계 서비스
- * BigQuery daily_vertex_ai_metrics 테이블의 타겟 고객사 프로젝트 실데이터를 연월(Month)별로 동적 필터링 조회합니다.
- * 해당 월에 데이터가 없을 경우 임의의 더미 데이터 대신 명시적인 빈 데이터(Empty List)를 반환합니다.
+ * GCP AI 서비스 직접 사용 (Direct AI Usage) & 엔드포인트 서빙 (Endpoint Serving) 듀얼 관제 메트릭 집계 서비스
  */
 @Slf4j
 @Service
@@ -35,53 +35,43 @@ public class GcpVertexAiMetricsService {
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
-    private static final String TABLE_NAME = "daily_vertex_ai_metrics";
+    private static final String DIRECT_AI_TABLE = "daily_direct_ai_metrics";
+    private static final String ENDPOINT_SERVING_TABLE = "daily_endpoint_serving_metrics";
 
     /**
-     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Vertex AI 운영 관제 메트릭 조회
-     * @param targetProjectId 조회 대상 고객사 GCP 프로젝트 ID
-     * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회
      */
-    public VertexAiMetricsDto getVertexAiOperationsMetrics(String targetProjectId, String targetYearMonth) {
+    public DirectAiMetricsDto getDirectAiOperationsMetrics(String targetProjectId, String targetYearMonth) {
         if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
-            log.info("[VERTEX-AI-METRICS] Project ID is null or empty. Returning empty metrics.");
-            return createEmptyMetrics("", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            return createEmptyDirectAiMetrics("");
         }
 
         String effectiveProjectId = targetProjectId.trim();
-
         String effectiveYearMonth = (targetYearMonth != null && targetYearMonth.matches("^\\d{4}-\\d{2}$"))
                 ? targetYearMonth.trim()
                 : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-        log.info("[VERTEX-AI-METRICS] Fetching GenAI metrics for project `{}` and month `{}` from BigQuery {}.{}.{}",
-                effectiveProjectId, effectiveYearMonth, hostProjectId, datasetName, TABLE_NAME);
+        log.info("[DIRECT-AI-METRICS] Fetching Direct AI metrics for project `{}` and month `{}` from BigQuery {}.{}.{}",
+                effectiveProjectId, effectiveYearMonth, hostProjectId, datasetName, DIRECT_AI_TABLE);
 
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
         try {
-            // 1. 타겟 프로젝트 ID 및 지정 연월 기준 스냅샷 쿼리 (날짜별 최신 레코드 ROW_NUMBER() 필터링으로 중복 100% 방지)
             String query = String.format(
                 "SELECT " +
-                "  project_id, " +
+                "  project_id, customer_name, " +
                 "  CAST(snapshot_date AS STRING) AS sdate, " +
-                "  input_tokens, output_tokens, current_rpm, max_rpm_quota, " +
-                "  current_tpd, max_tpd_quota, total_endpoints, active_endpoints, " +
-                "  idle_endpoints, allocated_gpus, allocated_tpus, gpu_model, " +
-                "  estimated_hourly_cost, gemini_flash_ratio, gemini_pro_ratio, " +
-                "  fine_tuned_ratio, prompt_cache_hit_ratio, rate_limit_429_errors, " +
-                "  safety_filter_blocks, avg_latency_ms " +
+                "  input_tokens, output_tokens, total_tokens, pretrained_api_calls, " +
+                "  vision_api_calls, speech_api_calls, translation_api_calls, nlp_api_calls, " +
+                "  training_node_hours, pipeline_runs_count, workbench_uptime_hours, active_workbench_count, " +
+                "  current_rpm, max_rpm_quota, gemini_flash_ratio, gemini_pro_ratio, claude_ratio, custom_model_ratio, " +
+                "  estimated_api_cost, estimated_training_cost, total_estimated_daily_cost " +
                 "FROM (" +
-                "  SELECT *, " +
-                "    ROW_NUMBER() OVER(PARTITION BY snapshot_date ORDER BY created_at DESC) AS rn " +
+                "  SELECT *, ROW_NUMBER() OVER(PARTITION BY snapshot_date ORDER BY created_at DESC) AS rn " +
                 "  FROM `%s.%s.%s` " +
-                "  WHERE project_id = '%s' " +
-                "    AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
-                ") " +
-                "WHERE rn = 1 " +
-                "ORDER BY snapshot_date ASC " +
-                "LIMIT 31",
-                hostProjectId, datasetName, TABLE_NAME, effectiveProjectId, effectiveYearMonth
+                "  WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                ") WHERE rn = 1 ORDER BY snapshot_date ASC LIMIT 31",
+                hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, effectiveYearMonth
             );
 
             TableResult result = bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
@@ -90,22 +80,41 @@ public class GcpVertexAiMetricsService {
                 rows.add(row);
             }
 
-            // 2. 지정된 프로젝트/월 데이터가 존재할 경우 정상 DTO 반환
             if (!rows.isEmpty()) {
-                String actualProjId = rows.get(0).get("project_id").isNull() ? effectiveProjectId : rows.get(0).get("project_id").getStringValue();
-                log.info("[VERTEX-AI-METRICS] Successfully loaded {} rows for project `{}` ({}) from BigQuery `{}`",
-                        rows.size(), actualProjId, effectiveYearMonth, TABLE_NAME);
-
+                String customerName = rows.get(0).get("customer_name").isNull() ? "고객사 GCP 프로젝트" : rows.get(0).get("customer_name").getStringValue();
                 List<String> dates = new ArrayList<>();
                 List<Long> inputTokens = new ArrayList<>();
                 List<Long> outputTokens = new ArrayList<>();
+                List<Long> pretrainedCalls = new ArrayList<>();
+
+                long sumInTok = 0;
+                long sumOutTok = 0;
+                long sumPretrained = 0;
+                long sumVision = 0;
+                long sumSpeech = 0;
+                long sumTrans = 0;
+                long sumNlp = 0;
 
                 for (FieldValueList r : rows) {
                     String fullDate = r.get("sdate").getStringValue();
-                    String shortDate = fullDate.length() >= 5 ? fullDate.substring(5, Math.min(10, fullDate.length())) : fullDate;
+                    String shortDate = fullDate.length() >= 5 ? fullDate.substring(5).replace("-", ".") : fullDate;
                     dates.add(shortDate);
-                    inputTokens.add(r.get("input_tokens").isNull() ? 0L : r.get("input_tokens").getLongValue());
-                    outputTokens.add(r.get("output_tokens").isNull() ? 0L : r.get("output_tokens").getLongValue());
+
+                    long inTok = r.get("input_tokens").isNull() ? 0L : r.get("input_tokens").getLongValue();
+                    long outTok = r.get("output_tokens").isNull() ? 0L : r.get("output_tokens").getLongValue();
+                    long preCalls = r.get("pretrained_api_calls").isNull() ? 0L : r.get("pretrained_api_calls").getLongValue();
+
+                    inputTokens.add(inTok);
+                    outputTokens.add(outTok);
+                    pretrainedCalls.add(preCalls);
+
+                    sumInTok += inTok;
+                    sumOutTok += outTok;
+                    sumPretrained += preCalls;
+                    sumVision += r.get("vision_api_calls").isNull() ? 0L : r.get("vision_api_calls").getLongValue();
+                    sumSpeech += r.get("speech_api_calls").isNull() ? 0L : r.get("speech_api_calls").getLongValue();
+                    sumTrans += r.get("translation_api_calls").isNull() ? 0L : r.get("translation_api_calls").getLongValue();
+                    sumNlp += r.get("nlp_api_calls").isNull() ? 0L : r.get("nlp_api_calls").getLongValue();
                 }
 
                 FieldValueList latest = rows.get(rows.size() - 1);
@@ -113,115 +122,116 @@ public class GcpVertexAiMetricsService {
                 int maxRpmQuota = latest.get("max_rpm_quota").isNull() ? 1000 : (int) latest.get("max_rpm_quota").getLongValue();
                 double rpmUsagePercent = maxRpmQuota > 0 ? Math.round(((double) currentRpm / maxRpmQuota * 100.0) * 10.0) / 10.0 : 0.0;
 
-                long currentTpd = latest.get("current_tpd").isNull() ? 0L : latest.get("current_tpd").getLongValue();
-                long maxTpdQuota = latest.get("max_tpd_quota").isNull() ? 4500000L : latest.get("max_tpd_quota").getLongValue();
-                double tpdUsagePercent = maxTpdQuota > 0 ? Math.round(((double) currentTpd / maxTpdQuota * 100.0) * 10.0) / 10.0 : 0.0;
-                boolean quotaAlert = tpdUsagePercent >= 80.0;
+                long currentTpd = latest.get("total_tokens").isNull() ? 0L : latest.get("total_tokens").getLongValue();
+                long maxTpdQuota = 4500000L;
+                double tpdUsagePercent = Math.round(((double) currentTpd / maxTpdQuota * 100.0) * 10.0) / 10.0;
+                boolean quotaAlert = rpmUsagePercent >= 80.0 || tpdUsagePercent >= 80.0;
 
-                int totalEndpoints = latest.get("total_endpoints").isNull() ? 0 : (int) latest.get("total_endpoints").getLongValue();
-                int activeEndpoints = latest.get("active_endpoints").isNull() ? 0 : (int) latest.get("active_endpoints").getLongValue();
-                int idleEndpoints = latest.get("idle_endpoints").isNull() ? 0 : (int) latest.get("idle_endpoints").getLongValue();
-                int allocatedGpus = latest.get("allocated_gpus").isNull() ? 0 : (int) latest.get("allocated_gpus").getLongValue();
-                int allocatedTpus = latest.get("allocated_tpus").isNull() ? 0 : (int) latest.get("allocated_tpus").getLongValue();
-                String gpuModel = latest.get("gpu_model").isNull() ? "N/A" : latest.get("gpu_model").getStringValue();
-                double hourlyCost = latest.get("estimated_hourly_cost").isNull() ? 0.0 : latest.get("estimated_hourly_cost").getDoubleValue();
-                double monthlyCost = Math.round(hourlyCost * 24 * 30 * 10.0) / 10.0;
+                double trainingHours = latest.get("training_node_hours").isNull() ? 0.0 : latest.get("training_node_hours").getDoubleValue();
+                int pipelineRuns = latest.get("pipeline_runs_count").isNull() ? 0 : (int) latest.get("pipeline_runs_count").getLongValue();
+                double workbenchUptime = latest.get("workbench_uptime_hours").isNull() ? 0.0 : latest.get("workbench_uptime_hours").getDoubleValue();
+                int activeWorkbench = latest.get("active_workbench_count").isNull() ? 0 : (int) latest.get("active_workbench_count").getLongValue();
 
                 double flashRatio = latest.get("gemini_flash_ratio").isNull() ? 0.0 : latest.get("gemini_flash_ratio").getDoubleValue();
                 double proRatio = latest.get("gemini_pro_ratio").isNull() ? 0.0 : latest.get("gemini_pro_ratio").getDoubleValue();
-                double fineTunedRatio = latest.get("fine_tuned_ratio").isNull() ? 0.0 : latest.get("fine_tuned_ratio").getDoubleValue();
-                double cacheHitRatio = latest.get("prompt_cache_hit_ratio").isNull() ? 0.0 : latest.get("prompt_cache_hit_ratio").getDoubleValue();
+                double claudeRatio = latest.get("claude_ratio").isNull() ? 0.0 : latest.get("claude_ratio").getDoubleValue();
+                double customRatio = latest.get("custom_model_ratio").isNull() ? 0.0 : latest.get("custom_model_ratio").getDoubleValue();
 
-                int rateLimit429Errors = latest.get("rate_limit_429_errors").isNull() ? 0 : (int) latest.get("rate_limit_429_errors").getLongValue();
-                int safetyFilterBlocks = latest.get("safety_filter_blocks").isNull() ? 0 : (int) latest.get("safety_filter_blocks").getLongValue();
-                int avgLatencyMs = latest.get("avg_latency_ms").isNull() ? 0 : (int) latest.get("avg_latency_ms").getLongValue();
+                double estimatedApiCost = latest.get("estimated_api_cost").isNull() ? 0.0 : latest.get("estimated_api_cost").getDoubleValue();
+                double estimatedTrainingCost = latest.get("estimated_training_cost").isNull() ? 0.0 : latest.get("estimated_training_cost").getDoubleValue();
+                double totalDailyCost = latest.get("total_estimated_daily_cost").isNull() ? 0.0 : latest.get("total_estimated_daily_cost").getDoubleValue();
+                double totalMonthlyCost = Math.round(totalDailyCost * 30.0 * 100.0) / 100.0;
 
-                return VertexAiMetricsDto.builder()
-                        .projectId(actualProjId)
-                        .customerName("고객사 GCP 프로젝트")
+                return DirectAiMetricsDto.builder()
+                        .projectId(effectiveProjectId)
+                        .customerName(customerName)
                         .dates(dates)
                         .inputTokensTrend(inputTokens)
                         .outputTokensTrend(outputTokens)
-                        .rpmQuotaUsagePercent(rpmUsagePercent)
-                        .tpdQuotaUsagePercent(tpdUsagePercent)
+                        .pretrainedApiCallsTrend(pretrainedCalls)
+                        .totalInputTokens(sumInTok)
+                        .totalOutputTokens(sumOutTok)
+                        .totalTokens(sumInTok + sumOutTok)
+                        .totalPretrainedApiCalls(sumPretrained)
+                        .visionApiCalls(sumVision)
+                        .speechApiCalls(sumSpeech)
+                        .translationApiCalls(sumTrans)
+                        .nlpApiCalls(sumNlp)
+                        .trainingNodeHours(trainingHours)
+                        .pipelineRunsCount(pipelineRuns)
+                        .workbenchUptimeHours(workbenchUptime)
+                        .activeWorkbenchCount(activeWorkbench)
                         .currentRpm(currentRpm)
                         .maxRpmQuota(maxRpmQuota)
+                        .rpmQuotaUsagePercent(rpmUsagePercent)
                         .currentTpd(currentTpd)
                         .maxTpdQuota(maxTpdQuota)
+                        .tpdQuotaUsagePercent(tpdUsagePercent)
                         .quotaAlert(quotaAlert)
-                        .totalEndpoints(totalEndpoints)
-                        .activeEndpoints(activeEndpoints)
-                        .idleEndpoints(idleEndpoints)
-                        .allocatedGpus(allocatedGpus)
-                        .allocatedTpus(allocatedTpus)
-                        .gpuModel(gpuModel)
-                        .estimatedHourlyCost(hourlyCost)
-                        .estimatedMonthlyCost(monthlyCost)
                         .geminiFlashRatio(flashRatio)
                         .geminiProRatio(proRatio)
-                        .fineTunedRatio(fineTunedRatio)
-                        .promptCacheHitRatio(cacheHitRatio)
-                        .rateLimit429Errors(rateLimit429Errors)
-                        .safetyFilterBlocks(safetyFilterBlocks)
-                        .avgLatencyMs(avgLatencyMs)
+                        .claudeRatio(claudeRatio)
+                        .customModelRatio(customRatio)
+                        .estimatedApiCost(estimatedApiCost)
+                        .estimatedTrainingCost(estimatedTrainingCost)
+                        .totalEstimatedDailyCost(totalDailyCost)
+                        .totalEstimatedMonthlyCost(totalMonthlyCost)
                         .lastUpdated(LocalDateTime.now().format(timeFormatter))
                         .build();
             } else {
-                log.info("[VERTEX-AI-METRICS] No BigQuery records for project `{}` in month `{}`. Returning empty data.",
-                        effectiveProjectId, effectiveYearMonth);
-                return createEmptyMetrics(effectiveProjectId, timeFormatter);
+                return createEmptyDirectAiMetrics(effectiveProjectId);
             }
         } catch (Exception e) {
-            log.warn("[VERTEX-AI-METRICS] BigQuery query notice: {}. Returning empty data for {}.",
-                    e.getMessage(), effectiveYearMonth);
-            return createEmptyMetrics(effectiveProjectId, timeFormatter);
+            log.warn("[DIRECT-AI-METRICS] BigQuery query notice: {}. Returning empty data for {}.", e.getMessage(), effectiveYearMonth);
+            return createEmptyDirectAiMetrics(effectiveProjectId);
         }
     }
 
-    /**
-     * 데이터가 없는 월에 대한 명시적 빈 데이터 DTO 반환
-     */
-    private VertexAiMetricsDto createEmptyMetrics(String targetProjectId, DateTimeFormatter timeFormatter) {
-        return VertexAiMetricsDto.builder()
+    private DirectAiMetricsDto createEmptyDirectAiMetrics(String targetProjectId) {
+        return DirectAiMetricsDto.builder()
                 .projectId(targetProjectId)
                 .customerName("고객사 GCP 프로젝트")
                 .dates(new ArrayList<>())
                 .inputTokensTrend(new ArrayList<>())
                 .outputTokensTrend(new ArrayList<>())
-                .rpmQuotaUsagePercent(0.0)
-                .tpdQuotaUsagePercent(0.0)
+                .pretrainedApiCallsTrend(new ArrayList<>())
+                .totalInputTokens(0L)
+                .totalOutputTokens(0L)
+                .totalTokens(0L)
+                .totalPretrainedApiCalls(0L)
+                .visionApiCalls(0L)
+                .speechApiCalls(0L)
+                .translationApiCalls(0L)
+                .nlpApiCalls(0L)
+                .trainingNodeHours(0.0)
+                .pipelineRunsCount(0)
+                .workbenchUptimeHours(0.0)
+                .activeWorkbenchCount(0)
                 .currentRpm(0)
                 .maxRpmQuota(1000)
+                .rpmQuotaUsagePercent(0.0)
                 .currentTpd(0L)
                 .maxTpdQuota(4500000L)
+                .tpdQuotaUsagePercent(0.0)
                 .quotaAlert(false)
-                .totalEndpoints(0)
-                .activeEndpoints(0)
-                .idleEndpoints(0)
-                .allocatedGpus(0)
-                .allocatedTpus(0)
-                .gpuModel("N/A")
-                .estimatedHourlyCost(0.0)
-                .estimatedMonthlyCost(0.0)
                 .geminiFlashRatio(0.0)
                 .geminiProRatio(0.0)
-                .fineTunedRatio(0.0)
-                .promptCacheHitRatio(0.0)
-                .rateLimit429Errors(0)
-                .safetyFilterBlocks(0)
-                .avgLatencyMs(0)
-                .lastUpdated(LocalDateTime.now().format(timeFormatter))
+                .claudeRatio(0.0)
+                .customModelRatio(0.0)
+                .estimatedApiCost(0.0)
+                .estimatedTrainingCost(0.0)
+                .totalEstimatedDailyCost(0.0)
+                .totalEstimatedMonthlyCost(0.0)
+                .lastUpdated(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
                 .build();
     }
 
-    private static final String ENDPOINT_TABLE_NAME = "daily_vertex_endpoint_metrics";
-
     /**
-     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Vertex AI Endpoint 온라인 예측 지표 및 인프라 관제 조회
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Endpoint Serving (엔드포인트 서빙) 관제 메트릭 조회
      */
-    public VertexEndpointMetricsDto getVertexEndpointOperationsMetrics(String targetProjectId, String targetYearMonth) {
+    public EndpointServingMetricsDto getEndpointServingOperationsMetrics(String targetProjectId, String targetYearMonth) {
         if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
-            return createEmptyEndpointMetrics("");
+            return createEmptyEndpointServingMetrics("");
         }
 
         String effectiveProjectId = targetProjectId.trim();
@@ -229,33 +239,35 @@ public class GcpVertexAiMetricsService {
                 ? targetYearMonth.trim()
                 : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-        log.info("[VERTEX-ENDPOINT-METRICS] Fetching endpoint metrics for project `{}` and month `{}`",
+        log.info("[ENDPOINT-SERVING-METRICS] Fetching endpoint serving metrics for project `{}` and month `{}`",
                 effectiveProjectId, effectiveYearMonth);
 
         try {
-            // 1. 일별 집계 쿼리 (날짜별 총 예측 요청수, 평균 지연시간)
+            // 1. 일별 집계 쿼리 (날짜별 총 예측 요청수, 평균 지연시간, QPS)
             String dailySql = String.format(
                 "SELECT " +
                 "  CAST(snapshot_date AS STRING) AS sdate, " +
-                "  SUM(total_predict_requests) AS daily_requests, " +
-                "  AVG(avg_latency_ms) AS daily_avg_latency " +
+                "  SUM(total_requests) AS daily_requests, " +
+                "  AVG(avg_latency_ms) AS daily_avg_latency, " +
+                "  AVG(qps) AS daily_qps " +
                 "FROM `%s.%s.%s` " +
                 "WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
-                "GROUP BY snapshot_date " +
-                "ORDER BY snapshot_date ASC",
-                hostProjectId, datasetName, ENDPOINT_TABLE_NAME, effectiveProjectId, effectiveYearMonth
+                "GROUP BY snapshot_date ORDER BY snapshot_date ASC",
+                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, effectiveYearMonth
             );
 
             TableResult dailyRes = bigQuery.query(QueryJobConfiguration.newBuilder(dailySql).build());
             List<String> dates = new ArrayList<>();
             List<Long> dailyRequests = new ArrayList<>();
             List<Integer> dailyLatencies = new ArrayList<>();
+            List<Double> dailyQpsList = new ArrayList<>();
 
             for (FieldValueList row : dailyRes.iterateAll()) {
                 String sdate = row.get("sdate").getStringValue();
                 dates.add(sdate.length() >= 10 ? sdate.substring(5).replace("-", ".") : sdate);
                 dailyRequests.add(row.get("daily_requests").getLongValue());
                 dailyLatencies.add((int) row.get("daily_avg_latency").getDoubleValue());
+                dailyQpsList.add(Math.round(row.get("daily_qps").getDoubleValue() * 100.0) / 100.0);
             }
 
             // 2. 최신 스냅샷 기준 개별 엔드포인트 목록 쿼리
@@ -265,17 +277,19 @@ public class GcpVertexAiMetricsService {
                 "  FROM `%s.%s.%s` " +
                 "  WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
                 ") WHERE rn = 1 ORDER BY endpoint_name ASC",
-                hostProjectId, datasetName, ENDPOINT_TABLE_NAME, effectiveProjectId, effectiveYearMonth
+                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, effectiveYearMonth
             );
 
             TableResult epRes = bigQuery.query(QueryJobConfiguration.newBuilder(endpointSql).build());
-            List<VertexEndpointMetricsDto.EndpointItemDto> endpointItems = new ArrayList<>();
+            List<EndpointServingMetricsDto.EndpointDetailDto> endpointItems = new ArrayList<>();
             String customerName = "고객사 GCP 프로젝트";
             long totalRequests7d = 0;
             long weightedLatencySum = 0;
             int maxP95 = 0;
+            int maxP99 = 0;
             double totalHourlyCost = 0.0;
             int activeCount = 0;
+            int totalGpuCount = 0;
             long error4xxSum = 0;
             long error5xxSum = 0;
 
@@ -283,89 +297,184 @@ public class GcpVertexAiMetricsService {
                 if (!row.get("customer_name").isNull()) {
                     customerName = row.get("customer_name").getStringValue();
                 }
-                long reqs = row.get("total_predict_requests").getLongValue();
+                long reqs = row.get("total_requests").getLongValue();
                 int avgLat = (int) row.get("avg_latency_ms").getLongValue();
                 int p95Lat = (int) row.get("p95_latency_ms").getLongValue();
-                double hourlyCost = row.get("estimated_hourly_cost").getDoubleValue();
+                int p99Lat = (int) row.get("p99_latency_ms").getLongValue();
+                double hourlyCost = row.get("hourly_serving_cost").getDoubleValue();
+                double monthlyCost = row.get("monthly_serving_cost").getDoubleValue();
                 String status = row.get("status").getStringValue();
-                if ("ACTIVE".equalsIgnoreCase(status)) activeCount++;
+                int gpuCount = (int) row.get("accelerator_count").getLongValue();
 
+                if ("ACTIVE".equalsIgnoreCase(status)) activeCount++;
+                totalGpuCount += gpuCount;
                 totalRequests7d += reqs;
                 weightedLatencySum += (reqs * avgLat);
                 if (p95Lat > maxP95) maxP95 = p95Lat;
+                if (p99Lat > maxP99) maxP99 = p99Lat;
                 totalHourlyCost += hourlyCost;
                 error4xxSum += row.get("error_count_4xx").getLongValue();
                 error5xxSum += row.get("error_count_5xx").getLongValue();
 
-                endpointItems.add(VertexEndpointMetricsDto.EndpointItemDto.builder()
+                endpointItems.add(EndpointServingMetricsDto.EndpointDetailDto.builder()
                         .endpointId(row.get("endpoint_id").getStringValue())
                         .endpointName(row.get("endpoint_name").getStringValue())
+                        .deployedModelId(row.get("deployed_model_id").getStringValue())
                         .deployedModelName(row.get("deployed_model_name").getStringValue())
                         .machineType(row.get("machine_type").getStringValue())
                         .acceleratorType(row.get("accelerator_type").getStringValue())
-                        .acceleratorCount((int) row.get("accelerator_count").getLongValue())
-                        .minReplicaCount((int) row.get("min_replica_count").getLongValue())
-                        .maxReplicaCount((int) row.get("max_replica_count").getLongValue())
-                        .activeReplicaCount((int) row.get("active_replica_count").getLongValue())
-                        .totalPredictRequests(reqs)
+                        .acceleratorCount(gpuCount)
+                        .minReplicas((int) row.get("min_replicas").getLongValue())
+                        .maxReplicas((int) row.get("max_replicas").getLongValue())
+                        .currentReplicas((int) row.get("current_replicas").getLongValue())
+                        .totalRequests(reqs)
+                        .qps(row.get("qps").getDoubleValue())
                         .avgLatencyMs(avgLat)
                         .p95LatencyMs(p95Lat)
+                        .p99LatencyMs(p99Lat)
+                        .errorCount4xx(row.get("error_count_4xx").getLongValue())
+                        .errorCount5xx(row.get("error_count_5xx").getLongValue())
+                        .errorRate4xx(row.get("error_rate_4xx_percent").getDoubleValue())
+                        .errorRate5xx(row.get("error_rate_5xx_percent").getDoubleValue())
                         .gpuUtilizationPercent(row.get("gpu_utilization_percent").getDoubleValue())
                         .cpuUtilizationPercent(row.get("cpu_utilization_percent").getDoubleValue())
-                        .estimatedHourlyCost(hourlyCost)
+                        .nodeUptimeHours(row.get("node_uptime_hours").getDoubleValue())
+                        .endpointNodeHours(row.get("endpoint_node_hours").getDoubleValue())
+                        .hourlyCost(hourlyCost)
+                        .monthlyCost(monthlyCost)
                         .status(status)
                         .build());
             }
 
             if (endpointItems.isEmpty()) {
-                return createEmptyEndpointMetrics(effectiveProjectId);
+                return createEmptyEndpointServingMetrics(effectiveProjectId);
             }
 
             int overallAvgLatency = totalRequests7d > 0 ? (int) (weightedLatencySum / totalRequests7d) : 0;
-            double successRate = totalRequests7d > 0
-                ? Math.round((1.0 - ((double)(error4xxSum + error5xxSum) / totalRequests7d)) * 10000.0) / 100.0
-                : 100.0;
-            double monthlyCost = Math.round(totalHourlyCost * 730.0 * 10.0) / 10.0;
+            double err4xxRate = totalRequests7d > 0 ? Math.round(((double) error4xxSum / totalRequests7d * 100.0) * 10.0) / 10.0 : 0.0;
+            double err5xxRate = totalRequests7d > 0 ? Math.round(((double) error5xxSum / totalRequests7d * 100.0) * 10.0) / 10.0 : 0.0;
+            double successRate = Math.max(0.0, Math.round((100.0 - err4xxRate - err5xxRate) * 10.0) / 10.0);
+            double monthlyCost = Math.round(totalHourlyCost * 24 * 30 * 10.0) / 10.0;
+            double currentQps = Math.round((totalRequests7d / (7.0 * 86400.0)) * 100.0) / 100.0;
 
-            return VertexEndpointMetricsDto.builder()
+            return EndpointServingMetricsDto.builder()
                     .projectId(effectiveProjectId)
                     .customerName(customerName)
-                    .totalPredictRequests7d(dailyRequests.stream().mapToLong(Long::longValue).sum())
+                    .totalRequests7d(totalRequests7d)
+                    .currentQps(currentQps)
                     .avgLatencyMs(overallAvgLatency)
                     .p95LatencyMs(maxP95)
+                    .p99LatencyMs(maxP99)
+                    .errorRate4xxPercent(err4xxRate)
+                    .errorRate5xxPercent(err5xxRate)
                     .successRatePercent(successRate)
                     .totalEndpoints(endpointItems.size())
                     .activeEndpoints(activeCount)
+                    .totalAllocatedGpus(totalGpuCount)
                     .totalEstimatedHourlyCost(Math.round(totalHourlyCost * 100.0) / 100.0)
                     .totalEstimatedMonthlyCost(monthlyCost)
                     .dates(dates)
                     .dailyRequestsTrend(dailyRequests)
                     .dailyLatencyTrend(dailyLatencies)
+                    .dailyQpsTrend(dailyQpsList)
                     .endpoints(endpointItems)
                     .build();
 
         } catch (Exception e) {
-            log.warn("[VERTEX-ENDPOINT-METRICS] Notice querying endpoint metrics: {}", e.getMessage());
-            return createEmptyEndpointMetrics(effectiveProjectId);
+            log.warn("[ENDPOINT-SERVING-METRICS] Notice querying endpoint serving metrics: {}", e.getMessage());
+            return createEmptyEndpointServingMetrics(effectiveProjectId);
         }
     }
 
-    private VertexEndpointMetricsDto createEmptyEndpointMetrics(String targetProjectId) {
-        return VertexEndpointMetricsDto.builder()
+    private EndpointServingMetricsDto createEmptyEndpointServingMetrics(String targetProjectId) {
+        return EndpointServingMetricsDto.builder()
                 .projectId(targetProjectId)
                 .customerName("고객사 GCP 프로젝트")
-                .totalPredictRequests7d(0L)
+                .totalRequests7d(0L)
+                .currentQps(0.0)
                 .avgLatencyMs(0)
                 .p95LatencyMs(0)
+                .p99LatencyMs(0)
+                .errorRate4xxPercent(0.0)
+                .errorRate5xxPercent(0.0)
                 .successRatePercent(100.0)
                 .totalEndpoints(0)
                 .activeEndpoints(0)
+                .totalAllocatedGpus(0)
                 .totalEstimatedHourlyCost(0.0)
                 .totalEstimatedMonthlyCost(0.0)
                 .dates(new ArrayList<>())
                 .dailyRequestsTrend(new ArrayList<>())
                 .dailyLatencyTrend(new ArrayList<>())
+                .dailyQpsTrend(new ArrayList<>())
                 .endpoints(new ArrayList<>())
+                .build();
+    }
+
+    // Legacy Fallback methods
+    public VertexAiMetricsDto getVertexAiOperationsMetrics(String targetProjectId, String targetYearMonth) {
+        DirectAiMetricsDto d = getDirectAiOperationsMetrics(targetProjectId, targetYearMonth);
+        return VertexAiMetricsDto.builder()
+                .projectId(d.getProjectId())
+                .customerName(d.getCustomerName())
+                .dates(d.getDates())
+                .inputTokensTrend(d.getInputTokensTrend())
+                .outputTokensTrend(d.getOutputTokensTrend())
+                .rpmQuotaUsagePercent(d.getRpmQuotaUsagePercent())
+                .tpdQuotaUsagePercent(d.getTpdQuotaUsagePercent())
+                .currentRpm(d.getCurrentRpm())
+                .maxRpmQuota(d.getMaxRpmQuota())
+                .currentTpd(d.getCurrentTpd())
+                .maxTpdQuota(d.getMaxTpdQuota())
+                .quotaAlert(d.getQuotaAlert())
+                .estimatedHourlyCost(d.getTotalEstimatedDailyCost() / 24.0)
+                .estimatedMonthlyCost(d.getTotalEstimatedMonthlyCost())
+                .geminiFlashRatio(d.getGeminiFlashRatio())
+                .geminiProRatio(d.getGeminiProRatio())
+                .lastUpdated(d.getLastUpdated())
+                .build();
+    }
+
+    public VertexEndpointMetricsDto getVertexEndpointOperationsMetrics(String targetProjectId, String targetYearMonth) {
+        EndpointServingMetricsDto s = getEndpointServingOperationsMetrics(targetProjectId, targetYearMonth);
+        List<VertexEndpointMetricsDto.EndpointItemDto> items = new ArrayList<>();
+        if (s.getEndpoints() != null) {
+            for (EndpointServingMetricsDto.EndpointDetailDto ep : s.getEndpoints()) {
+                items.add(VertexEndpointMetricsDto.EndpointItemDto.builder()
+                        .endpointId(ep.getEndpointId())
+                        .endpointName(ep.getEndpointName())
+                        .deployedModelName(ep.getDeployedModelName())
+                        .machineType(ep.getMachineType())
+                        .acceleratorType(ep.getAcceleratorType())
+                        .acceleratorCount(ep.getAcceleratorCount())
+                        .minReplicaCount(ep.getMinReplicas())
+                        .maxReplicaCount(ep.getMaxReplicas())
+                        .activeReplicaCount(ep.getCurrentReplicas())
+                        .totalPredictRequests(ep.getTotalRequests())
+                        .avgLatencyMs(ep.getAvgLatencyMs())
+                        .p95LatencyMs(ep.getP95LatencyMs())
+                        .gpuUtilizationPercent(ep.getGpuUtilizationPercent())
+                        .cpuUtilizationPercent(ep.getCpuUtilizationPercent())
+                        .estimatedHourlyCost(ep.getHourlyCost())
+                        .status(ep.getStatus())
+                        .build());
+            }
+        }
+        return VertexEndpointMetricsDto.builder()
+                .projectId(s.getProjectId())
+                .customerName(s.getCustomerName())
+                .totalPredictRequests7d(s.getTotalRequests7d())
+                .avgLatencyMs(s.getAvgLatencyMs())
+                .p95LatencyMs(s.getP95LatencyMs())
+                .successRatePercent(s.getSuccessRatePercent())
+                .totalEndpoints(s.getTotalEndpoints())
+                .activeEndpoints(s.getActiveEndpoints())
+                .totalEstimatedHourlyCost(s.getTotalEstimatedHourlyCost())
+                .totalEstimatedMonthlyCost(s.getTotalEstimatedMonthlyCost())
+                .dates(s.getDates())
+                .dailyRequestsTrend(s.getDailyRequestsTrend())
+                .dailyLatencyTrend(s.getDailyLatencyTrend())
+                .endpoints(items)
                 .build();
     }
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getCustomers, InfraCustomer } from '../services/api';
-import VertexAiOperationsPanel from '../components/VertexAiOperationsPanel';
-import VertexEndpointOperationsPanel from '../components/VertexEndpointOperationsPanel';
+import DirectAiUsagePanel from '../components/DirectAiUsagePanel';
+import EndpointServingPanel from '../components/EndpointServingPanel';
 
 interface CudCommitment {
     name: string;
@@ -2239,17 +2239,17 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     );
                 })()}
 
-                    {/* Section 6: GCP Vertex AI & GenAI Operations Center (고객사별 및 연월별 동적 바인딩) */}
+                    {/* Section 6: GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 */}
                     <div style={{ marginTop: '20px' }}>
-                        <VertexAiOperationsPanel
+                        <DirectAiUsagePanel
                             projectId={selectedProject || 'hcompany-485701'}
                             targetYearMonth={selectedYearMonth}
                         />
                     </div>
 
-                    {/* Section 6-2: GCP Vertex AI Endpoint Online Prediction Operations Panel */}
+                    {/* Section 6-2: GCP AI 엔드포인트 서빙 (Endpoint Serving) 관제 */}
                     <div>
-                        <VertexEndpointOperationsPanel
+                        <EndpointServingPanel
                             projectId={selectedProject || 'hcompany-485701'}
                             targetYearMonth={selectedYearMonth}
                         />

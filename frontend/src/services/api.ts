@@ -103,80 +103,108 @@ export const getJiraIssues = (projectKey: string, days: number = 7) =>
         `${API_BASE_URL}/jira/issues`, { params: { projectKey, days } }
     );
 
-// Vertex AI & GenAI Metrics
-export interface VertexAiMetricsDto {
+// 1. Direct AI Usage (AI 서비스 직접 사용) Metrics
+export interface DirectAiMetricsDto {
     projectId?: string;
     customerName?: string;
     dates: string[];
     inputTokensTrend: number[];
     outputTokensTrend: number[];
-    rpmQuotaUsagePercent: number;
-    tpdQuotaUsagePercent: number;
+    pretrainedApiCallsTrend: number[];
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    totalTokens: number;
+    totalPretrainedApiCalls: number;
+    visionApiCalls: number;
+    speechApiCalls: number;
+    translationApiCalls: number;
+    nlpApiCalls: number;
+    trainingNodeHours: number;
+    pipelineRunsCount: number;
+    workbenchUptimeHours: number;
+    activeWorkbenchCount: number;
     currentRpm: number;
     maxRpmQuota: number;
+    rpmQuotaUsagePercent: number;
     currentTpd: number;
     maxTpdQuota: number;
+    tpdQuotaUsagePercent: number;
     quotaAlert: boolean;
-    totalEndpoints: number;
-    activeEndpoints: number;
-    idleEndpoints: number;
-    allocatedGpus: number;
-    allocatedTpus: number;
-    gpuModel: string;
-    estimatedHourlyCost: number;
-    estimatedMonthlyCost: number;
     geminiFlashRatio: number;
     geminiProRatio: number;
-    fineTunedRatio: number;
-    promptCacheHitRatio: number;
-    rateLimit429Errors: number;
-    safetyFilterBlocks: number;
-    avgLatencyMs: number;
+    claudeRatio: number;
+    customModelRatio: number;
+    estimatedApiCost: number;
+    estimatedTrainingCost: number;
+    totalEstimatedDailyCost: number;
+    totalEstimatedMonthlyCost: number;
     lastUpdated: string;
 }
 
-export const getVertexAiMetrics = (projectId?: string, targetYearMonth?: string) =>
-    axios.get<VertexAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-ai`, { params: { projectId, targetYearMonth } });
+export const getDirectAiMetrics = (projectId?: string, targetYearMonth?: string) =>
+    axios.get<DirectAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/direct-ai`, { params: { projectId, targetYearMonth } });
 
-// Vertex AI Endpoint Online Prediction Metrics
-export interface EndpointItemDto {
+// 2. Endpoint Serving (AI 엔드포인트 서빙) Metrics
+export interface EndpointDetailDto {
     endpointId: string;
     endpointName: string;
+    deployedModelId: string;
     deployedModelName: string;
     machineType: string;
     acceleratorType: string;
     acceleratorCount: number;
-    minReplicaCount: number;
-    maxReplicaCount: number;
-    activeReplicaCount: number;
-    totalPredictRequests: number;
+    minReplicas: number;
+    maxReplicas: number;
+    currentReplicas: number;
+    totalRequests: number;
+    qps: number;
     avgLatencyMs: number;
     p95LatencyMs: number;
+    p99LatencyMs: number;
+    errorCount4xx: number;
+    errorCount5xx: number;
+    errorRate4xx: number;
+    errorRate5xx: number;
     gpuUtilizationPercent: number;
     cpuUtilizationPercent: number;
-    estimatedHourlyCost: number;
+    nodeUptimeHours: number;
+    endpointNodeHours: number;
+    hourlyCost: number;
+    monthlyCost: number;
     status: string;
 }
 
-export interface VertexEndpointMetricsDto {
+export interface EndpointServingMetricsDto {
     projectId?: string;
     customerName?: string;
-    totalPredictRequests7d: number;
+    totalRequests7d: number;
+    currentQps: number;
     avgLatencyMs: number;
     p95LatencyMs: number;
+    p99LatencyMs: number;
+    errorRate4xxPercent: number;
+    errorRate5xxPercent: number;
     successRatePercent: number;
     totalEndpoints: number;
     activeEndpoints: number;
+    totalAllocatedGpus: number;
     totalEstimatedHourlyCost: number;
     totalEstimatedMonthlyCost: number;
     dates: string[];
     dailyRequestsTrend: number[];
     dailyLatencyTrend: number[];
-    endpoints: EndpointItemDto[];
+    dailyQpsTrend: number[];
+    endpoints: EndpointDetailDto[];
 }
 
-export const getVertexEndpointMetrics = (projectId?: string, targetYearMonth?: string) =>
-    axios.get<VertexEndpointMetricsDto>(`${API_BASE_URL}/metrics/gcp/vertex-endpoints`, { params: { projectId, targetYearMonth } });
+export const getEndpointServingMetrics = (projectId?: string, targetYearMonth?: string) =>
+    axios.get<EndpointServingMetricsDto>(`${API_BASE_URL}/metrics/gcp/endpoint-serving`, { params: { projectId, targetYearMonth } });
+
+// Legacy Aliases for Backward Compatibility
+export type VertexAiMetricsDto = DirectAiMetricsDto;
+export const getVertexAiMetrics = getDirectAiMetrics;
+export type VertexEndpointMetricsDto = EndpointServingMetricsDto;
+export const getVertexEndpointMetrics = getEndpointServingMetrics;
 
 
 

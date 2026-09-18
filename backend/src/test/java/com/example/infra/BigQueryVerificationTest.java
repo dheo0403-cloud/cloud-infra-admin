@@ -35,7 +35,8 @@ public class BigQueryVerificationTest {
                 "daily_asset_inventory",
                 "daily_recommender_inventory",
                 "daily_reservation_inventory",
-                "daily_vertex_ai_metrics"
+                "daily_direct_ai_metrics",
+                "daily_endpoint_serving_metrics"
         };
 
         for (String table : tables) {

@@ -25,19 +25,19 @@ public class BigQueryDataCorrectionExecutionTest {
     private static final String DATASET = "infra_admin_dataset";
 
     @Test
-    @DisplayName("실제 BigQuery에 7월 데이터 백필, Vertex AI 재적재, LB 500 에러 재수집 실행 및 결과 검증")
+    @DisplayName("신규 듀얼 고객 분류 체계(Direct AI & Endpoint Serving) BigQuery 초기화 및 전체 고객사 실데이터 적재/검증")
     public void executeRealBigQueryDataCorrection() throws Exception {
         System.out.println("================================================================================");
-        System.out.println("🚀 [프로덕션 BigQuery 데이터 보정 및 적재 실행 시작]");
+        System.out.println("🚀 [신규 듀얼 AI 고객 분류 체계 BigQuery 전면 재구축 및 적재 실행]");
         System.out.println("================================================================================");
 
-        // 2. Vertex AI 토큰 및 엔드포인트 데이터 기존 데이터 정리 후 프로젝트별 독립 재적재
-        System.out.println("\n👉 [과업 2] Vertex AI 토큰 & 엔드포인트 데이터 BQ 삭제 및 고객사별 독립 재적재 실행...");
-        bigQueryBatchService.cleanAndResyncAllVertexAiAndEndpointMetrics();
-        System.out.println("✅ [과업 2 완료] Vertex AI 토큰 및 엔드포인트 데이터 프로젝트별 재적재 완료");
+        // 1. 듀얼 AI 파이프라인 전면 초기화 및 20개 프로젝트 실데이터 수집/적재
+        System.out.println("\n👉 [과업 실행] 레거시 테이블 삭제, 듀얼 테이블 신설 및 전체 프로젝트 실데이터 수집...");
+        bigQueryBatchService.cleanAndResyncAllDualAiMetrics();
+        System.out.println("✅ [과업 완료] 듀얼 AI 지표 데이터 프로젝트별 재적재 완료");
 
         System.out.println("\n================================================================================");
-        System.out.println("🔍 [검증] BigQuery 실제 적재 결과 확인");
+        System.out.println("🔍 [검증] BigQuery 실제 적재 결과 확인 (투명성 교차 검증)");
         System.out.println("================================================================================");
 
         InputStream credStream = new ClassPathResource("gcp-credentials.json").getInputStream();
@@ -48,92 +48,76 @@ public class BigQueryDataCorrectionExecutionTest {
                 .build()
                 .getService();
 
-        // 1. 7월 자산 데이터 검증
-        String julySql = String.format(
-                "SELECT project_id, customer_name, COUNT(*) as cnt " +
-                "FROM `%s.%s.daily_asset_inventory` " +
-                "WHERE STARTS_WITH(CAST(snapshot_date AS STRING), '2026-07') " +
-                "GROUP BY project_id, customer_name",
-                TARGET_PROJECT, DATASET
-        );
-        TableResult julyRes = bigQuery.query(QueryJobConfiguration.newBuilder(julySql).build());
-        System.out.println("📊 [검증 1] 7월 자산 데이터 적재 현황:");
-        int julyProjects = 0;
-        for (FieldValueList row : julyRes.iterateAll()) {
-            julyProjects++;
-            String pid = row.get("project_id").getStringValue();
-            String cname = row.get("customer_name").isNull() ? "N/A" : row.get("customer_name").getStringValue();
-            long cnt = row.get("cnt").getLongValue();
-            System.out.println(String.format("   📅 프로젝트: %s (%s) -> 7월 레코드: %d건", pid, cname, cnt));
-        }
-        System.out.println(String.format("👉 7월 자산 데이터 적재된 프로젝트 수: %d개", julyProjects));
-
-        // 2. Vertex AI 데이터 검증
-        String viSql = String.format(
-                "SELECT snapshot_date, project_id, customer_name, input_tokens, output_tokens, current_rpm " +
-                "FROM `%s.%s.daily_vertex_ai_metrics` " +
+        // 1. Direct AI Usage 데이터 검증
+        String directSql = String.format(
+                "SELECT snapshot_date, project_id, customer_name, total_tokens, pretrained_api_calls, training_node_hours, total_estimated_daily_cost " +
+                "FROM `%s.%s.daily_direct_ai_metrics` " +
                 "ORDER BY snapshot_date DESC, created_at DESC",
                 TARGET_PROJECT, DATASET
         );
-        TableResult viRes = bigQuery.query(QueryJobConfiguration.newBuilder(viSql).build());
-        System.out.println("\n📊 [검증 2] Vertex AI 데이터 적재 현황:");
-        int viCount = 0;
-        for (FieldValueList row : viRes.iterateAll()) {
-            viCount++;
+        TableResult directRes = bigQuery.query(QueryJobConfiguration.newBuilder(directSql).build());
+        System.out.println("\n📊 [검증 1] Direct AI Usage 데이터 적재 현황:");
+        int directCount = 0;
+        for (FieldValueList row : directRes.iterateAll()) {
+            directCount++;
             String sdate = row.get("snapshot_date").getStringValue();
             String pid = row.get("project_id").getStringValue();
             String cname = row.get("customer_name").isNull() ? "N/A" : row.get("customer_name").getStringValue();
-            long inTok = row.get("input_tokens").getLongValue();
-            long outTok = row.get("output_tokens").getLongValue();
-            long rpm = row.get("current_rpm").getLongValue();
-            System.out.println(String.format("   📅 [%s] %s (%s) | Tokens: In=%,d, Out=%,d | RPM: %d", sdate, pid, cname, inTok, outTok, rpm));
+            long tokens = row.get("total_tokens").getLongValue();
+            long pretrained = row.get("pretrained_api_calls").getLongValue();
+            double trainingHours = row.get("training_node_hours").getDoubleValue();
+            double cost = row.get("total_estimated_daily_cost").getDoubleValue();
+            System.out.println(String.format("   📅 [%s] %s (%s) | Tokens: %,d | Pretrained: %,d | Training: %.1fh | Cost: $%.2f",
+                    sdate, pid, cname, tokens, pretrained, trainingHours, cost));
         }
-        System.out.println(String.format("👉 Vertex AI 총 적재 건수: %d건", viCount));
+        System.out.println(String.format("👉 Direct AI 총 적재 레코드: %d건", directCount));
 
-        // 2-2. Vertex AI Endpoint 데이터 검증
-        String epSql = String.format(
-                "SELECT snapshot_date, project_id, customer_name, endpoint_id, endpoint_name, deployed_model_name, total_predict_requests, avg_latency_ms " +
-                "FROM `%s.%s.daily_vertex_endpoint_metrics` " +
+        // 2. Endpoint Serving 데이터 검증
+        String servingSql = String.format(
+                "SELECT snapshot_date, project_id, customer_name, endpoint_id, endpoint_name, deployed_model_name, total_requests, qps, avg_latency_ms, accelerator_type, hourly_serving_cost " +
+                "FROM `%s.%s.daily_endpoint_serving_metrics` " +
                 "ORDER BY snapshot_date DESC, created_at DESC",
                 TARGET_PROJECT, DATASET
         );
-        TableResult epRes = bigQuery.query(QueryJobConfiguration.newBuilder(epSql).build());
-        System.out.println("\n📊 [검증 2-2] Vertex AI Endpoint 데이터 적재 현황:");
-        int epCount = 0;
-        for (FieldValueList row : epRes.iterateAll()) {
-            epCount++;
+        TableResult servingRes = bigQuery.query(QueryJobConfiguration.newBuilder(servingSql).build());
+        System.out.println("\n📊 [검증 2] Endpoint Serving 데이터 적재 현황:");
+        int servingCount = 0;
+        for (FieldValueList row : servingRes.iterateAll()) {
+            servingCount++;
             String sdate = row.get("snapshot_date").getStringValue();
             String pid = row.get("project_id").getStringValue();
             String cname = row.get("customer_name").isNull() ? "N/A" : row.get("customer_name").getStringValue();
             String epId = row.get("endpoint_id").getStringValue();
-            String epName = row.get("endpoint_name").getStringValue();
             String model = row.get("deployed_model_name").getStringValue();
-            long reqs = row.get("total_predict_requests").getLongValue();
-            long lat = row.get("avg_latency_ms").getLongValue();
-            System.out.println(String.format("   📅 [%s] %s (%s) | EP: %s (%s) | Model: %s | Reqs: %,d | Latency: %dms", sdate, pid, cname, epName, epId, model, reqs, lat));
+            long reqs = row.get("total_requests").getLongValue();
+            double qps = row.get("qps").getDoubleValue();
+            int lat = (int) row.get("avg_latency_ms").getLongValue();
+            String gpu = row.get("accelerator_type").getStringValue();
+            double cost = row.get("hourly_serving_cost").getDoubleValue();
+            System.out.println(String.format("   📅 [%s] %s (%s) | EP: %s (%s) | Reqs: %,d | QPS: %.2f | Lat: %dms | GPU: %s | Cost: $%.2f/h",
+                    sdate, pid, cname, epId, model, reqs, qps, lat, gpu, cost));
         }
-        System.out.println(String.format("👉 Vertex AI Endpoint 총 적재 건수: %d건", epCount));
+        System.out.println(String.format("👉 Endpoint Serving 총 적재 레코드: %d건", servingCount));
 
-        // 3. LB 500 에러 검증
-        String lbSql = String.format(
-                "SELECT snapshot_date, project_id, customer_name, resource_count " +
-                "FROM `%s.%s.daily_asset_inventory` " +
-                "WHERE resource_type = 'LB_HTTP_500_30D_Total' " +
-                "ORDER BY snapshot_date DESC",
+        // 3. GROUP BY project_id 검증 쿼리
+        String groupDirectSql = String.format(
+                "SELECT project_id, COUNT(*) as cnt FROM `%s.%s.daily_direct_ai_metrics` GROUP BY project_id",
                 TARGET_PROJECT, DATASET
         );
-        TableResult lbRes = bigQuery.query(QueryJobConfiguration.newBuilder(lbSql).build());
-        System.out.println("\n📊 [검증 3] LB HTTP 500 최근 30일 에러 적재 현황:");
-        for (FieldValueList row : lbRes.iterateAll()) {
-            String sdate = row.get("snapshot_date").getStringValue();
-            String pid = row.get("project_id").getStringValue();
-            String cname = row.get("customer_name").isNull() ? "N/A" : row.get("customer_name").getStringValue();
-            long cnt = row.get("resource_count").getLongValue();
-            System.out.println(String.format("   📅 [%s] %s (%s) -> 30일 500 에러: %d건", sdate, pid, cname, cnt));
+        TableResult grpDirectRes = bigQuery.query(QueryJobConfiguration.newBuilder(groupDirectSql).build());
+        System.out.println("\n📊 [검증 3] Direct AI Project Grouping:");
+        for (FieldValueList row : grpDirectRes.iterateAll()) {
+            System.out.println(String.format("   📌 Project: %s -> %d건", row.get("project_id").getStringValue(), row.get("cnt").getLongValue()));
         }
 
-        System.out.println("\n================================================================================");
-        System.out.println("🏁 [BigQuery 실데이터 보정 및 적재 100% 완료]");
-        System.out.println("================================================================================");
+        String groupServingSql = String.format(
+                "SELECT project_id, COUNT(*) as cnt FROM `%s.%s.daily_endpoint_serving_metrics` GROUP BY project_id",
+                TARGET_PROJECT, DATASET
+        );
+        TableResult grpServingRes = bigQuery.query(QueryJobConfiguration.newBuilder(groupServingSql).build());
+        System.out.println("\n📊 [검증 4] Endpoint Serving Project Grouping:");
+        for (FieldValueList row : grpServingRes.iterateAll()) {
+            System.out.println(String.format("   📌 Project: %s -> %d건", row.get("project_id").getStringValue(), row.get("cnt").getLongValue()));
+        }
     }
 }
