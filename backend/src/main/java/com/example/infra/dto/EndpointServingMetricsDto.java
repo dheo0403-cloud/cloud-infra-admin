@@ -30,6 +30,8 @@ public class EndpointServingMetricsDto {
     private Double errorRate4xxPercent;        // 4xx 에러율 (%)
     private Double errorRate5xxPercent;        // 5xx 에러율 (%)
     private Double successRatePercent;         // 예측 성공률 (%)
+    private Long vectorSearchQueries;          // Vector Search (Matching Engine) 쿼리수
+    private Long vectorSearchUpdates;          // Vector Search 스트림 업데이트수
     private Integer totalEndpoints;            // 총 엔드포인트 수
     private Integer activeEndpoints;           // 활성 엔드포인트 수
     private Integer totalAllocatedGpus;        // 총 할당된 GPU 수량

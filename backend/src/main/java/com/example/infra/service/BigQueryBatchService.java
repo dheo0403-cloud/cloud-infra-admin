@@ -1203,6 +1203,7 @@ public class BigQueryBatchService {
             String truncateDirectSql = String.format(
                 "CREATE OR REPLACE TABLE `%s.%s.daily_direct_ai_metrics` (" +
                 "  snapshot_date DATE," +
+                "  timestamp TIMESTAMP," +
                 "  project_id STRING," +
                 "  customer_name STRING," +
                 "  input_tokens INT64," +
@@ -1240,6 +1241,7 @@ public class BigQueryBatchService {
             String truncateServingSql = String.format(
                 "CREATE OR REPLACE TABLE `%s.%s.daily_endpoint_serving_metrics` (" +
                 "  snapshot_date DATE," +
+                "  timestamp TIMESTAMP," +
                 "  project_id STRING," +
                 "  customer_name STRING," +
                 "  endpoint_id STRING," +
@@ -1262,6 +1264,8 @@ public class BigQueryBatchService {
                 "  error_rate_4xx_percent FLOAT64," +
                 "  error_rate_5xx_percent FLOAT64," +
                 "  success_rate_percent FLOAT64," +
+                "  vector_search_queries INT64," +
+                "  vector_search_updates INT64," +
                 "  gpu_utilization_percent FLOAT64," +
                 "  cpu_utilization_percent FLOAT64," +
                 "  node_uptime_hours FLOAT64," +
@@ -1493,6 +1497,7 @@ public class BigQueryBatchService {
             String createTableDdl = String.format(
                 "CREATE TABLE IF NOT EXISTS `%s.%s.daily_endpoint_serving_metrics` (" +
                 "  snapshot_date DATE," +
+                "  timestamp TIMESTAMP," +
                 "  project_id STRING," +
                 "  customer_name STRING," +
                 "  endpoint_id STRING," +
@@ -1515,6 +1520,8 @@ public class BigQueryBatchService {
                 "  error_rate_4xx_percent FLOAT64," +
                 "  error_rate_5xx_percent FLOAT64," +
                 "  success_rate_percent FLOAT64," +
+                "  vector_search_queries INT64," +
+                "  vector_search_updates INT64," +
                 "  gpu_utilization_percent FLOAT64," +
                 "  cpu_utilization_percent FLOAT64," +
                 "  node_uptime_hours FLOAT64," +
@@ -1536,6 +1543,7 @@ public class BigQueryBatchService {
             String createTableDdl = String.format(
                 "CREATE TABLE IF NOT EXISTS `%s.%s.daily_direct_ai_metrics` (" +
                 "  snapshot_date DATE," +
+                "  timestamp TIMESTAMP," +
                 "  project_id STRING," +
                 "  customer_name STRING," +
                 "  input_tokens INT64," +
@@ -1770,6 +1778,7 @@ public class BigQueryBatchService {
 
         Map<String, Object> row = new HashMap<>();
         row.put("snapshot_date", snapshotDate);
+        row.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.put("project_id", projectId);
         row.put("customer_name", customerName);
         row.put("input_tokens", data.getInputTokens());
@@ -1892,6 +1901,7 @@ public class BigQueryBatchService {
         for (GcpResourceFetcher.EndpointServingItemCollectedData ep : endpointList) {
             Map<String, Object> row = new HashMap<>();
             row.put("snapshot_date", snapshotDate);
+            row.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             row.put("project_id", projectId);
             row.put("customer_name", customerName);
             row.put("endpoint_id", ep.getEndpointId());
@@ -1914,6 +1924,8 @@ public class BigQueryBatchService {
             row.put("error_rate_4xx_percent", ep.getErrorRate4xxPercent());
             row.put("error_rate_5xx_percent", ep.getErrorRate5xxPercent());
             row.put("success_rate_percent", ep.getSuccessRatePercent());
+            row.put("vector_search_queries", ep.getVectorSearchQueries());
+            row.put("vector_search_updates", ep.getVectorSearchUpdates());
             row.put("gpu_utilization_percent", ep.getGpuUtilizationPercent());
             row.put("cpu_utilization_percent", ep.getCpuUtilizationPercent());
             row.put("node_uptime_hours", ep.getNodeUptimeHours());

@@ -1187,6 +1187,8 @@ public class GcpResourceFetcher {
         private double errorRate4xxPercent;
         private double errorRate5xxPercent;
         private double successRatePercent;
+        private long vectorSearchQueries;
+        private long vectorSearchUpdates;
         private double gpuUtilizationPercent;
         private double cpuUtilizationPercent;
         private double nodeUptimeHours;
@@ -1198,7 +1200,7 @@ public class GcpResourceFetcher {
 
     /**
      * GCP Cloud Monitoring & Asset API 기반 특정 프로젝트의 Direct AI Usage 실데이터 수집
-     * - Generative AI 토큰: aiplatform.googleapis.com/publisher/token_count
+     * - Generative AI 토큰: global_generate_content_input_tokens_per_minute_per_base_model 등 실측 메트릭
      * - Pretrained API: serviceruntime.googleapis.com/api/request_count (Vision, Speech, Translate, NLP)
      * - Training / Pipelines / Workbench 가동 리소스 및 비용
      */
@@ -1243,16 +1245,24 @@ public class GcpResourceFetcher {
                         .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
                         .build();
 
-                // 1. Token Count 메트릭 조회 (최근 24시간, 메트릭 타입별 분리 쿼리로 Cloud Monitoring OR 필터 제약 완벽 해결)
-                String[] tokenMetricTypes = {
-                        "aiplatform.googleapis.com/publisher/token_count",
-                        "aiplatform.googleapis.com/prediction/online/token_count"
+                // 1. 실측 Token Count 메트릭 조회 (단독 쿼리로 OR 제약 극복)
+                String[] inputTokenMetricTypes = {
+                        "aiplatform.googleapis.com/global_generate_content_input_tokens_per_minute_per_base_model",
+                        "aiplatform.googleapis.com/generate_content_input_tokens_per_minute_per_base_model",
+                        "aiplatform.googleapis.com/global_online_prediction_input_tokens_per_minute_per_base_model",
+                        "aiplatform.googleapis.com/online_prediction_input_tokens_per_minute_per_base_model",
+                        "aiplatform.googleapis.com/publisher/token_count"
                 };
 
-                for (String mType : tokenMetricTypes) {
+                String[] outputTokenMetricTypes = {
+                        "aiplatform.googleapis.com/global_generate_content_output_tokens_per_minute_per_base_model",
+                        "aiplatform.googleapis.com/global_online_prediction_output_tokens_per_minute_per_base_model",
+                        "aiplatform.googleapis.com/online_prediction_output_tokens_per_minute_per_base_model"
+                };
+
+                for (String mType : inputTokenMetricTypes) {
                     try {
                         String tokenFilter = "metric.type = \"" + mType + "\"";
-
                         com.google.monitoring.v3.ListTimeSeriesRequest tokenReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
                                 .setName(projectName)
                                 .setFilter(tokenFilter)
@@ -1265,33 +1275,52 @@ public class GcpResourceFetcher {
                                 .build();
 
                         for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(tokenReq).iterateAll()) {
-                            String tokenType = ts.getMetric().getLabelsOrDefault("token_type", "").toLowerCase();
-                            String modelName = ts.getResource().getLabelsOrDefault("model_id", "").toLowerCase();
-
+                            String modelName = ts.getMetric().getLabelsOrDefault("base_model", ts.getResource().getLabelsOrDefault("model_id", "")).toLowerCase();
                             long sum = 0L;
                             for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
                                 if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
                                 else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
                             }
-
-                            if (tokenType.contains("prompt") || tokenType.contains("input") || tokenType.isEmpty()) {
-                                inputTokens += sum;
-                            } else {
-                                outputTokens += sum;
-                            }
-
-                            if (modelName.contains("flash")) {
-                                flashTokens += sum;
-                            } else if (modelName.contains("pro")) {
-                                proTokens += sum;
-                            } else if (modelName.contains("claude") || modelName.contains("anthropic")) {
-                                claudeTokens += sum;
-                            } else if (modelName.contains("custom") || modelName.contains("ft") || modelName.contains("tuned")) {
-                                customTokens += sum;
-                            }
+                            inputTokens += sum;
+                            if (modelName.contains("flash")) flashTokens += sum;
+                            else if (modelName.contains("pro")) proTokens += sum;
+                            else if (modelName.contains("claude") || modelName.contains("anthropic")) claudeTokens += sum;
+                            else customTokens += sum;
                         }
                     } catch (Exception ex) {
-                        log.debug("Token count metric [{}] query skipped for project {}: {}", mType, projectId, ex.getMessage());
+                        log.debug("Input Token metric [{}] skipped for project {}: {}", mType, projectId, ex.getMessage());
+                    }
+                }
+
+                for (String mType : outputTokenMetricTypes) {
+                    try {
+                        String tokenFilter = "metric.type = \"" + mType + "\"";
+                        com.google.monitoring.v3.ListTimeSeriesRequest tokenReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                                .setName(projectName)
+                                .setFilter(tokenFilter)
+                                .setInterval(dailyInterval)
+                                .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
+                                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                                        .build())
+                                .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                                .build();
+
+                        for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(tokenReq).iterateAll()) {
+                            String modelName = ts.getMetric().getLabelsOrDefault("base_model", ts.getResource().getLabelsOrDefault("model_id", "")).toLowerCase();
+                            long sum = 0L;
+                            for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                                if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
+                                else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                            }
+                            outputTokens += sum;
+                            if (modelName.contains("flash")) flashTokens += sum;
+                            else if (modelName.contains("pro")) proTokens += sum;
+                            else if (modelName.contains("claude") || modelName.contains("anthropic")) claudeTokens += sum;
+                            else customTokens += sum;
+                        }
+                    } catch (Exception ex) {
+                        log.debug("Output Token metric [{}] skipped for project {}: {}", mType, projectId, ex.getMessage());
                     }
                 }
 
@@ -1335,10 +1364,11 @@ public class GcpResourceFetcher {
                     }
                 }
 
-                // 3. Request Count & RPM (최근 10분 요청량)
+                // 3. Request Count & RPM (실측 요청량 메트릭)
                 String[] reqMetricTypes = {
-                        "aiplatform.googleapis.com/publisher/request_count",
-                        "aiplatform.googleapis.com/prediction/online/request_count"
+                        "aiplatform.googleapis.com/global_generate_content_requests_per_minute_per_project_per_base_model",
+                        "aiplatform.googleapis.com/generate_content_requests_per_minute_per_project_per_base_model",
+                        "aiplatform.googleapis.com/publisher/request_count"
                 };
 
                 long totalRequests10m = 0L;
@@ -1448,6 +1478,7 @@ public class GcpResourceFetcher {
      * GCP Cloud Monitoring 기반 특정 프로젝트의 AI Endpoint Serving 실데이터 수집
      * - Endpoint ID, Deployed Model ID, GPU 사양 (NVIDIA L4/T4/A100)
      * - QPS, 95th/99th Latency, HTTP Error Rate (4xx, 5xx)
+     * - Matching Engine (Vector Search) 쿼리/업데이트
      * - Min/Max/Current Replicas, GPU/CPU 사용률(%), Node Uptime, 비용
      */
     public List<EndpointServingItemCollectedData> getEndpointServingMetricsData(GoogleCredentials credentials, String projectId) {
@@ -1459,6 +1490,8 @@ public class GcpResourceFetcher {
         Map<String, Long> endpointErrors5xx = new HashMap<>();
         Map<String, List<Double>> endpointLatencies = new HashMap<>();
         Map<String, String> endpointModelNames = new HashMap<>();
+        long totalVectorQueries = 0L;
+        long totalVectorUpdates = 0L;
 
         try {
             com.google.cloud.monitoring.v3.MetricServiceSettings settings = com.google.cloud.monitoring.v3.MetricServiceSettings.newBuilder()
@@ -1475,12 +1508,58 @@ public class GcpResourceFetcher {
                         .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
                         .build();
 
-                // 1. Prediction Request Count 및 응답 코드별 에러 수집
+                // 1. 실측 Prediction Request Count 및 Response Count 수집
+                String[] servingReqMetricTypes = {
+                        "aiplatform.googleapis.com/prediction/online/prediction_count",
+                        "aiplatform.googleapis.com/prediction/online/response_count",
+                        "aiplatform.googleapis.com/prediction/online/request_count"
+                };
+
+                for (String reqType : servingReqMetricTypes) {
+                    try {
+                        String reqFilter = "metric.type = \"" + reqType + "\"";
+                        com.google.monitoring.v3.ListTimeSeriesRequest req = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                                .setName(projectName)
+                                .setFilter(reqFilter)
+                                .setInterval(dailyInterval)
+                                .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
+                                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                                        .build())
+                                .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                                .build();
+
+                        for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(req).iterateAll()) {
+                            String endpointId = ts.getResource().getLabelsOrDefault("endpoint_id", "endpoint-main-serving");
+                            String modelId = ts.getResource().getLabelsOrDefault("deployed_model_id", "custom-model-v1");
+                            String respCode = ts.getMetric().getLabelsOrDefault("response_code", "200");
+
+                            endpointModelNames.putIfAbsent(endpointId, modelId);
+
+                            long sum = 0L;
+                            for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                                if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
+                                else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
+                            }
+
+                            endpointRequests.put(endpointId, endpointRequests.getOrDefault(endpointId, 0L) + sum);
+                            if (respCode.startsWith("4")) {
+                                endpointErrors4xx.put(endpointId, endpointErrors4xx.getOrDefault(endpointId, 0L) + sum);
+                            } else if (respCode.startsWith("5")) {
+                                endpointErrors5xx.put(endpointId, endpointErrors5xx.getOrDefault(endpointId, 0L) + sum);
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.debug("Endpoint request metric [{}] skipped for project {}: {}", reqType, projectId, ex.getMessage());
+                    }
+                }
+
+                // 2. 실측 Prediction Error Count 메트릭 수집
                 try {
-                    String reqFilter = "metric.type = \"aiplatform.googleapis.com/prediction/online/request_count\"";
-                    com.google.monitoring.v3.ListTimeSeriesRequest req = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                    String errFilter = "metric.type = \"aiplatform.googleapis.com/prediction/online/error_count\"";
+                    com.google.monitoring.v3.ListTimeSeriesRequest errReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
                             .setName(projectName)
-                            .setFilter(reqFilter)
+                            .setFilter(errFilter)
                             .setInterval(dailyInterval)
                             .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
                                     .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
@@ -1489,31 +1568,25 @@ public class GcpResourceFetcher {
                             .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
                             .build();
 
-                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(req).iterateAll()) {
-                        String endpointId = ts.getResource().getLabelsOrDefault("endpoint_id", "default-endpoint");
-                        String modelId = ts.getResource().getLabelsOrDefault("deployed_model_id", "custom-model-v1");
-                        String respCode = ts.getMetric().getLabelsOrDefault("response_code", "200");
-
-                        endpointModelNames.putIfAbsent(endpointId, modelId);
-
+                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(errReq).iterateAll()) {
+                        String endpointId = ts.getResource().getLabelsOrDefault("endpoint_id", "endpoint-main-serving");
+                        String respCode = ts.getMetric().getLabelsOrDefault("response_code", "500");
                         long sum = 0L;
                         for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
                             if (p.getValue().hasInt64Value()) sum += p.getValue().getInt64Value();
                             else if (p.getValue().hasDoubleValue()) sum += (long) p.getValue().getDoubleValue();
                         }
-
-                        endpointRequests.put(endpointId, endpointRequests.getOrDefault(endpointId, 0L) + sum);
                         if (respCode.startsWith("4")) {
                             endpointErrors4xx.put(endpointId, endpointErrors4xx.getOrDefault(endpointId, 0L) + sum);
-                        } else if (respCode.startsWith("5")) {
+                        } else {
                             endpointErrors5xx.put(endpointId, endpointErrors5xx.getOrDefault(endpointId, 0L) + sum);
                         }
                     }
                 } catch (Exception ex) {
-                    log.debug("Endpoint request count query notice for project {}: {}", projectId, ex.getMessage());
+                    log.debug("Endpoint error count metric skipped for project {}: {}", projectId, ex.getMessage());
                 }
 
-                // 2. Prediction Latencies 수집
+                // 3. Prediction Latencies 수집
                 try {
                     String latFilter = "metric.type = \"aiplatform.googleapis.com/prediction/online/prediction_latencies\"";
                     com.google.monitoring.v3.ListTimeSeriesRequest latReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
@@ -1524,7 +1597,7 @@ public class GcpResourceFetcher {
                             .build();
 
                     for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(latReq).iterateAll()) {
-                        String endpointId = ts.getResource().getLabelsOrDefault("endpoint_id", "default-endpoint");
+                        String endpointId = ts.getResource().getLabelsOrDefault("endpoint_id", "endpoint-main-serving");
                         List<Double> lats = endpointLatencies.computeIfAbsent(endpointId, k -> new ArrayList<>());
                         for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
                             if (p.getValue().hasDoubleValue()) lats.add(p.getValue().getDoubleValue());
@@ -1533,6 +1606,39 @@ public class GcpResourceFetcher {
                     }
                 } catch (Exception ex) {
                     log.debug("Endpoint latency query notice for project {}: {}", projectId, ex.getMessage());
+                }
+
+                // 4. Matching Engine (Vector Search) 메트릭 수집
+                try {
+                    String queryFilter = "metric.type = \"aiplatform.googleapis.com/matching_engine/query/request_count\"";
+                    com.google.monitoring.v3.ListTimeSeriesRequest vsReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                            .setName(projectName)
+                            .setFilter(queryFilter)
+                            .setInterval(dailyInterval)
+                            .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                            .build();
+                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(vsReq).iterateAll()) {
+                        for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                            if (p.getValue().hasInt64Value()) totalVectorQueries += p.getValue().getInt64Value();
+                            else if (p.getValue().hasDoubleValue()) totalVectorQueries += (long) p.getValue().getDoubleValue();
+                        }
+                    }
+
+                    String updateFilter = "metric.type = \"aiplatform.googleapis.com/matching_engine/stream_update/request_count\"";
+                    com.google.monitoring.v3.ListTimeSeriesRequest vsUpdReq = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                            .setName(projectName)
+                            .setFilter(updateFilter)
+                            .setInterval(dailyInterval)
+                            .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
+                            .build();
+                    for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(vsUpdReq).iterateAll()) {
+                        for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                            if (p.getValue().hasInt64Value()) totalVectorUpdates += p.getValue().getInt64Value();
+                            else if (p.getValue().hasDoubleValue()) totalVectorUpdates += (long) p.getValue().getDoubleValue();
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.debug("Matching engine vector search metrics skipped for project {}: {}", projectId, ex.getMessage());
                 }
             }
         } catch (Exception e) {
@@ -1591,6 +1697,8 @@ public class GcpResourceFetcher {
                         .errorRate4xxPercent(err4xxRate)
                         .errorRate5xxPercent(err5xxRate)
                         .successRatePercent(successRate)
+                        .vectorSearchQueries(totalVectorQueries)
+                        .vectorSearchUpdates(totalVectorUpdates)
                         .gpuUtilizationPercent(48.2)
                         .cpuUtilizationPercent(32.5)
                         .nodeUptimeHours(720.0)

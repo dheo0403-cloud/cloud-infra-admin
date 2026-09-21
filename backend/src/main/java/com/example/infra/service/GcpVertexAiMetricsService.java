@@ -39,9 +39,16 @@ public class GcpVertexAiMetricsService {
     private static final String ENDPOINT_SERVING_TABLE = "daily_endpoint_serving_metrics";
 
     /**
-     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회 (기본 월간)
      */
     public DirectAiMetricsDto getDirectAiOperationsMetrics(String targetProjectId, String targetYearMonth) {
+        return getDirectAiOperationsMetrics(targetProjectId, targetYearMonth, "monthly");
+    }
+
+    /**
+     * 타겟 고객사 프로젝트, 지정 연월, 조회 기간(monthly/quarterly) 기준의 Direct AI Usage 관제 메트릭 조회
+     */
+    public DirectAiMetricsDto getDirectAiOperationsMetrics(String targetProjectId, String targetYearMonth, String period) {
         if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
             return createEmptyDirectAiMetrics("");
         }
@@ -51,12 +58,25 @@ public class GcpVertexAiMetricsService {
                 ? targetYearMonth.trim()
                 : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-        log.info("[DIRECT-AI-METRICS] Fetching Direct AI metrics for project `{}` and month `{}` from BigQuery {}.{}.{}",
-                effectiveProjectId, effectiveYearMonth, hostProjectId, datasetName, DIRECT_AI_TABLE);
+        boolean isQuarterly = "quarterly".equalsIgnoreCase(period);
+        log.info("[DIRECT-AI-METRICS] Fetching Direct AI metrics for project `{}` and month `{}` (period: {}) from BigQuery {}.{}.{}",
+                effectiveProjectId, effectiveYearMonth, isQuarterly ? "QUARTERLY(90D)" : "MONTHLY(30D)", hostProjectId, datasetName, DIRECT_AI_TABLE);
 
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
         try {
+            // 기간 필터 조건 생성: quarterly인 경우 기준월 포함 직전 3개월 범위 (예: 2026-09 -> 2026-07-01 ~ 2026-09-30)
+            String dateWhereClause;
+            if (isQuarterly) {
+                YearMonth currentYm = YearMonth.parse(effectiveYearMonth);
+                YearMonth startYm = currentYm.minusMonths(2);
+                String startDateStr = startYm.atDay(1).toString();
+                String endDateStr = currentYm.atEndOfMonth().toString();
+                dateWhereClause = String.format("CAST(snapshot_date AS STRING) >= '%s' AND CAST(snapshot_date AS STRING) <= '%s'", startDateStr, endDateStr);
+            } else {
+                dateWhereClause = String.format("CAST(snapshot_date AS STRING) LIKE '%s%%'", effectiveYearMonth);
+            }
+
             String query = String.format(
                 "SELECT " +
                 "  project_id, customer_name, " +
@@ -69,9 +89,9 @@ public class GcpVertexAiMetricsService {
                 "FROM (" +
                 "  SELECT *, ROW_NUMBER() OVER(PARTITION BY snapshot_date ORDER BY created_at DESC) AS rn " +
                 "  FROM `%s.%s.%s` " +
-                "  WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
-                ") WHERE rn = 1 ORDER BY snapshot_date ASC LIMIT 31",
-                hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, effectiveYearMonth
+                "  WHERE project_id = '%s' AND %s " +
+                ") WHERE rn = 1 ORDER BY snapshot_date ASC LIMIT 100",
+                hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, dateWhereClause
             );
 
             TableResult result = bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
@@ -140,7 +160,7 @@ public class GcpVertexAiMetricsService {
                 double estimatedApiCost = latest.get("estimated_api_cost").isNull() ? 0.0 : latest.get("estimated_api_cost").getDoubleValue();
                 double estimatedTrainingCost = latest.get("estimated_training_cost").isNull() ? 0.0 : latest.get("estimated_training_cost").getDoubleValue();
                 double totalDailyCost = latest.get("total_estimated_daily_cost").isNull() ? 0.0 : latest.get("total_estimated_daily_cost").getDoubleValue();
-                double totalMonthlyCost = Math.round(totalDailyCost * 30.0 * 100.0) / 100.0;
+                double totalMonthlyCost = Math.round(totalDailyCost * (isQuarterly ? 90.0 : 30.0) * 100.0) / 100.0;
 
                 return DirectAiMetricsDto.builder()
                         .projectId(effectiveProjectId)
@@ -227,9 +247,16 @@ public class GcpVertexAiMetricsService {
     }
 
     /**
-     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Endpoint Serving (엔드포인트 서빙) 관제 메트릭 조회
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Endpoint Serving (엔드포인트 서빙) 관제 메트릭 조회 (기본 월간)
      */
     public EndpointServingMetricsDto getEndpointServingOperationsMetrics(String targetProjectId, String targetYearMonth) {
+        return getEndpointServingOperationsMetrics(targetProjectId, targetYearMonth, "monthly");
+    }
+
+    /**
+     * 타겟 고객사 프로젝트, 지정 연월, 조회 기간(monthly/quarterly) 기준의 Endpoint Serving 관제 메트릭 조회
+     */
+    public EndpointServingMetricsDto getEndpointServingOperationsMetrics(String targetProjectId, String targetYearMonth, String period) {
         if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
             return createEmptyEndpointServingMetrics("");
         }
@@ -239,10 +266,23 @@ public class GcpVertexAiMetricsService {
                 ? targetYearMonth.trim()
                 : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-        log.info("[ENDPOINT-SERVING-METRICS] Fetching endpoint serving metrics for project `{}` and month `{}`",
-                effectiveProjectId, effectiveYearMonth);
+        boolean isQuarterly = "quarterly".equalsIgnoreCase(period);
+        log.info("[ENDPOINT-SERVING-METRICS] Fetching endpoint serving metrics for project `{}` and month `{}` (period: {})",
+                effectiveProjectId, effectiveYearMonth, isQuarterly ? "QUARTERLY(90D)" : "MONTHLY(30D)");
 
         try {
+            // 기간 필터 조건 생성
+            String dateWhereClause;
+            if (isQuarterly) {
+                YearMonth currentYm = YearMonth.parse(effectiveYearMonth);
+                YearMonth startYm = currentYm.minusMonths(2);
+                String startDateStr = startYm.atDay(1).toString();
+                String endDateStr = currentYm.atEndOfMonth().toString();
+                dateWhereClause = String.format("CAST(snapshot_date AS STRING) >= '%s' AND CAST(snapshot_date AS STRING) <= '%s'", startDateStr, endDateStr);
+            } else {
+                dateWhereClause = String.format("CAST(snapshot_date AS STRING) LIKE '%s%%'", effectiveYearMonth);
+            }
+
             // 1. 일별 집계 쿼리 (날짜별 총 예측 요청수, 평균 지연시간, QPS)
             String dailySql = String.format(
                 "SELECT " +
@@ -251,9 +291,9 @@ public class GcpVertexAiMetricsService {
                 "  AVG(avg_latency_ms) AS daily_avg_latency, " +
                 "  AVG(qps) AS daily_qps " +
                 "FROM `%s.%s.%s` " +
-                "WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                "WHERE project_id = '%s' AND %s " +
                 "GROUP BY snapshot_date ORDER BY snapshot_date ASC",
-                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, effectiveYearMonth
+                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, dateWhereClause
             );
 
             TableResult dailyRes = bigQuery.query(QueryJobConfiguration.newBuilder(dailySql).build());
@@ -275,9 +315,9 @@ public class GcpVertexAiMetricsService {
                 "SELECT * FROM (" +
                 "  SELECT *, ROW_NUMBER() OVER(PARTITION BY endpoint_id ORDER BY snapshot_date DESC, created_at DESC) as rn " +
                 "  FROM `%s.%s.%s` " +
-                "  WHERE project_id = '%s' AND CAST(snapshot_date AS STRING) LIKE '%s%%' " +
+                "  WHERE project_id = '%s' AND %s " +
                 ") WHERE rn = 1 ORDER BY endpoint_name ASC",
-                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, effectiveYearMonth
+                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, dateWhereClause
             );
 
             TableResult epRes = bigQuery.query(QueryJobConfiguration.newBuilder(endpointSql).build());
@@ -292,6 +332,8 @@ public class GcpVertexAiMetricsService {
             int totalGpuCount = 0;
             long error4xxSum = 0;
             long error5xxSum = 0;
+            long totalVectorQueries = 0;
+            long totalVectorUpdates = 0;
 
             for (FieldValueList row : epRes.iterateAll()) {
                 if (!row.get("customer_name").isNull()) {
@@ -315,6 +357,8 @@ public class GcpVertexAiMetricsService {
                 totalHourlyCost += hourlyCost;
                 error4xxSum += row.get("error_count_4xx").getLongValue();
                 error5xxSum += row.get("error_count_5xx").getLongValue();
+                if (!row.get("vector_search_queries").isNull()) totalVectorQueries += row.get("vector_search_queries").getLongValue();
+                if (!row.get("vector_search_updates").isNull()) totalVectorUpdates += row.get("vector_search_updates").getLongValue();
 
                 endpointItems.add(EndpointServingMetricsDto.EndpointDetailDto.builder()
                         .endpointId(row.get("endpoint_id").getStringValue())
@@ -368,6 +412,8 @@ public class GcpVertexAiMetricsService {
                     .errorRate4xxPercent(err4xxRate)
                     .errorRate5xxPercent(err5xxRate)
                     .successRatePercent(successRate)
+                    .vectorSearchQueries(totalVectorQueries)
+                    .vectorSearchUpdates(totalVectorUpdates)
                     .totalEndpoints(endpointItems.size())
                     .activeEndpoints(activeCount)
                     .totalAllocatedGpus(totalGpuCount)

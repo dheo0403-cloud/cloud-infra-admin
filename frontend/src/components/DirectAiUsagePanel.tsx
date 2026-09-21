@@ -4,15 +4,16 @@ import { getDirectAiMetrics, DirectAiMetricsDto } from '../services/api';
 interface DirectAiUsagePanelProps {
     projectId?: string;
     targetYearMonth?: string;
+    period?: 'monthly' | 'quarterly';
 }
 
-const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targetYearMonth }) => {
+const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targetYearMonth, period = 'monthly' }) => {
     const [metrics, setMetrics] = useState<DirectAiMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchMetrics = async () => {
         try {
-            const res = await getDirectAiMetrics(projectId, targetYearMonth);
+            const res = await getDirectAiMetrics(projectId, targetYearMonth, period);
             if (res.data) {
                 setMetrics(res.data);
             }
@@ -25,7 +26,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
 
     useEffect(() => {
         fetchMetrics();
-    }, [projectId, targetYearMonth]);
+    }, [projectId, targetYearMonth, period]);
 
     const hasData = Boolean(metrics && metrics.dates && metrics.dates.length > 0);
 
@@ -113,7 +114,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                 {/* 4 Summary Chips */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '14px' }}>
                     <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>7일 누적 토큰</span>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{period === 'quarterly' ? '분기(90일) 누적 토큰' : '월간(30일) 누적 토큰'}</span>
                         <strong style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'Pretendard, sans-serif' }}>
                             {totalTokensM}M <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Tokens</span>
                         </strong>
@@ -131,9 +132,9 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                         </strong>
                     </div>
                     <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 예상 비용</span>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{period === 'quarterly' ? '분기 예상 비용' : '월간 예상 비용'}</span>
                         <strong style={{ fontSize: '14px', fontWeight: 800, color: '#d97706', fontFamily: 'Pretendard, sans-serif' }}>
-                            ${(data.totalEstimatedMonthlyCost || 0).toFixed(2)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>/ 월</span>
+                            ${(data.totalEstimatedMonthlyCost || 0).toFixed(2)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>{period === 'quarterly' ? '/ 분기' : '/ 월'}</span>
                         </strong>
                     </div>
                 </div>

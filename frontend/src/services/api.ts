@@ -141,8 +141,8 @@ export interface DirectAiMetricsDto {
     lastUpdated: string;
 }
 
-export const getDirectAiMetrics = (projectId?: string, targetYearMonth?: string) =>
-    axios.get<DirectAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/direct-ai`, { params: { projectId, targetYearMonth } });
+export const getDirectAiMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>
+    axios.get<DirectAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/direct-ai`, { params: { projectId, targetYearMonth, period } });
 
 // 2. Endpoint Serving (AI 엔드포인트 서빙) Metrics
 export interface EndpointDetailDto {
@@ -185,6 +185,8 @@ export interface EndpointServingMetricsDto {
     errorRate4xxPercent: number;
     errorRate5xxPercent: number;
     successRatePercent: number;
+    vectorSearchQueries?: number;
+    vectorSearchUpdates?: number;
     totalEndpoints: number;
     activeEndpoints: number;
     totalAllocatedGpus: number;
@@ -197,8 +199,8 @@ export interface EndpointServingMetricsDto {
     endpoints: EndpointDetailDto[];
 }
 
-export const getEndpointServingMetrics = (projectId?: string, targetYearMonth?: string) =>
-    axios.get<EndpointServingMetricsDto>(`${API_BASE_URL}/metrics/gcp/endpoint-serving`, { params: { projectId, targetYearMonth } });
+export const getEndpointServingMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>
+    axios.get<EndpointServingMetricsDto>(`${API_BASE_URL}/metrics/gcp/endpoint-serving`, { params: { projectId, targetYearMonth, period } });
 
 // Legacy Aliases for Backward Compatibility
 export type VertexAiMetricsDto = DirectAiMetricsDto;

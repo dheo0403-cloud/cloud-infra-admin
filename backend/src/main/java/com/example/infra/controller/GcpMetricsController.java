@@ -30,14 +30,16 @@ public class GcpMetricsController {
      * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 조회
      * @param projectId 타겟 고객사 GCP 프로젝트 ID (선택 사항)
      * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
+     * @param period 조회 주기 (monthly: 월간 30일, quarterly: 분기 90일)
      * @return DirectAiMetricsDto
      */
     @GetMapping("/direct-ai")
     public ResponseEntity<DirectAiMetricsDto> getDirectAiMetrics(
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String targetYearMonth) {
-        log.info("[API] Requesting GCP Direct AI usage metrics for target projectId: {}, targetYearMonth: {}", projectId, targetYearMonth);
-        DirectAiMetricsDto metrics = gcpVertexAiMetricsService.getDirectAiOperationsMetrics(projectId, targetYearMonth);
+            @RequestParam(required = false) String targetYearMonth,
+            @RequestParam(required = false, defaultValue = "monthly") String period) {
+        log.info("[API] Requesting GCP Direct AI usage metrics for target projectId: {}, targetYearMonth: {}, period: {}", projectId, targetYearMonth, period);
+        DirectAiMetricsDto metrics = gcpVertexAiMetricsService.getDirectAiOperationsMetrics(projectId, targetYearMonth, period);
         return ResponseEntity.ok(metrics);
     }
 
@@ -45,14 +47,16 @@ public class GcpMetricsController {
      * GCP AI 엔드포인트 서빙 (Endpoint Serving) 온라인 예측 및 인프라 관제 메트릭 조회
      * @param projectId 타겟 고객사 GCP 프로젝트 ID (선택 사항)
      * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
+     * @param period 조회 주기 (monthly: 월간 30일, quarterly: 분기 90일)
      * @return EndpointServingMetricsDto
      */
     @GetMapping("/endpoint-serving")
     public ResponseEntity<EndpointServingMetricsDto> getEndpointServingMetrics(
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String targetYearMonth) {
-        log.info("[API] Requesting GCP AI Endpoint Serving metrics for target projectId: {}, targetYearMonth: {}", projectId, targetYearMonth);
-        EndpointServingMetricsDto metrics = gcpVertexAiMetricsService.getEndpointServingOperationsMetrics(projectId, targetYearMonth);
+            @RequestParam(required = false) String targetYearMonth,
+            @RequestParam(required = false, defaultValue = "monthly") String period) {
+        log.info("[API] Requesting GCP AI Endpoint Serving metrics for target projectId: {}, targetYearMonth: {}, period: {}", projectId, targetYearMonth, period);
+        EndpointServingMetricsDto metrics = gcpVertexAiMetricsService.getEndpointServingOperationsMetrics(projectId, targetYearMonth, period);
         return ResponseEntity.ok(metrics);
     }
 

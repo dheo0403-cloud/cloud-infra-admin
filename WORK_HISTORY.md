@@ -1,6 +1,42 @@
 # 작업 이력 (WORK_HISTORY.md)
 
-## [2026-09-18] 듀얼 고객 분류 체계(Direct Usage & Endpoint Serving) 기반 AI 대시보드 전면 재구축
+## [2026-09-21] GCP 실측 AI 메트릭 기반 수집 파이프라인 전면 재구축, BigQuery 90일 소급 적재 및 월간/분기 통합 보고서 구현
+
+### 1. 작업 목적 및 개요
+- **GCP Cloud Monitoring AI 메트릭 실측 전수 조사 및 필터 전면 교체:**
+  - 기존 백엔드에서 모든 AI 데이터가 0으로 수집되던 근본 원인(존재하지 않거나 잘못된 메트릭 명칭 하드코딩)을 20개 GCP 프로젝트 전수 조사를 통해 규명.
+  - 실제 Cloud Monitoring 메트릭으로 전면 교체:
+    - **Direct AI:** `global_generate_content_input_tokens_per_minute_per_base_model`, `global_generate_content_output_tokens_per_minute_per_base_model`, `global_generate_content_requests_per_minute_per_project_per_base_model`, `generate_content_input_tokens_per_minute_per_base_model`, `online_prediction_tokens_per_minute_per_base_model`, `serviceruntime.googleapis.com/api/request_count`
+    - **Endpoint Serving:** `prediction_count`, `response_count`, `error_count` (응답코드 라벨 분류), `prediction_latencies`, Matching Engine Vector Search(`matching_engine/query/request_count`, `matching_engine/stream_update/request_count`)
+- **BigQuery AI 테이블 스키마 재구축 및 90일(최근 3개월) 과거 데이터 소급 적재(Backfill):**
+  - 기존 `daily_direct_ai_metrics`, `daily_endpoint_serving_metrics` 테이블을 완전히 DROP하고 `timestamp`, `vector_search_queries`, `vector_search_updates` 컬럼이 포함된 신규 스키마로 CREATE TABLE.
+  - 20개 프로젝트 전수에 대해 최근 90일(7월, 8월, 9월) 소급 데이터 1회성 적재 완료 (Direct AI: 580건, Endpoint Serving: 348건).
+- **월간(30일) 및 분기(90일) 보고서 UI 통일화 및 백엔드 Aggregation 연동:**
+  - `GcpMonthlyReportViewPage.tsx` 상단 컨트롤 바에 **[📅 월간 보고서 (30일)]** / **[📊 분기 보고서 (90일)]** 세그먼트 토글 버튼 신설.
+  - `DirectAiUsagePanel.tsx` 및 `EndpointServingPanel.tsx`에 `period` prop을 바인딩하여 동일한 UX/차트 레이아웃 내에서 X축 기간 및 집계 수치만 동적으로 매핑되도록 구현.
+  - 백엔드 `GcpVertexAiMetricsService.java` 및 `GcpMetricsController.java`에 `period=monthly|quarterly` 지원 추가.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java` (실측 AI 메트릭 및 Matching Engine Vector Search 수집기 교정)
+2. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (신규 BQ 테이블 DDL 및 타임스탬프/VectorSearch 적재 매핑)
+3. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java` (월간/분기 period별 동적 쿼리 및 집계 로직 구현)
+4. `backend/src/main/java/com/example/infra/controller/GcpMetricsController.java` (`period` 파라미터 연동)
+5. `backend/src/main/java/com/example/infra/dto/EndpointServingMetricsDto.java` (`vectorSearchQueries`, `vectorSearchUpdates` 필드 추가)
+6. `backend/src/test/java/com/example/infra/BigQueryAiDataRecreationAndBackfillTest.java` (테이블 재생성 및 90일 치 소급 적재 검증 테스트)
+7. `frontend/src/services/api.ts` (`period` 파라미터 및 DTO 인터페이스 확장)
+8. `frontend/src/components/DirectAiUsagePanel.tsx` (월간/분기 period 바인딩 및 칩 텍스트 동적 변환)
+9. `frontend/src/components/EndpointServingPanel.tsx` (월간/분기 period 바인딩 및 칩 텍스트 동적 변환)
+10. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (상단 월간/분기 토글 세그먼트 버튼 및 패널 연동)
+11. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **BigQuery 소급 적재 투명성 교차 검증 (20개 프로젝트 전수 100% 반영):**
+  - `daily_direct_ai_metrics`: 20개 프로젝트 전수 580건 적재 완료 (7월 4일치, 8월 4일치, 9월 21일치).
+  - `daily_endpoint_serving_metrics`: 실서빙 활성 12개 프로젝트 348건 적재 완료.
+- **백엔드/프론트엔드 통합 빌드:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+- **백엔드 서버 런타임 검증:** `deploy.ps1`을 통한 `http://localhost:8080` 기동 및 `/api/metrics/gcp/direct-ai`, `/api/metrics/gcp/endpoint-serving` monthly/quarterly API 실측 데이터 검증 완료.
+
+---
 
 ### 1. 작업 목적 및 개요
 - **레거시 Vertex AI 테이블 및 컴포넌트 완전 폐기(Wipe-out):**

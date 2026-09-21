@@ -144,6 +144,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
     const [selectedCustomer, setSelectedCustomer] = useState<InfraCustomer | null>(null);
     const [selectedProject, setSelectedProject] = useState<string>('');
     const [selectedYearMonth, setSelectedYearMonth] = useState<string>(getCurrentYearMonth());
+    const [periodMode, setPeriodMode] = useState<'monthly' | 'quarterly'>('monthly');
     const [reportData, setReportData] = useState<MonthlyReportData | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
     const [refreshing, setRefreshing] = useState<boolean>(false);
@@ -801,7 +802,53 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </select>
                         </div>
 
-
+                        {/* 월간 / 분기 주기 토글 버튼 */}
+                        <div className="control-item">
+                            <label>조회 주기</label>
+                            <div style={{
+                                display: 'inline-flex',
+                                backgroundColor: '#f1f5f9',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                padding: '2px',
+                                height: '34px'
+                            }}>
+                                <button
+                                    type="button"
+                                    onClick={() => setPeriodMode('monthly')}
+                                    style={{
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        backgroundColor: periodMode === 'monthly' ? '#2563eb' : 'transparent',
+                                        color: periodMode === 'monthly' ? '#ffffff' : '#64748b',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    <i className="fas fa-calendar-alt mr-1"></i>월간 (30일)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPeriodMode('quarterly')}
+                                    style={{
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        backgroundColor: periodMode === 'quarterly' ? '#2563eb' : 'transparent',
+                                        color: periodMode === 'quarterly' ? '#ffffff' : '#64748b',
+                                        transition: 'all 0.15s ease'
+                                    }}
+                                >
+                                    <i className="fas fa-chart-pie mr-1"></i>분기 (90일)
+                                </button>
+                            </div>
+                        </div>
 
                         <button
                             className="btn-generate"
@@ -2244,6 +2291,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         <DirectAiUsagePanel
                             projectId={selectedProject || 'hcompany-485701'}
                             targetYearMonth={selectedYearMonth}
+                            period={periodMode}
                         />
                     </div>
 
@@ -2252,6 +2300,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         <EndpointServingPanel
                             projectId={selectedProject || 'hcompany-485701'}
                             targetYearMonth={selectedYearMonth}
+                            period={periodMode}
                         />
                     </div>
 
