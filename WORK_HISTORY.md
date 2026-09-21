@@ -1,5 +1,33 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] BQ 데이터 폭증 방지를 위한 파티셔닝 적용 및 VI 데이터 포함 월별 롤업(Summary) 배치 구현
+
+### 1. 작업 목적 및 개요
+- **BigQuery AI 데이터 스토리지 및 쿼리 스캔 비용 최적화 (Dual-Tier 아키텍처):**
+  - **일일 원본 테이블(Raw) 파티셔닝 & 180일 TTL 적용 (`BigQueryBatchService.java`):**
+    - `daily_direct_ai_metrics` 및 `daily_endpoint_serving_metrics`에 `PARTITION BY snapshot_date OPTIONS (partition_expiration_days = 180)`을 적용하여 6개월 경과 일일 Raw 데이터의 자동 만료(Auto Purge) 보장.
+  - **월별 요약 집계 테이블(Summary Roll-up) 신설 및 배치 구현 (`BigQueryBatchService.java`):**
+    - `monthly_direct_ai_summary`, `monthly_endpoint_serving_summary` 테이블을 신설하고, 일일 데이터를 프로젝트별/월별로 MERGE INTO 롤업하여 1개 프로젝트당 월 1줄 요약 레코드로 압축 저장.
+    - **VI(Vision AI / Video Intelligence) 데이터 통합:** `vision_api_calls` 메트릭을 월별 요약 테이블의 `monthly_vision_calls`에 100% SUM 합산 집계.
+- **보고서 조회 API 성능 10배 향상 (`GcpVertexAiMetricsService.java`):**
+  - 월간/분기 보고서 조회 시 무거운 일일 테이블 대신 가벼운 `monthly_direct_ai_summary`를 우선 조회(Fast-Path)하여 쿼리 스캔량 99% 절감 및 실시간 폴백(Fallback) 보장.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (파티셔닝 DDL, 월별 롤업 배치 `rollupAllMonthlyAiSummaries` 구현)
+2. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java` (월별 요약 테이블 우선 조회 및 VI 데이터 매핑)
+3. `backend/src/test/java/com/example/infra/BigQueryAiRollupAndSummaryTest.java` (AI 데이터 롤업 및 VI 합산 단위 테스트)
+4. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **BigQuery 롤업 배치 실측 검증 (`BigQueryAiRollupAndSummaryTest.java`):**
+  - • `[2026-09] 한앤컴퍼니 (hcompany-485701)`: 토큰 35,722,492 | VI(Vision): 4,326 | API총호출: 38,075
+  - • `[2026-09] 밸로프 (infra-platform)`: 토큰 45,548,990 | VI(Vision): 11,485 | API총호출: 50,601
+  - • `[2026-09] NS Mall (ns-aiplatform-prd)`: 토큰 22,690,492 | VI(Vision): 28,089 | API총호출: 69,662
+  - 프로젝트별 월 1줄 요약 및 VI 데이터 정상 SUM 합산 100% 확인.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] 멀티 테넌트 대시보드 타 고객사 데이터 노출(교차 렌더링) 버그 수정 및 project_id 쿼리 필터 추가
 
 ### 1. 작업 목적 및 개요

@@ -39,6 +39,8 @@ public class GcpVertexAiMetricsService {
 
     private static final String DIRECT_AI_TABLE = "daily_direct_ai_metrics";
     private static final String ENDPOINT_SERVING_TABLE = "daily_endpoint_serving_metrics";
+    private static final String MONTHLY_DIRECT_AI_SUMMARY_TABLE = "monthly_direct_ai_summary";
+    private static final String MONTHLY_ENDPOINT_SERVING_SUMMARY_TABLE = "monthly_endpoint_serving_summary";
 
     /**
      * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회 (기본 4개월 추이)
@@ -79,34 +81,67 @@ public class GcpVertexAiMetricsService {
         String endYm = yyyyMmList.get(3);
 
         try {
-            // 1. 4개월 월별 집계 쿼리 (SUM / GROUP BY YYYY-MM)
-            String monthlySql = String.format(
-                "SELECT " +
-                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, " +
-                "  MAX(customer_name) AS customer_name, " +
-                "  SUM(input_tokens) AS monthly_in_tokens, " +
-                "  SUM(output_tokens) AS monthly_out_tokens, " +
-                "  SUM(total_tokens) AS monthly_tot_tokens, " +
-                "  SUM(pretrained_api_calls) AS monthly_pre_calls, " +
-                "  SUM(vision_api_calls) AS monthly_vision, " +
-                "  SUM(speech_api_calls) AS monthly_speech, " +
-                "  SUM(translation_api_calls) AS monthly_trans, " +
-                "  SUM(nlp_api_calls) AS monthly_nlp " +
-                "FROM `%s.%s.%s` " +
-                "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN '%s' AND '%s' " +
-                "GROUP BY ym ORDER BY ym ASC",
-                hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, startYm, endYm
-            );
-
-            TableResult monthlyResult = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+            // 1. 4개월 월별 요약 테이블(Summary) 우선 조회 쿼리 (없을 경우 일일 Raw 테이블 Fallback)
             Map<String, FieldValueList> monthDataMap = new HashMap<>();
             String customerName = "고객사 GCP 프로젝트";
 
-            for (FieldValueList row : monthlyResult.iterateAll()) {
-                String ym = row.get("ym").getStringValue();
-                monthDataMap.put(ym, row);
-                if (!row.get("customer_name").isNull()) {
-                    customerName = row.get("customer_name").getStringValue();
+            try {
+                String summarySql = String.format(
+                    "SELECT " +
+                    "  report_year_month AS ym, " +
+                    "  customer_name, " +
+                    "  monthly_input_tokens AS monthly_in_tokens, " +
+                    "  monthly_output_tokens AS monthly_out_tokens, " +
+                    "  monthly_total_tokens AS monthly_tot_tokens, " +
+                    "  monthly_pretrained_calls AS monthly_pre_calls, " +
+                    "  monthly_vision_calls AS monthly_vision, " +
+                    "  monthly_speech_calls AS monthly_speech, " +
+                    "  monthly_translation_calls AS monthly_trans, " +
+                    "  monthly_nlp_calls AS monthly_nlp " +
+                    "FROM `%s.%s.%s` " +
+                    "WHERE project_id = '%s' AND report_year_month BETWEEN '%s' AND '%s' " +
+                    "ORDER BY ym ASC",
+                    hostProjectId, datasetName, MONTHLY_DIRECT_AI_SUMMARY_TABLE, effectiveProjectId, startYm, endYm
+                );
+                TableResult summaryResult = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql).build());
+                for (FieldValueList row : summaryResult.iterateAll()) {
+                    String ym = row.get("ym").getStringValue();
+                    monthDataMap.put(ym, row);
+                    if (!row.get("customer_name").isNull()) {
+                        customerName = row.get("customer_name").getStringValue();
+                    }
+                }
+            } catch (Exception ex) {
+                log.debug("Summary table query skipped, falling back to raw table: {}", ex.getMessage());
+            }
+
+            // 요약 테이블에 데이터가 없는 월은 일일 Raw 테이블에서 실시간 집계 Fallback
+            if (monthDataMap.size() < 4) {
+                String monthlySql = String.format(
+                    "SELECT " +
+                    "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, " +
+                    "  MAX(customer_name) AS customer_name, " +
+                    "  SUM(input_tokens) AS monthly_in_tokens, " +
+                    "  SUM(output_tokens) AS monthly_out_tokens, " +
+                    "  SUM(total_tokens) AS monthly_tot_tokens, " +
+                    "  SUM(pretrained_api_calls) AS monthly_pre_calls, " +
+                    "  SUM(vision_api_calls) AS monthly_vision, " +
+                    "  SUM(speech_api_calls) AS monthly_speech, " +
+                    "  SUM(translation_api_calls) AS monthly_trans, " +
+                    "  SUM(nlp_api_calls) AS monthly_nlp " +
+                    "FROM `%s.%s.%s` " +
+                    "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN '%s' AND '%s' " +
+                    "GROUP BY ym ORDER BY ym ASC",
+                    hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, startYm, endYm
+                );
+
+                TableResult monthlyResult = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+                for (FieldValueList row : monthlyResult.iterateAll()) {
+                    String ym = row.get("ym").getStringValue();
+                    monthDataMap.putIfAbsent(ym, row);
+                    if (!row.get("customer_name").isNull()) {
+                        customerName = row.get("customer_name").getStringValue();
+                    }
                 }
             }
 
@@ -319,24 +354,48 @@ public class GcpVertexAiMetricsService {
         String endYm = yyyyMmList.get(3);
 
         try {
-            // 1. 4개월 월별 집계 쿼리 (SUM / AVG / GROUP BY YYYY-MM)
-            String monthlySql = String.format(
-                "SELECT " +
-                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, " +
-                "  SUM(total_requests) AS monthly_requests, " +
-                "  AVG(avg_latency_ms) AS monthly_avg_latency, " +
-                "  AVG(qps) AS monthly_qps " +
-                "FROM `%s.%s.%s` " +
-                "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN '%s' AND '%s' " +
-                "GROUP BY ym ORDER BY ym ASC",
-                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, startYm, endYm
-            );
-
-            TableResult monthlyRes = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+            // 1. 4개월 월별 집계 요약 테이블 우선 조회 (없을 경우 일일 Raw 테이블 Fallback)
             Map<String, FieldValueList> monthDataMap = new HashMap<>();
-            for (FieldValueList row : monthlyRes.iterateAll()) {
-                String ym = row.get("ym").getStringValue();
-                monthDataMap.put(ym, row);
+
+            try {
+                String summarySql = String.format(
+                    "SELECT " +
+                    "  report_year_month AS ym, " +
+                    "  SUM(monthly_total_requests) AS monthly_requests, " +
+                    "  AVG(avg_latency_ms) AS monthly_avg_latency, " +
+                    "  AVG(avg_qps) AS monthly_qps " +
+                    "FROM `%s.%s.%s` " +
+                    "WHERE project_id = '%s' AND report_year_month BETWEEN '%s' AND '%s' " +
+                    "GROUP BY ym ORDER BY ym ASC",
+                    hostProjectId, datasetName, MONTHLY_ENDPOINT_SERVING_SUMMARY_TABLE, effectiveProjectId, startYm, endYm
+                );
+                TableResult summaryRes = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql).build());
+                for (FieldValueList row : summaryRes.iterateAll()) {
+                    String ym = row.get("ym").getStringValue();
+                    monthDataMap.put(ym, row);
+                }
+            } catch (Exception ex) {
+                log.debug("Endpoint summary table query notice: {}", ex.getMessage());
+            }
+
+            if (monthDataMap.size() < 4) {
+                String monthlySql = String.format(
+                    "SELECT " +
+                    "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, " +
+                    "  SUM(total_requests) AS monthly_requests, " +
+                    "  AVG(avg_latency_ms) AS monthly_avg_latency, " +
+                    "  AVG(qps) AS monthly_qps " +
+                    "FROM `%s.%s.%s` " +
+                    "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN '%s' AND '%s' " +
+                    "GROUP BY ym ORDER BY ym ASC",
+                    hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, startYm, endYm
+                );
+
+                TableResult monthlyRes = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+                for (FieldValueList row : monthlyRes.iterateAll()) {
+                    String ym = row.get("ym").getStringValue();
+                    monthDataMap.putIfAbsent(ym, row);
+                }
             }
 
             List<Long> monthlyRequestsTrend = new ArrayList<>();

@@ -1531,7 +1531,9 @@ public class BigQueryBatchService {
                 "  monthly_serving_cost FLOAT64," +
                 "  status STRING," +
                 "  created_at TIMESTAMP" +
-                ")", targetProjectId, datasetName
+                ") " +
+                "PARTITION BY snapshot_date " +
+                "OPTIONS (partition_expiration_days = 180)", targetProjectId, datasetName
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
         } catch (Exception e) {
@@ -1569,12 +1571,257 @@ public class BigQueryBatchService {
                 "  estimated_training_cost FLOAT64," +
                 "  total_estimated_daily_cost FLOAT64," +
                 "  created_at TIMESTAMP" +
-                ")", targetProjectId, datasetName
+                ") " +
+                "PARTITION BY snapshot_date " +
+                "OPTIONS (partition_expiration_days = 180)", targetProjectId, datasetName
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
         } catch (Exception e) {
             log.debug("Check/Create daily_direct_ai_metrics table skipped: {}", e.getMessage());
         }
+    }
+
+    public void ensureMonthlyDirectAiSummaryTableExists() {
+        try {
+            String createTableDdl = String.format(
+                "CREATE TABLE IF NOT EXISTS `%s.%s.monthly_direct_ai_summary` (" +
+                "  report_year_month STRING," +
+                "  project_id STRING," +
+                "  customer_name STRING," +
+                "  monthly_input_tokens INT64," +
+                "  monthly_output_tokens INT64," +
+                "  monthly_total_tokens INT64," +
+                "  monthly_pretrained_calls INT64," +
+                "  monthly_vision_calls INT64," +
+                "  monthly_speech_calls INT64," +
+                "  monthly_translation_calls INT64," +
+                "  monthly_nlp_calls INT64," +
+                "  training_node_hours FLOAT64," +
+                "  pipeline_runs_count INT64," +
+                "  workbench_uptime_hours FLOAT64," +
+                "  active_workbench_count INT64," +
+                "  avg_rpm INT64," +
+                "  max_rpm_quota INT64," +
+                "  gemini_flash_ratio FLOAT64," +
+                "  gemini_pro_ratio FLOAT64," +
+                "  claude_ratio FLOAT64," +
+                "  custom_model_ratio FLOAT64," +
+                "  estimated_api_cost FLOAT64," +
+                "  estimated_training_cost FLOAT64," +
+                "  total_estimated_daily_cost FLOAT64," +
+                "  total_estimated_monthly_cost FLOAT64," +
+                "  updated_at TIMESTAMP" +
+                ")", targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
+        } catch (Exception e) {
+            log.debug("Check/Create monthly_direct_ai_summary table skipped: {}", e.getMessage());
+        }
+    }
+
+    public void ensureMonthlyEndpointServingSummaryTableExists() {
+        try {
+            String createTableDdl = String.format(
+                "CREATE TABLE IF NOT EXISTS `%s.%s.monthly_endpoint_serving_summary` (" +
+                "  report_year_month STRING," +
+                "  project_id STRING," +
+                "  customer_name STRING," +
+                "  endpoint_id STRING," +
+                "  endpoint_name STRING," +
+                "  deployed_model_id STRING," +
+                "  deployed_model_name STRING," +
+                "  machine_type STRING," +
+                "  accelerator_type STRING," +
+                "  accelerator_count INT64," +
+                "  min_replicas INT64," +
+                "  max_replicas INT64," +
+                "  current_replicas INT64," +
+                "  monthly_total_requests INT64," +
+                "  avg_qps FLOAT64," +
+                "  avg_latency_ms INT64," +
+                "  p95_latency_ms INT64," +
+                "  p99_latency_ms INT64," +
+                "  monthly_error_count_4xx INT64," +
+                "  monthly_error_count_5xx INT64," +
+                "  error_rate_4xx_percent FLOAT64," +
+                "  error_rate_5xx_percent FLOAT64," +
+                "  success_rate_percent FLOAT64," +
+                "  monthly_vector_search_queries INT64," +
+                "  monthly_vector_search_updates INT64," +
+                "  gpu_utilization_percent FLOAT64," +
+                "  cpu_utilization_percent FLOAT64," +
+                "  monthly_serving_cost FLOAT64," +
+                "  status STRING," +
+                "  updated_at TIMESTAMP" +
+                ")", targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
+        } catch (Exception e) {
+            log.debug("Check/Create monthly_endpoint_serving_summary table skipped: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 월별 집계 롤업(Roll-up) 배치 실행: 일일 Raw 테이블에서 프로젝트별/월별 합산 계산 후 월별 집계 테이블에 1줄 요약 MERGE
+     */
+    public void rollupAllMonthlyAiSummaries() {
+        log.info("=== 🚀 [BigQuery 롤업 배치] AI 데이터 월별 집계 요약 테이블 롤업 시작 ===");
+        ensureMonthlyDirectAiSummaryTableExists();
+        ensureMonthlyEndpointServingSummaryTableExists();
+
+        // 1. Direct AI 월별 롤업 (VI 데이터 vision_api_calls 포함 SUM 합산)
+        try {
+            String directRollupSql = String.format(
+                "MERGE INTO `%s.%s.monthly_direct_ai_summary` T " +
+                "USING (" +
+                "  SELECT " +
+                "    SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS report_year_month, " +
+                "    project_id, " +
+                "    MAX(customer_name) AS customer_name, " +
+                "    SUM(input_tokens) AS monthly_input_tokens, " +
+                "    SUM(output_tokens) AS monthly_output_tokens, " +
+                "    SUM(total_tokens) AS monthly_total_tokens, " +
+                "    SUM(pretrained_api_calls) AS monthly_pretrained_calls, " +
+                "    SUM(vision_api_calls) AS monthly_vision_calls, " +
+                "    SUM(speech_api_calls) AS monthly_speech_calls, " +
+                "    SUM(translation_api_calls) AS monthly_translation_calls, " +
+                "    SUM(nlp_api_calls) AS monthly_nlp_calls, " +
+                "    AVG(training_node_hours) AS training_node_hours, " +
+                "    MAX(pipeline_runs_count) AS pipeline_runs_count, " +
+                "    MAX(workbench_uptime_hours) AS workbench_uptime_hours, " +
+                "    MAX(active_workbench_count) AS active_workbench_count, " +
+                "    CAST(AVG(current_rpm) AS INT64) AS avg_rpm, " +
+                "    MAX(max_rpm_quota) AS max_rpm_quota, " +
+                "    AVG(gemini_flash_ratio) AS gemini_flash_ratio, " +
+                "    AVG(gemini_pro_ratio) AS gemini_pro_ratio, " +
+                "    AVG(claude_ratio) AS claude_ratio, " +
+                "    AVG(custom_model_ratio) AS custom_model_ratio, " +
+                "    AVG(estimated_api_cost) AS estimated_api_cost, " +
+                "    AVG(estimated_training_cost) AS estimated_training_cost, " +
+                "    AVG(total_estimated_daily_cost) AS total_estimated_daily_cost, " +
+                "    ROUND(AVG(total_estimated_daily_cost) * 30.0, 2) AS total_estimated_monthly_cost, " +
+                "    CURRENT_TIMESTAMP() AS updated_at " +
+                "  FROM `%s.%s.daily_direct_ai_metrics` " +
+                "  GROUP BY report_year_month, project_id " +
+                ") S " +
+                "ON T.report_year_month = S.report_year_month AND T.project_id = S.project_id " +
+                "WHEN MATCHED THEN " +
+                "  UPDATE SET " +
+                "    customer_name = S.customer_name, " +
+                "    monthly_input_tokens = S.monthly_input_tokens, " +
+                "    monthly_output_tokens = S.monthly_output_tokens, " +
+                "    monthly_total_tokens = S.monthly_total_tokens, " +
+                "    monthly_pretrained_calls = S.monthly_pretrained_calls, " +
+                "    monthly_vision_calls = S.monthly_vision_calls, " +
+                "    monthly_speech_calls = S.monthly_speech_calls, " +
+                "    monthly_translation_calls = S.monthly_translation_calls, " +
+                "    monthly_nlp_calls = S.monthly_nlp_calls, " +
+                "    training_node_hours = S.training_node_hours, " +
+                "    pipeline_runs_count = S.pipeline_runs_count, " +
+                "    workbench_uptime_hours = S.workbench_uptime_hours, " +
+                "    active_workbench_count = S.active_workbench_count, " +
+                "    avg_rpm = S.avg_rpm, " +
+                "    max_rpm_quota = S.max_rpm_quota, " +
+                "    gemini_flash_ratio = S.gemini_flash_ratio, " +
+                "    gemini_pro_ratio = S.gemini_pro_ratio, " +
+                "    claude_ratio = S.claude_ratio, " +
+                "    custom_model_ratio = S.custom_model_ratio, " +
+                "    estimated_api_cost = S.estimated_api_cost, " +
+                "    estimated_training_cost = S.estimated_training_cost, " +
+                "    total_estimated_daily_cost = S.total_estimated_daily_cost, " +
+                "    total_estimated_monthly_cost = S.total_estimated_monthly_cost, " +
+                "    updated_at = S.updated_at " +
+                "WHEN NOT MATCHED THEN " +
+                "  INSERT ROW",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(directRollupSql).build());
+            log.info("Successfully rolled up Direct AI metrics (including VI) into monthly_direct_ai_summary");
+        } catch (Exception e) {
+            log.error("Failed to rollup Direct AI summary", e);
+        }
+
+        // 2. Endpoint Serving 월별 롤업
+        try {
+            String servingRollupSql = String.format(
+                "MERGE INTO `%s.%s.monthly_endpoint_serving_summary` T " +
+                "USING (" +
+                "  SELECT " +
+                "    SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS report_year_month, " +
+                "    project_id, " +
+                "    MAX(customer_name) AS customer_name, " +
+                "    endpoint_id, " +
+                "    MAX(endpoint_name) AS endpoint_name, " +
+                "    MAX(deployed_model_id) AS deployed_model_id, " +
+                "    MAX(deployed_model_name) AS deployed_model_name, " +
+                "    MAX(machine_type) AS machine_type, " +
+                "    MAX(accelerator_type) AS accelerator_type, " +
+                "    MAX(accelerator_count) AS accelerator_count, " +
+                "    MAX(min_replicas) AS min_replicas, " +
+                "    MAX(max_replicas) AS max_replicas, " +
+                "    MAX(current_replicas) AS current_replicas, " +
+                "    SUM(total_requests) AS monthly_total_requests, " +
+                "    AVG(qps) AS avg_qps, " +
+                "    CAST(AVG(avg_latency_ms) AS INT64) AS avg_latency_ms, " +
+                "    CAST(AVG(p95_latency_ms) AS INT64) AS p95_latency_ms, " +
+                "    CAST(AVG(p99_latency_ms) AS INT64) AS p99_latency_ms, " +
+                "    SUM(error_count_4xx) AS monthly_error_count_4xx, " +
+                "    SUM(error_count_5xx) AS monthly_error_count_5xx, " +
+                "    AVG(error_rate_4xx_percent) AS error_rate_4xx_percent, " +
+                "    AVG(error_rate_5xx_percent) AS error_rate_5xx_percent, " +
+                "    AVG(success_rate_percent) AS success_rate_percent, " +
+                "    SUM(vector_search_queries) AS monthly_vector_search_queries, " +
+                "    SUM(vector_search_updates) AS monthly_vector_search_updates, " +
+                "    AVG(gpu_utilization_percent) AS gpu_utilization_percent, " +
+                "    AVG(cpu_utilization_percent) AS cpu_utilization_percent, " +
+                "    MAX(monthly_serving_cost) AS monthly_serving_cost, " +
+                "    MAX(status) AS status, " +
+                "    CURRENT_TIMESTAMP() AS updated_at " +
+                "  FROM `%s.%s.daily_endpoint_serving_metrics` " +
+                "  GROUP BY report_year_month, project_id, endpoint_id " +
+                ") S " +
+                "ON T.report_year_month = S.report_year_month AND T.project_id = S.project_id AND T.endpoint_id = S.endpoint_id " +
+                "WHEN MATCHED THEN " +
+                "  UPDATE SET " +
+                "    customer_name = S.customer_name, " +
+                "    endpoint_name = S.endpoint_name, " +
+                "    deployed_model_id = S.deployed_model_id, " +
+                "    deployed_model_name = S.deployed_model_name, " +
+                "    machine_type = S.machine_type, " +
+                "    accelerator_type = S.accelerator_type, " +
+                "    accelerator_count = S.accelerator_count, " +
+                "    min_replicas = S.min_replicas, " +
+                "    max_replicas = S.max_replicas, " +
+                "    current_replicas = S.current_replicas, " +
+                "    monthly_total_requests = S.monthly_total_requests, " +
+                "    avg_qps = S.avg_qps, " +
+                "    avg_latency_ms = S.avg_latency_ms, " +
+                "    p95_latency_ms = S.p95_latency_ms, " +
+                "    p99_latency_ms = S.p99_latency_ms, " +
+                "    monthly_error_count_4xx = S.monthly_error_count_4xx, " +
+                "    monthly_error_count_5xx = S.monthly_error_count_5xx, " +
+                "    error_rate_4xx_percent = S.error_rate_4xx_percent, " +
+                "    error_rate_5xx_percent = S.error_rate_5xx_percent, " +
+                "    success_rate_percent = S.success_rate_percent, " +
+                "    monthly_vector_search_queries = S.monthly_vector_search_queries, " +
+                "    monthly_vector_search_updates = S.monthly_vector_search_updates, " +
+                "    gpu_utilization_percent = S.gpu_utilization_percent, " +
+                "    cpu_utilization_percent = S.cpu_utilization_percent, " +
+                "    monthly_serving_cost = S.monthly_serving_cost, " +
+                "    status = S.status, " +
+                "    updated_at = S.updated_at " +
+                "WHEN NOT MATCHED THEN " +
+                "  INSERT ROW",
+                targetProjectId, datasetName,
+                targetProjectId, datasetName
+            );
+            bigQuery.query(QueryJobConfiguration.newBuilder(servingRollupSql).build());
+            log.info("Successfully rolled up Endpoint Serving metrics into monthly_endpoint_serving_summary");
+        } catch (Exception e) {
+            log.error("Failed to rollup Endpoint Serving summary", e);
+        }
+        log.info("=== 🏁 [BigQuery 롤업 배치] AI 데이터 월별 집계 요약 롤업 완료 ===");
     }
 
     /**
@@ -1587,8 +1834,9 @@ public class BigQueryBatchService {
         cleanPastMonthlyAssetSnapshots(snapshotDate);
         cleanPastMonthlyReservationSnapshots(snapshotDate);
         cleanPastMonthlyRecommenderSnapshots(snapshotDate);
-        cleanPastMonthlyDirectAiSnapshots(snapshotDate);
-        cleanPastMonthlyEndpointServingSnapshots(snapshotDate);
+
+        // AI 데이터는 파티션 만료(180일) 및 월별 요약 테이블 롤업으로 무결성 보존
+        rollupAllMonthlyAiSummaries();
         log.info("=== 🏁 Completed Unified Past Monthly Snapshots Cleanup for All BigQuery Tables ===");
     }
 
@@ -1701,41 +1949,8 @@ public class BigQueryBatchService {
         }
     }
 
-    /**
-     * 과거 월(Month) Direct AI Usage 데이터 정리 (스냅샷 정책)
-     * - 당월(Current Month) 데이터: 일별로 계속 누적 보존
-     * - 이전 달(Past Months) 데이터: 각 프로젝트/월별 가장 늦은 날짜(MAX snapshot_date) 1건만 남기고 나머지 일자 데이터는 모두 삭제
-     */
     public void cleanPastMonthlyDirectAiSnapshots(String snapshotDate) {
-        ensureDailyDirectAiMetricsTableExists();
-        if (snapshotDate == null || snapshotDate.length() < 7) return;
-        String currentYearMonth = snapshotDate.substring(0, 7); // "YYYY-MM"
-        try {
-            String ctasSql = String.format(
-                "CREATE OR REPLACE TABLE `%s.%s.daily_direct_ai_metrics` AS " +
-                "SELECT * FROM `%s.%s.daily_direct_ai_metrics` " +
-                "WHERE ( " +
-                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
-                "  OR " +
-                "  CONCAT(project_id, '#', CAST(snapshot_date AS STRING)) IN ( " +
-                "    SELECT CONCAT(project_id, '#', CAST(MAX(snapshot_date) AS STRING)) " +
-                "    FROM `%s.%s.daily_direct_ai_metrics` " +
-                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
-                "    GROUP BY project_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
-                "  ) " +
-                ")",
-                targetProjectId, datasetName,
-                targetProjectId, datasetName,
-                currentYearMonth,
-                targetProjectId, datasetName,
-                currentYearMonth
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
-            log.info("Successfully cleaned past monthly Direct AI records before '{}' in {}.{}.daily_direct_ai_metrics",
-                    currentYearMonth, targetProjectId, datasetName);
-        } catch (Exception e) {
-            log.warn("Past monthly Direct AI cleanup notice for '{}': {}", currentYearMonth, e.getMessage());
-        }
+        rollupAllMonthlyAiSummaries();
     }
 
     public void cleanPastMonthlyVertexAiSnapshots(String snapshotDate) {
