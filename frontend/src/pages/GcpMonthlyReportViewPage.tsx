@@ -604,7 +604,14 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                 @media print {
                     @page {
                         size: A4 portrait;
-                        margin: 0 !important;
+                        margin-top: 14mm !important;
+                        margin-bottom: 14mm !important;
+                        margin-left: 10mm !important;
+                        margin-right: 10mm !important;
+                    }
+                    @page :first {
+                        margin-top: 8mm !important;
+                        margin-bottom: 14mm !important;
                     }
                     * {
                         -webkit-print-color-adjust: exact !important;
@@ -634,7 +641,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         width: 100% !important;
                         max-width: 100% !important;
                         margin: 0 auto !important;
-                        padding: 12mm 10mm !important;
+                        padding: 0 !important;
                         box-sizing: border-box !important;
                         display: block !important;
                     }

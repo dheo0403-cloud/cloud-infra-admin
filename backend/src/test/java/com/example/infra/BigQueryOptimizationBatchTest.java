@@ -104,36 +104,24 @@ public class BigQueryOptimizationBatchTest {
     @Test
     @DisplayName("전체 GCP 고객사 프로젝트 대상 4개월치 BigQuery 성능 및 비용 최적화 데이터 일괄 Upsert 동기화")
     public void testBackfillAllProjects4Months() {
-        String[] months = {"2026-06", "2026-07", "2026-08", "2026-09"};
-        java.util.Map<String, String> projectsMap = new java.util.LinkedHashMap<>();
-        projectsMap.put("hcompany-485701", "한앤컴퍼니");
-        projectsMap.put("skshipping", "한앤컴퍼니");
-        projectsMap.put("hcompanycsg", "한앤컴퍼니");
-        projectsMap.put("skspecialty", "한앤컴퍼니");
-        projectsMap.put("ssycne", "한앤컴퍼니");
-        projectsMap.put("secu-390423", "카카오헬스케어");
-        projectsMap.put("prd-pasta", "카카오헬스케어");
-        projectsMap.put("prd-dfd", "카카오헬스케어");
-        projectsMap.put("wjis-gw-project", "우진산전");
-        projectsMap.put("infra-platform", "밸로프");
-        projectsMap.put("ns-user-data", "NS Mall");
-        projectsMap.put("ns-intr-data", "NS Mall");
-        projectsMap.put("ns-analysis-user", "NS Mall");
-        projectsMap.put("ns-pipe-srvc-prod-402505", "NS Mall");
-        projectsMap.put("ns-infr-host-402505", "NS Mall");
-        projectsMap.put("ns-aiplatform-dev", "NS Mall");
-        projectsMap.put("ns-extr-data", "NS Mall");
-        projectsMap.put("ns-mart-data", "NS Mall");
-        projectsMap.put("ns-dev-ground", "NS Mall");
-        projectsMap.put("ns-aiplatform-prd", "NS Mall");
+        bigQueryOptimizationService.backfillAllProjects4MonthsBulk();
+        System.out.println("✅ 전체 20개 GCP 프로젝트 대상 4개월치 BigQuery 성능 최적화 데이터 롤업 Bulk Upsert 완료!");
 
-        for (String ym : months) {
-            String snapDate = ym + "-25";
-            for (java.util.Map.Entry<String, String> entry : projectsMap.entrySet()) {
-                bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapDate, entry.getKey(), entry.getValue(), null);
-            }
-        }
-        System.out.println("✅ 전체 20개 GCP 프로젝트 대상 4개월치 BigQuery 성능 최적화 데이터 롤업 Upsert 완료!");
+        // 검증: hcompany-485701 프로젝트에 4개월 트렌드와 2026-09 데이터가 정상 적재되었는지 확인
+        BigQueryOptimizationDto dto = bigQueryOptimizationService.getBigQueryOptimizationMetrics("hcompany-485701", "2026-09");
+        assertNotNull(dto);
+        assertEquals(4, dto.getDataProcessedTbTrend().size());
+        assertTrue(dto.getDataProcessedTbTrend().get(0) > 0, "6월 처리량이 존재해야 합니다.");
+        assertTrue(dto.getDataProcessedTbTrend().get(1) > 0, "7월 처리량이 존재해야 합니다.");
+        assertTrue(dto.getDataProcessedTbTrend().get(2) > 0, "8월 처리량이 존재해야 합니다.");
+        assertTrue(dto.getDataProcessedTbTrend().get(3) > 0, "9월 처리량이 존재해야 합니다.");
+        assertTrue(dto.getTotalLogicalStorageGb() > 0, "논리 스토리지가 정상 적재되어야 합니다.");
+        assertTrue(dto.getTotalPhysicalStorageGb() > 0, "물리 스토리지가 정상 적재되어야 합니다.");
+        assertEquals(10, dto.getHighCostQueries().size(), "고비용 TOP 10 쿼리가 존재해야 합니다.");
+        assertEquals(10, dto.getLongDurationQueries().size(), "장기실행 TOP 10 쿼리가 존재해야 합니다.");
+        System.out.println(String.format("• [hcompany-485701 백필 검증 실측] 4개월 TB 추이: %s | 논리 스토리지: %.1f GB | 물리 스토리지: %.1f GB | TOP 쿼리: %d건",
+                dto.getDataProcessedTbTrend(), dto.getTotalLogicalStorageGb(), dto.getTotalPhysicalStorageGb(),
+                dto.getHighCostQueries().size() + dto.getLongDurationQueries().size()));
     }
 
     @Test

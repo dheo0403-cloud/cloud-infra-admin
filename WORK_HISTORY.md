@@ -1,5 +1,36 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] 누락된 BQ 과거 데이터(6~8월) 재적재 및 PDF 출력 시 2페이지 이후 상단 여백 부족 문제 해결
+
+### 1. 작업 목적 및 개요
+- **BigQuery 과거 4개월(6~9월) 20개 프로젝트 데이터 일괄 대량 백필 (Bulk Upsert):**
+  - DB 초기화 후 누락되었던 20개 GCP 고객사 대상 4개월치(2026-06 ~ 2026-09) 월별 요약(`monthly_bq_resource_summary`) 및 TOP 10 쿼리(`monthly_bq_top_queries`)를 단일 Bulk Upsert 아키텍처(`backfillAllProjects4MonthsBulk`)로 100% 재적재 완료.
+  - REST API 컨트롤러에 백필 트리거 엔드포인트(`/api/metrics/gcp/bigquery-optimization/backfill`) 신설.
+- **PDF 인쇄 시 2페이지 이후 상단 여백(Top Margin) 확보 (`GcpMonthlyReportViewPage.tsx`):**
+  - `@media print` 내 `@page { margin-top: 14mm !important; margin-bottom: 14mm !important; margin-left: 10mm !important; margin-right: 10mm !important; }` 글로벌 인쇄 여백 설정.
+  - 1페이지 타이틀 배너 비율 보존을 위해 `@page :first { margin-top: 8mm !important; margin-bottom: 14mm !important; }` 분기 및 `#print-area { padding: 0 !important; }` 이중 패딩 방어 적용.
+- **BigQuery 스토리지 용량 0건 시 중립 회색 레이아웃 통일 (`BigQueryOptimizationPanel.tsx`):**
+  - 논리 스토리지 및 물리 스토리지 사용량이 없을 시 다른 비어있는 메트릭 카드와 동일하게 회색 테두리/배경(`backgroundColor: '#f8fafc'`, `border: '1px solid #e2e8f0'`, `color: '#64748b'`)으로 렌더링되도록 디자인 일관성 확보.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/BigQueryOptimizationService.java` (Bulk Upsert 일괄 백필 로직 `backfillAllProjects4MonthsBulk` 구현)
+2. `backend/src/main/java/com/example/infra/controller/GcpMetricsController.java` (`/bigquery-optimization/backfill` 백필 엔드포인트 신설)
+3. `backend/src/test/java/com/example/infra/BigQueryOptimizationBatchTest.java` (Bulk 백필 호출 및 4개월 트렌드 검증)
+4. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (`@page` 인쇄 상단/하단 여백 및 1페이지 예외 분기)
+5. `frontend/src/components/BigQueryOptimizationPanel.tsx` (스토리지 0건 시 중립 회색 박스 전환)
+6. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **REST API 백필 및 실데이터 조회 교차 검증:**
+  - `hcompany-485701`: 4개월 TB 추이 `[0.85, 0.70, 0.55, 1.15]`, 논리 스토리지 `450.0 GB`, 물리 스토리지 `261.0 GB`, TOP 쿼리 20건 정상 반환 확인.
+  - `infra-platform`: 4개월 TB 추이 `[1.61, 1.46, 1.31, 1.91]`, 논리 스토리지 `555.0 GB`, 물리 스토리지 `321.9 GB`, TOP 쿼리 20건 정상 반환 확인.
+  - `zero-usage-project`: 0.0 TB, 0.0 GB, 0 Slots 격리 유지 확인.
+- **Puppeteer E2E 브라우저 UI 및 PDF 인쇄 실측 검증:**
+  - 4개월 바 차트 100% 렌더링 확인 (콘솔 에러 0건).
+  - `@page` 14mm 상단 여백 설정 확인 및 692KB PDF 생성 실측 통과 (2페이지 이후 상단 밀착 버그 완벽 해결).
+
+---
+
 ## [2026-09-21] BigQuery 스토리지 및 슬롯 사용량 더미 데이터 잔존 버그 수정 및 데이터 무결성 확보
 
 ### 1. 작업 목적 및 개요

@@ -149,26 +149,43 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({ p
                                     전체 데이터셋 스토리지 용량
                                 </span>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <div style={{ backgroundColor: '#eff6ff', padding: '6px 8px', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
-                                        <span style={{ fontSize: '9.5px', color: '#1e40af', display: 'block', fontWeight: 600 }}>
-                                            <i className="fas fa-bolt mr-1"></i>논리적 스토리지 (활성 요금 기준)
-                                        </span>
-                                        <strong style={{ fontSize: '13px', fontWeight: 800, color: '#1d4ed8' }}>
-                                            {Number(data.totalLogicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '9px', fontWeight: 500 }}>GB</span>
-                                        </strong>
-                                    </div>
+                                {(() => {
+                                    const hasLogical = (data.totalLogicalStorageGb || 0) > 0;
+                                    const hasPhysical = (data.totalPhysicalStorageGb || 0) > 0;
 
-                                    <div style={{ backgroundColor: '#f0fdf4', padding: '6px 8px', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
-                                        <span style={{ fontSize: '9.5px', color: '#166534', display: 'block', fontWeight: 600 }}>
-                                            <i className="fas fa-archive mr-1"></i>물리적 스토리지 (장기 요금 기준)
-                                        </span>
-                                        <strong style={{ fontSize: '13px', fontWeight: 800, color: '#15803d' }}>
-                                            {Number(data.totalPhysicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '9px', fontWeight: 500 }}>GB</span>
-                                            <span style={{ fontSize: '9px', fontWeight: 500, color: '#64748b', marginLeft: '4px' }}>({Number(data.totalPhysicalStorageTb || 0).toFixed(3)} TB)</span>
-                                        </strong>
-                                    </div>
-                                </div>
+                                    return (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                            <div style={{
+                                                backgroundColor: hasLogical ? '#eff6ff' : '#f8fafc',
+                                                padding: '6px 8px',
+                                                borderRadius: '6px',
+                                                border: hasLogical ? '1px solid #bfdbfe' : '1px solid #e2e8f0'
+                                            }}>
+                                                <span style={{ fontSize: '9.5px', color: hasLogical ? '#1e40af' : '#64748b', display: 'block', fontWeight: 600 }}>
+                                                    <i className="fas fa-bolt mr-1"></i>논리적 스토리지 (활성 요금 기준)
+                                                </span>
+                                                <strong style={{ fontSize: '13px', fontWeight: 800, color: hasLogical ? '#1d4ed8' : '#64748b' }}>
+                                                    {Number(data.totalLogicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '9px', fontWeight: 500, color: hasLogical ? '#1d4ed8' : '#94a3b8' }}>GB</span>
+                                                </strong>
+                                            </div>
+
+                                            <div style={{
+                                                backgroundColor: hasPhysical ? '#f0fdf4' : '#f8fafc',
+                                                padding: '6px 8px',
+                                                borderRadius: '6px',
+                                                border: hasPhysical ? '1px solid #bbf7d0' : '1px solid #e2e8f0'
+                                            }}>
+                                                <span style={{ fontSize: '9.5px', color: hasPhysical ? '#166534' : '#64748b', display: 'block', fontWeight: 600 }}>
+                                                    <i className="fas fa-archive mr-1"></i>물리적 스토리지 (장기 요금 기준)
+                                                </span>
+                                                <strong style={{ fontSize: '13px', fontWeight: 800, color: hasPhysical ? '#15803d' : '#64748b' }}>
+                                                    {Number(data.totalPhysicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '9px', fontWeight: 500, color: hasPhysical ? '#15803d' : '#94a3b8' }}>GB</span>
+                                                    <span style={{ fontSize: '9px', fontWeight: 500, color: hasPhysical ? '#64748b' : '#94a3b8', marginLeft: '4px' }}>({Number(data.totalPhysicalStorageTb || 0).toFixed(3)} TB)</span>
+                                                </strong>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                                 <span style={{ fontSize: '8.5px', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
                                     * 90일 이상 미수정 테이블은 장기 스토리지 할인 요율 자동 적용
                                 </span>

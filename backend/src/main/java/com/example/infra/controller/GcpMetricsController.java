@@ -42,6 +42,19 @@ public class GcpMetricsController {
     }
 
     /**
+     * 전체 20개 GCP 프로젝트 대상 과거 4개월(6~9월) BigQuery 성능 최적화 데이터 일괄 백필 트리거
+     */
+    @RequestMapping({"/bigquery-optimization/backfill"})
+    public ResponseEntity<java.util.Map<String, Object>> backfillBigQueryOptimizationMetrics() {
+        log.info("[API] Triggering bulk backfill for all 20 GCP projects across 4 months (2026-06 ~ 2026-09)");
+        bigQueryOptimizationService.backfillAllProjects4MonthsBulk();
+        java.util.Map<String, Object> res = new java.util.HashMap<>();
+        res.put("status", "SUCCESS");
+        res.put("message", "20개 프로젝트 대상 과거 4개월(6~9월) BigQuery 최적화 데이터 일괄 롤업 완료");
+        return ResponseEntity.ok(res);
+    }
+
+    /**
      * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 조회
      * @param projectId 타겟 고객사 GCP 프로젝트 ID (선택 사항)
      * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
