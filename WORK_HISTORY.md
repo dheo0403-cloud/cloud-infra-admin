@@ -1,6 +1,32 @@
 # 작업 이력 (WORK_HISTORY.md)
 
-## [2026-09-21] GCP 실측 AI 메트릭 기반 수집 파이프라인 전면 재구축, BigQuery 90일 소급 적재 및 월간/분기 통합 보고서 구현
+## [2026-09-21] 보고서 조회 주기 UI 제거 및 4개월 월별 통합 차트 뷰로 UX 전면 개편
+
+### 1. 작업 목적 및 개요
+- **불필요한 조회 주기 버튼 제거 및 상단 필터 바 레이아웃 원상 복구:**
+  - `GcpMonthlyReportViewPage.tsx` 상단 컨트롤 바의 '조회 주기(월간/분기)' 토글 버튼을 완전히 제거하여 단일 행(Row) 정렬 및 레이아웃 틀어짐을 완벽히 해결.
+- **4개월 월별 통합 차트 로직 구현 (UX 통일화):**
+  - 기존 일별(Daily 21~29일) 데이터 과적 렌더링을 폐기하고, 보고서 내 타 인프라 지표(VM, SQL, Storage 등)와 동일하게 **선택한 연월 기준 최근 4개월(예: 6월, 7월, 8월, 9월)** 월별 데이터로 통합.
+  - X축에 정확히 4개의 월별 막대(`dates: ['26.06', '26.07', '26.08', '26.09']`)만 여유롭고 명확하게 표출되도록 프론트엔드(`DirectAiUsagePanel.tsx`) 및 백엔드(`GcpVertexAiMetricsService.java`) 집계 쿼리 전면 개편.
+- **백엔드 월별 Aggregation 로직 구현:**
+  - BigQuery에서 `SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN startMonth AND endMonth` 기준으로 월별 `SUM(input_tokens)`, `SUM(output_tokens)`, `SUM(total_requests)` 등을 집계하여 4개 요소 배열로 반환.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/GcpVertexAiMetricsService.java` (4개월 월별 집계 쿼리 및 트렌드 배열 매핑 구현)
+2. `backend/src/main/java/com/example/infra/controller/GcpMetricsController.java` (컨트롤러 정리)
+3. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (상단 조회 주기 버튼 삭제 및 레이아웃 복원)
+4. `frontend/src/components/DirectAiUsagePanel.tsx` (4개월 월별 차트 렌더링 및 칩 텍스트 통일화)
+5. `frontend/src/components/EndpointServingPanel.tsx` (칩 텍스트 및 인프라 상세 테이블 뷰 최적화)
+6. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **백엔드 API 4개월 실측 데이터 검증:**
+  - `GET /api/metrics/gcp/direct-ai?projectId=hcompany-485701&targetYearMonth=2026-09`: `dates: ['26.06', '26.07', '26.08', '26.09']`, 토큰 트렌드 4개 값 정상 반환.
+  - `GET /api/metrics/gcp/endpoint-serving?projectId=hcompany-485701&targetYearMonth=2026-09`: `dates: ['26.06', '26.07', '26.08', '26.09']`, 예측 요청 트렌드 4개 값 정상 반환.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+- **서버 재기동:** `deploy.ps1`을 통한 `http://localhost:8080` 정상 기동 확인.
+
+---
 
 ### 1. 작업 목적 및 개요
 - **GCP Cloud Monitoring AI 메트릭 실측 전수 조사 및 필터 전면 교체:**

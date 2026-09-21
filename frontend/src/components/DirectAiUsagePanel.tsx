@@ -4,16 +4,15 @@ import { getDirectAiMetrics, DirectAiMetricsDto } from '../services/api';
 interface DirectAiUsagePanelProps {
     projectId?: string;
     targetYearMonth?: string;
-    period?: 'monthly' | 'quarterly';
 }
 
-const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targetYearMonth, period = 'monthly' }) => {
+const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targetYearMonth }) => {
     const [metrics, setMetrics] = useState<DirectAiMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchMetrics = async () => {
         try {
-            const res = await getDirectAiMetrics(projectId, targetYearMonth, period);
+            const res = await getDirectAiMetrics(projectId, targetYearMonth);
             if (res.data) {
                 setMetrics(res.data);
             }
@@ -26,7 +25,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
 
     useEffect(() => {
         fetchMetrics();
-    }, [projectId, targetYearMonth, period]);
+    }, [projectId, targetYearMonth]);
 
     const hasData = Boolean(metrics && metrics.dates && metrics.dates.length > 0);
 
@@ -114,7 +113,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                 {/* 4 Summary Chips */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '14px' }}>
                     <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{period === 'quarterly' ? '분기(90일) 누적 토큰' : '월간(30일) 누적 토큰'}</span>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 누적 토큰</span>
                         <strong style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'Pretendard, sans-serif' }}>
                             {totalTokensM}M <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Tokens</span>
                         </strong>
@@ -132,9 +131,9 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                         </strong>
                     </div>
                     <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{period === 'quarterly' ? '분기 예상 비용' : '월간 예상 비용'}</span>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 예상 비용</span>
                         <strong style={{ fontSize: '14px', fontWeight: 800, color: '#d97706', fontFamily: 'Pretendard, sans-serif' }}>
-                            ${(data.totalEstimatedMonthlyCost || 0).toFixed(2)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>{period === 'quarterly' ? '/ 분기' : '/ 월'}</span>
+                            ${(data.totalEstimatedMonthlyCost || 0).toFixed(2)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>/ 월</span>
                         </strong>
                     </div>
                 </div>
@@ -145,7 +144,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                     <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
-                                <i className="fas fa-chart-bar mr-1" style={{ color: '#2563eb' }}></i>일별 토큰 및 Pre-trained API 호출 트렌드
+                                <i className="fas fa-chart-bar mr-1" style={{ color: '#2563eb' }}></i>월별 토큰 및 Pre-trained API 호출 트렌드 (최근 4개월)
                             </span>
                             <div style={{ display: 'flex', gap: '10px', fontSize: '9px', fontWeight: 600 }}>
                                 <span style={{ display: 'flex', alignItems: 'center' }}>
@@ -160,18 +159,18 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                         </div>
 
                         {hasData && data.dates.length > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'flex-end', height: '140px', gap: '10px', paddingBottom: '20px', position: 'relative' }}>
+                            <div style={{ display: 'flex', alignItems: 'flex-end', height: '140px', gap: '16px', paddingBottom: '20px', position: 'relative' }}>
                                 {data.dates.map((date, idx) => {
                                     const inTok = Number(data.inputTokensTrend?.[idx] || 0);
                                     const outTok = Number(data.outputTokensTrend?.[idx] || 0);
-                                    const inHeight = inTok > 0 ? Math.max((inTok / maxTokenValue) * 100, 6) : 0;
-                                    const outHeight = outTok > 0 ? Math.max((outTok / maxTokenValue) * 100, 6) : 0;
+                                    const inHeight = inTok > 0 ? Math.max((inTok / maxTokenValue) * 100, 8) : 0;
+                                    const outHeight = outTok > 0 ? Math.max((outTok / maxTokenValue) * 100, 8) : 0;
 
                                     return (
                                         <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                            <div style={{ display: 'flex', gap: '3px', alignItems: 'flex-end', width: '100%', height: '100%' }}>
+                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', width: '100%', height: '100%', justifyContent: 'center' }}>
                                                 {/* Input Token Bar */}
-                                                <div style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative' }}>
+                                                <div style={{ width: '22px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative' }}>
                                                     {inTok > 0 && (
                                                         <span style={{
                                                             fontSize: '8px',
@@ -181,7 +180,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                                                             whiteSpace: 'nowrap',
                                                             lineHeight: 1
                                                         }}>
-                                                            {(inTok / 1000).toFixed(0)}k
+                                                            {(inTok / 1000000).toFixed(1)}M
                                                         </span>
                                                     )}
                                                     <div style={{
@@ -194,7 +193,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                                                 </div>
 
                                                 {/* Output Token Bar */}
-                                                <div style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative' }}>
+                                                <div style={{ width: '22px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative' }}>
                                                     {outTok > 0 && (
                                                         <span style={{
                                                             fontSize: '8px',
@@ -204,7 +203,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                                                             whiteSpace: 'nowrap',
                                                             lineHeight: 1
                                                         }}>
-                                                            {(outTok / 1000).toFixed(0)}k
+                                                            {(outTok / 1000000).toFixed(1)}M
                                                         </span>
                                                     )}
                                                     <div style={{
@@ -216,7 +215,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                                                     }}></div>
                                                 </div>
                                             </div>
-                                            <span style={{ fontSize: '9px', color: '#64748b', marginTop: '6px', fontWeight: 600 }}>{date}</span>
+                                            <span style={{ fontSize: '10px', color: '#475569', marginTop: '6px', fontWeight: 700 }}>{date}</span>
                                         </div>
                                     );
                                 })}

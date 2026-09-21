@@ -4,16 +4,15 @@ import { getEndpointServingMetrics, EndpointServingMetricsDto } from '../service
 interface EndpointServingPanelProps {
     projectId?: string;
     targetYearMonth?: string;
-    period?: 'monthly' | 'quarterly';
 }
 
-const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({ projectId, targetYearMonth, period = 'monthly' }) => {
+const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({ projectId, targetYearMonth }) => {
     const [metrics, setMetrics] = useState<EndpointServingMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchMetrics = async () => {
         try {
-            const res = await getEndpointServingMetrics(projectId, targetYearMonth, period);
+            const res = await getEndpointServingMetrics(projectId, targetYearMonth);
             if (res.data) {
                 setMetrics(res.data);
             }
@@ -26,7 +25,7 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({ projectId, 
 
     useEffect(() => {
         fetchMetrics();
-    }, [projectId, targetYearMonth, period]);
+    }, [projectId, targetYearMonth]);
 
     const hasData = Boolean(metrics && metrics.endpoints && metrics.endpoints.length > 0);
 
@@ -99,7 +98,7 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({ projectId, 
                         {/* 5 Summary Chips */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '14px' }}>
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{period === 'quarterly' ? '분기(90일) 누적 예측' : '월간(30일) 누적 예측'}</span>
+                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 누적 예측 요청</span>
                                 <strong style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'Pretendard, sans-serif' }}>
                                     {(data.totalRequests7d || 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Calls</span>
                                 </strong>
@@ -123,7 +122,7 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({ projectId, 
                                 </strong>
                             </div>
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>{period === 'quarterly' ? '분기 예상 서빙 비용' : '월간 예상 서빙 비용'}</span>
+                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 예상 서빙 비용</span>
                                 <strong style={{ fontSize: '14px', fontWeight: 800, color: '#d97706', fontFamily: 'Pretendard, sans-serif' }}>
                                     ${(data.totalEstimatedMonthlyCost || 0).toFixed(1)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>(${data.totalEstimatedHourlyCost || 0}/h)</span>
                                 </strong>
