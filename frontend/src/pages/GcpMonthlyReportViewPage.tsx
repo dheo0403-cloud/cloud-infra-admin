@@ -2341,7 +2341,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     {/* Section 6: GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 */}
                     <div style={{ marginTop: '20px' }}>
                         <DirectAiUsagePanel
-                            projectId={selectedProject || 'hcompany-485701'}
+                            projectId={selectedProject || reportData?.projectId || ''}
                             targetYearMonth={selectedYearMonth}
                         />
                     </div>
@@ -2349,7 +2349,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     {/* Section 6-2: GCP AI 엔드포인트 서빙 (Endpoint Serving) 관제 */}
                     <div>
                         <EndpointServingPanel
-                            projectId={selectedProject || 'hcompany-485701'}
+                            projectId={selectedProject || reportData?.projectId || ''}
                             targetYearMonth={selectedYearMonth}
                         />
                     </div>

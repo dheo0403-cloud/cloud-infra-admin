@@ -175,26 +175,32 @@ public class BigQueryAiDataRecreationAndBackfillTest {
                 String tsStr = dt + " 02:00:00";
                 String createdStr = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
 
-                // Direct AI Row
-                long baseTok = (pid.contains("prd") || pid.contains("hcompany") || pid.contains("aiplatform")) ? 1250000L : 350000L;
-                int dayFactorNum = Integer.parseInt(dt.replace("-", "")) % 10;
-                double dayFactor = 1.0 + (dayFactorNum * 0.05);
+                // Direct AI Row - 프로젝트별 고유 해시(pHash) 기반 완벽한 테넌트 데이터 격리 및 다양성 보장
+                int pHash = Math.abs(pid.hashCode());
+                long baseTok = 300000L + ((pHash % 17) * 150000L); // 300,000 ~ 2,700,000 토큰 범위 프로젝트별 고유 분산
+                int dayFactorNum = (Integer.parseInt(dt.replace("-", "")) + (pHash % 7)) % 10;
+                double dayFactor = 0.85 + (dayFactorNum * 0.04);
 
                 long inTok = (long) (baseTok * 0.7 * dayFactor);
                 long outTok = (long) (baseTok * 0.3 * dayFactor);
                 long totTok = inTok + outTok;
 
-                long visCalls = (pid.contains("ns") || pid.contains("prd")) ? (long)(1200 * dayFactor) : (long)(300 * dayFactor);
-                long spCalls = pid.contains("prd") ? (long)(450 * dayFactor) : (long)(150 * dayFactor);
-                long trCalls = (long)(800 * dayFactor);
-                long nlpCalls = (long)(350 * dayFactor);
+                long visCalls = (long)((200L + ((pHash % 11) * 110L)) * dayFactor);
+                long spCalls = (long)((100L + ((pHash % 7) * 75L)) * dayFactor);
+                long trCalls = (long)((400L + ((pHash % 9) * 90L)) * dayFactor);
+                long nlpCalls = (long)((250L + ((pHash % 6) * 80L)) * dayFactor);
                 long totPre = visCalls + spCalls + trCalls + nlpCalls;
 
-                double trainHours = (pid.contains("dev") || pid.contains("prd")) ? 12.5 : 4.0;
-                int pipeRuns = (pid.contains("pipe") || pid.contains("prd")) ? 6 : 2;
-                double wbHours = (pid.contains("data") || pid.contains("analysis")) ? 48.0 : 12.0;
-                int wbCnt = pid.contains("data") ? 3 : 1;
-                int rpm = (int)(45 * dayFactor);
+                double trainHours = 2.0 + ((pHash % 8) * 1.5);
+                int pipeRuns = 1 + (pHash % 5);
+                double wbHours = 8.0 + ((pHash % 6) * 6.5);
+                int wbCnt = 1 + (pHash % 3);
+                int rpm = 25 + (pHash % 45);
+
+                double flashRatio = 55.0 + (pHash % 25);
+                double proRatio = 20.0 + (pHash % 15);
+                double claudeRatio = Math.max(0.0, 100.0 - flashRatio - proRatio);
+                double customRatio = 0.0;
 
                 double apiCost = Math.round(((inTok * 0.0000005) + (outTok * 0.0000015) + (totPre * 0.0015)) * 100.0) / 100.0;
                 double trainCost = Math.round((trainHours * 0.45 + pipeRuns * 0.15 + wbHours * 0.08) * 100.0) / 100.0;
@@ -219,10 +225,10 @@ public class BigQueryAiDataRecreationAndBackfillTest {
                 dRow.put("active_workbench_count", wbCnt);
                 dRow.put("current_rpm", rpm);
                 dRow.put("max_rpm_quota", 1000);
-                dRow.put("gemini_flash_ratio", 65.0);
-                dRow.put("gemini_pro_ratio", 25.0);
-                dRow.put("claude_ratio", 10.0);
-                dRow.put("custom_model_ratio", 0.0);
+                dRow.put("gemini_flash_ratio", flashRatio);
+                dRow.put("gemini_pro_ratio", proRatio);
+                dRow.put("claude_ratio", claudeRatio);
+                dRow.put("custom_model_ratio", customRatio);
                 dRow.put("estimated_api_cost", apiCost);
                 dRow.put("estimated_training_cost", trainCost);
                 dRow.put("total_estimated_daily_cost", dailyCost);
@@ -230,15 +236,15 @@ public class BigQueryAiDataRecreationAndBackfillTest {
 
                 directRows.add(InsertAllRequest.RowToInsert.of(dRow));
 
-                // Endpoint Serving Row
+                // Endpoint Serving Row - 프로젝트별 고유 해시 기반 독립 서빙 메트릭
                 if (hasServing) {
-                    long reqCnt = (pid.contains("prd") || pid.contains("hcompany")) ? (long)(14500 * dayFactor) : (long)(4500 * dayFactor);
+                    long reqCnt = (long)((3000L + ((pHash % 13) * 1200L)) * dayFactor);
                     double qps = Math.round((reqCnt / 86400.0) * 100.0) / 100.0;
-                    long err4xx = (long)(reqCnt * 0.004);
-                    long err5xx = (long)(reqCnt * 0.001);
+                    long err4xx = (long)(reqCnt * (0.002 + ((pHash % 5) * 0.001)));
+                    long err5xx = (long)(reqCnt * (0.0005 + ((pHash % 4) * 0.0003)));
                     long vsQueries = hasVectorSearch ? (long)(2800 * dayFactor) : 0L;
                     long vsUpdates = hasVectorSearch ? (long)(1400 * dayFactor) : 0L;
-                    double hourlyCost = 0.74;
+                    double hourlyCost = 0.55 + ((pHash % 5) * 0.12);
                     double monthlyCost = Math.round(hourlyCost * 24 * 30 * 100.0) / 100.0;
 
                     Map<String, Object> sRow = new HashMap<>();
@@ -250,22 +256,22 @@ public class BigQueryAiDataRecreationAndBackfillTest {
                     sRow.put("endpoint_name", "ep-" + pid + "-inference");
                     sRow.put("deployed_model_id", pid.contains("hcompany") ? "custom-llm-v1" : "gemini-serving-v2");
                     sRow.put("deployed_model_name", pid.contains("hcompany") ? "custom-llm-v1" : "gemini-serving-v2");
-                    sRow.put("machine_type", "g2-standard-8");
+                    sRow.put("machine_type", (pHash % 2 == 0) ? "g2-standard-8" : "g2-standard-4");
                     sRow.put("accelerator_type", "NVIDIA_L4");
                     sRow.put("accelerator_count", 1);
                     sRow.put("min_replicas", 1);
-                    sRow.put("max_replicas", 5);
-                    sRow.put("current_replicas", 2);
+                    sRow.put("max_replicas", 3 + (pHash % 4));
+                    sRow.put("current_replicas", 1 + (pHash % 2));
                     sRow.put("total_requests", reqCnt);
                     sRow.put("qps", qps);
-                    sRow.put("avg_latency_ms", 48);
-                    sRow.put("p95_latency_ms", 88);
-                    sRow.put("p99_latency_ms", 135);
+                    sRow.put("avg_latency_ms", 35 + (pHash % 25));
+                    sRow.put("p95_latency_ms", 70 + (pHash % 40));
+                    sRow.put("p99_latency_ms", 110 + (pHash % 60));
                     sRow.put("error_count_4xx", err4xx);
                     sRow.put("error_count_5xx", err5xx);
-                    sRow.put("error_rate_4xx_percent", 0.4);
+                    sRow.put("error_rate_4xx_percent", 0.3);
                     sRow.put("error_rate_5xx_percent", 0.1);
-                    sRow.put("success_rate_percent", 99.5);
+                    sRow.put("success_rate_percent", 99.6);
                     sRow.put("vector_search_queries", vsQueries);
                     sRow.put("vector_search_updates", vsUpdates);
                     sRow.put("gpu_utilization_percent", 48.5);

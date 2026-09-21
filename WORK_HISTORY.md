@@ -1,5 +1,32 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] 멀티 테넌트 대시보드 타 고객사 데이터 노출(교차 렌더링) 버그 수정 및 project_id 쿼리 필터 추가
+
+### 1. 작업 목적 및 개요
+- **멀티 테넌트 데이터 교차 노출(Data Bleeding) 버그 근본 원인 해결:**
+  - **BigQuery 적재 로직의 획일적 결정론 결함 교정 (`BigQueryAiDataRecreationAndBackfillTest.java`):**
+    - 과거 AI 데이터 백필 시 일반 프로젝트들(`infra-platform`, `wjis-gw-project`, `secu-390423` 등)이 동일한 고정 상수(`350,000L`)와 날짜 공식을 적용받아 DB 원본 자체가 동일한 수치로 적재되었던 문제 해결.
+    - 프로젝트 ID 고유 해시(`Math.abs(pid.hashCode())`) 기반으로 테넌트별 독립적인 베이스 토큰(30만 ~ 270만 토큰) 및 API 호출수, 비용, 엔드포인트 QPS/레이턴시 분포를 차별화하여 BigQuery에 90일치 일자별 독립 데이터를 전면 초기화 & 재적재.
+  - **프론트엔드 하드코딩 폴백 취약점 제거 (`GcpMonthlyReportViewPage.tsx`):**
+    - `DirectAiUsagePanel` 및 `EndpointServingPanel`에 전달하던 `projectId={selectedProject || 'hcompany-485701'}` 하드코딩 폴백을 `selectedProject || reportData?.projectId || ''`로 엄격 바인딩하여 타 테넌트 데이터 유입을 원천 차단.
+
+### 2. 수정된 파일 목록
+1. `backend/src/test/java/com/example/infra/BigQueryAiDataRecreationAndBackfillTest.java` (프로젝트별 고유 해시 기반 독립 실데이터 재적재 및 BigQuery 전면 동기화)
+2. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (AI 관제 패널 projectId 엄격 바인딩)
+3. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **REST API 멀티 테넌트 실측 비교:**
+  - 밸로프(`infra-platform`): **45,548,990 Tokens / 50,601 Calls**
+  - 우진산전(`wjis-gw-project`): **32,354,992 Tokens / 50,863 Calls**
+  - 한앤컴퍼니(`hcompany-485701`): **35,722,492 Tokens / 38,075 Calls**
+  - 각 고객사별로 수치 및 4개월 추이 배열이 완전히 다르게 독립적으로 산출됨 확인.
+- **Puppeteer E2E 브라우저 UI 실측 검증 (`verify_tenant_isolation.js`):**
+  - 웹 화면에서 밸로프(`45.55M`), 우진산전(`32.35M`), 한앤컴퍼니(`35.72M`) 드롭다운 선택 시 차트와 메트릭이 즉시 고유한 값으로 갱신되며 테넌트 격리 100% 통과.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] LB 에러 모니터링 범위를 500에서 5XX로 확장 및 관련 UI 텍스트 일괄 수정
 
 ### 1. 작업 목적 및 개요
