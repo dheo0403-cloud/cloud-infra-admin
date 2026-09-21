@@ -25,7 +25,7 @@ app:
   security:
     encryption-key: "MZC-INFRA-SECRET-KEY"
   slack:
-    webhook-url: ${SLACK_WEBHOOK_URL:https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK}
+    webhook-url: ${SLACK_WEBHOOK_URL:}
 
 jira:
   base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}

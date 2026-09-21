@@ -1,5 +1,37 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] PDF 보고서 편집 상태 롤백 수정, CUD 연동 및 약정 만료 D-30 Slack Block Kit 알람 자동화
+
+### 1. 작업 목적 및 개요
+- **[프론트엔드] PDF 보고서 편집 상태 로컬 롤백 방어:**
+  - `GcpMonthlyReportViewPage.tsx`에서 편집 모드(`isEditMode`) 종료 시 사용자 수정 텍스트가 초기 Props/API 데이터로 덮어씌워지던 버그 수정.
+  - '운영 정보(MSP 등급, 영업/기술 담당자)', '핵심 요약(보안, 비용, 성능)', '정기 점검 권고 사항(3대 카테고리 목록)'에 대해 수정된 로컬 State를 최우선 렌더링하도록 일원화하여 PDF 인쇄 시 수정 내역 보존 보장.
+- **[프론트엔드/백엔드] GCP CUD(확정 사용 할인) 약정 현황 테이블 신설:**
+  - BigQuery `cud_commitments` 및 `daily_reservation_inventory` 테이블과 연동하여 약정명, 카테고리, 리소스 스펙, 리전, 만료 예정일, D-Day 상태 배지를 보고서 Section 5.5에 카드 테이블로 렌더링.
+- **[백엔드] Azure RI & GCP CUD 약정 만료 D-30 Slack Block Kit 알람 자동화:**
+  - 매일 09:00 (KST) 실행되는 `@Scheduled` 배치(`checkReservationsD30ExpiryAndNotifySlack`) 신설.
+  - BigQuery에서 `DATE_DIFF(expiry_date, CURRENT_DATE('Asia/Seoul'), DAY) = 30` 조건으로 정확히 30일 남은 대상을 필터링하여 매일 반복되는 스팸 중복 발송 방지.
+  - Slack Block Kit 포맷으로 고객사명, 벤더, 리소스 스펙, 만료일, 식별명을 단정한 레이아웃으로 발송.
+  - 1회성 테스트 수동 트리거 API (`POST /api/reservations/trigger-d30-slack-alert`) 추가.
+
+### 2. 수정 및 추가된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (D-30 스케줄러, Block Kit 메시지 생성 및 Slack 발송 파이프라인 구현)
+2. `backend/src/main/java/com/example/infra/service/MonthlyReportService.java` (CUD commitments 쿼리 및 daily_reservation_inventory 폴백 구현)
+3. `backend/src/main/java/com/example/infra/controller/ReservationController.java` (`/trigger-d30-slack-alert` 엔드포인트 추가)
+4. `backend/src/main/resources/application.yml` (Slack 웹훅 설정 정비)
+5. `backend/src/test/java/com/example/infra/SlackD30NotificationTest.java` (D-30 Slack 알람 1회성 발송 JUnit 테스트)
+6. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (로컬 State 롤백 버그 수정 및 CUD 약정 테이블 렌더링)
+7. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **Slack Block Kit 실발송 검증:** `SlackD30NotificationTest` 및 `/api/reservations/trigger-d30-slack-alert` 호출을 통해 Slack Webhook으로 Block Kit 메시지 1회 전송 완료 (HTTP 200 OK 확인).
+- **Puppeteer E2E UI 실측 검증:** 
+  - ① CUD 약정 테이블 정상 렌더링 확인 (`총 0건 약정 보유` Empty State 및 테이블 헤더 확인).
+  - ② 편집 모드에서 텍스트 수정 후 편집 모드 종료 시 수정한 텍스트가 100% 온전히 유지됨 확인.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 통과.
+
+---
+
 ## [2026-09-21] 보고서 조회 주기 UI 제거 및 4개월 월별 통합 차트 뷰로 UX 전면 개편
 
 ### 1. 작업 목적 및 개요

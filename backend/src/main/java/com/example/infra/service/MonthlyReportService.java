@@ -875,36 +875,59 @@ public class MonthlyReportService {
         Map<String, QueryParameterValue> params = new HashMap<>();
         params.put("projectId", QueryParameterValue.string(projectId));
 
-        TableResult tableResult = queryWithFallback(projectId, "cud_commitments", selectFields, whereClause, params);
-        if (tableResult != null) {
-            LocalDate today = LocalDate.now();
-            for (FieldValueList row : tableResult.iterateAll()) {
-                String expiryStr = row.get("expiry_date").isNull() ? null : row.get("expiry_date").getStringValue();
-                long dday = 0;
-                if (expiryStr != null && !expiryStr.isEmpty()) {
-                    try {
-                        LocalDate expiryDate = LocalDate.parse(expiryStr);
-                        dday = ChronoUnit.DAYS.between(today, expiryDate);
-                    } catch (Exception e) {
-                        dday = 0;
-                    }
+        try {
+            TableResult tableResult = queryWithFallback(projectId, "cud_commitments", selectFields, whereClause, params);
+            if (tableResult != null) {
+                parseCudCommitmentsResult(tableResult, list);
+            }
+        } catch (Exception e) {
+            log.debug("cud_commitments table query skipped: {}", e.getMessage());
+        }
+
+        // daily_reservation_inventory fallback
+        if (list.isEmpty()) {
+            try {
+                String resSelect = "reservation_name as commitment_name, COALESCE(type, plan, 'CUD') as category, region, CAST(start_date AS STRING) as start_date, CAST(expiry_date AS STRING) as expiry_date, status, resource_detail";
+                String resWhere = "WHERE provider = 'GCP' AND project_id = @projectId";
+                TableResult resResult = queryWithFallback(projectId, "daily_reservation_inventory", resSelect, resWhere, params);
+                if (resResult != null) {
+                    parseCudCommitmentsResult(resResult, list);
                 }
-
-                CudCommitmentDto dto = CudCommitmentDto.builder()
-                        .name(row.get("commitment_name").isNull() ? "" : row.get("commitment_name").getStringValue())
-                        .category(row.get("category").isNull() ? "" : row.get("category").getStringValue())
-                        .region(row.get("region").isNull() ? "" : row.get("region").getStringValue())
-                        .startDate(row.get("start_date").isNull() ? "" : row.get("start_date").getStringValue())
-                        .expiryDate(expiryStr != null ? expiryStr : "")
-                        .status(row.get("status").isNull() ? "ACTIVE" : row.get("status").getStringValue())
-                        .dday((int) dday)
-                        .resourceDetail(row.get("resource_detail").isNull() ? "" : row.get("resource_detail").getStringValue())
-                        .build();
-
-                list.add(dto);
+            } catch (Exception e) {
+                log.debug("daily_reservation_inventory CUD fallback skipped: {}", e.getMessage());
             }
         }
+
         return list;
+    }
+
+    private void parseCudCommitmentsResult(TableResult tableResult, List<CudCommitmentDto> list) {
+        LocalDate today = LocalDate.now();
+        for (FieldValueList row : tableResult.iterateAll()) {
+            String expiryStr = row.get("expiry_date").isNull() ? null : row.get("expiry_date").getStringValue();
+            long dday = 0;
+            if (expiryStr != null && !expiryStr.isEmpty()) {
+                try {
+                    LocalDate expiryDate = LocalDate.parse(expiryStr);
+                    dday = ChronoUnit.DAYS.between(today, expiryDate);
+                } catch (Exception e) {
+                    dday = 0;
+                }
+            }
+
+            CudCommitmentDto dto = CudCommitmentDto.builder()
+                    .name(row.get("commitment_name").isNull() ? "" : row.get("commitment_name").getStringValue())
+                    .category(row.get("category").isNull() ? "" : row.get("category").getStringValue())
+                    .region(row.get("region").isNull() ? "" : row.get("region").getStringValue())
+                    .startDate(row.get("start_date").isNull() ? "" : row.get("start_date").getStringValue())
+                    .expiryDate(expiryStr != null ? expiryStr : "")
+                    .status(row.get("status").isNull() ? "ACTIVE" : row.get("status").getStringValue())
+                    .dday((int) dday)
+                    .resourceDetail(row.get("resource_detail").isNull() ? "" : row.get("resource_detail").getStringValue())
+                    .build();
+
+            list.add(dto);
+        }
     }
 
     private String fetchLatestSnapshotTime(String projectId, String yearMonth) {

@@ -914,7 +914,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 {isEditMode ? (
                                     <input type="text" className="edit-input-field" value={editGrade} onChange={(e) => setEditGrade(e.target.value)} style={{ textAlign: 'right', padding: '2px 8px' }} />
                                 ) : (
-                                    <span className="info-value highlight">{reportData.mspGrade}</span>
+                                    <span className="info-value highlight">{editGrade || reportData.mspGrade}</span>
                                 )}
                             </div>
                             <div className="info-row">
@@ -922,7 +922,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 {isEditMode ? (
                                     <input type="text" className="edit-input-field" value={editSalesContact} onChange={(e) => setEditSalesContact(e.target.value)} style={{ textAlign: 'right', padding: '2px 8px' }} />
                                 ) : (
-                                    <span className="info-value">{reportData.mspSalesContact}</span>
+                                    <span className="info-value">{editSalesContact || reportData.mspSalesContact}</span>
                                 )}
                             </div>
                             <div className="info-row">
@@ -930,7 +930,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 {isEditMode ? (
                                     <input type="text" className="edit-input-field" value={editTechContact} onChange={(e) => setEditTechContact(e.target.value)} style={{ textAlign: 'right', padding: '2px 8px' }} />
                                 ) : (
-                                    <span className="info-value">{reportData.mspTechContact}</span>
+                                    <span className="info-value">{editTechContact || reportData.mspTechContact}</span>
                                 )}
                             </div>
                         </div>
@@ -1054,7 +1054,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         />
                                     ) : (
                                         <p className="subcard-desc">
-                                            {reportData.customExecSecurity || '해당 카테고리 권고 사항 없음'}
+                                            {editExecSecurity || reportData.customExecSecurity || '해당 카테고리 권고 사항 없음'}
                                         </p>
                                     )}
                                 </div>
@@ -1074,7 +1074,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         />
                                     ) : (
                                         <p className="subcard-desc">
-                                            {reportData.customExecCost || '해당 카테고리 권고 사항 없음'}
+                                            {editExecCost || reportData.customExecCost || '해당 카테고리 권고 사항 없음'}
                                         </p>
                                     )}
                                 </div>
@@ -1094,7 +1094,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         />
                                     ) : (
                                         <p className="subcard-desc">
-                                            {reportData.customExecPerformance || '해당 카테고리 권고 사항 없음'}
+                                            {editExecPerformance || reportData.customExecPerformance || '해당 카테고리 권고 사항 없음'}
                                         </p>
                                     )}
                                 </div>
@@ -2237,6 +2237,89 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     );
                 })()}
 
+                    {/* Section 5.5: GCP CUD (Committed Use Discounts) 확정 사용 할인 약정 현황 */}
+                    <div className="report-card" style={{ marginTop: '20px', marginBottom: 0 }}>
+                        <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span><i className="fas fa-tags mr-2" style={{ color: '#2563eb' }}></i>확정 사용 할인 (CUD) 약정 현황 (Committed Use Discounts)</span>
+                            <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af', backgroundColor: '#dbeafe', padding: '2px 10px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                                총 {reportData.commitments?.length || 0}건 약정 보유
+                            </span>
+                        </div>
+
+                        {(!reportData.commitments || reportData.commitments.length === 0) ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px', fontWeight: 600, backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <i className="fas fa-info-circle mr-2" style={{ color: '#3b82f6' }}></i>현재 프로젝트에 활성화된 확정 사용 할인(CUD) 약정 내역이 없습니다.
+                            </div>
+                        ) : (
+                            <div className="table-responsive" style={{ marginTop: '8px' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                                    <thead>
+                                        <tr style={{ backgroundColor: '#0b4885', color: '#ffffff', textAlign: 'center' }}>
+                                            <th style={{ padding: '8px 10px', width: '22%', border: '1px solid #0b4885' }}>약정 식별명 (Name)</th>
+                                            <th style={{ padding: '8px 10px', width: '15%', border: '1px solid #0b4885' }}>약정 구분 (Category)</th>
+                                            <th style={{ padding: '8px 10px', width: '28%', border: '1px solid #0b4885' }}>약정 리소스 스펙 (Detail)</th>
+                                            <th style={{ padding: '8px 10px', width: '13%', border: '1px solid #0b4885' }}>리전 (Region)</th>
+                                            <th style={{ padding: '8px 10px', width: '12%', border: '1px solid #0b4885' }}>만료 예정일</th>
+                                            <th style={{ padding: '8px 10px', width: '10%', border: '1px solid #0b4885' }}>D-Day 상태</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {reportData.commitments.map((c, idx) => {
+                                            const isExpired = c.dday < 0 || c.status?.toUpperCase() === 'EXPIRED';
+                                            const isUrgent = c.dday <= 30 && !isExpired;
+                                            const isWarning = c.dday <= 90 && !isUrgent && !isExpired;
+
+                                            return (
+                                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
+                                                        <i className="fas fa-bookmark mr-1.5" style={{ color: '#2563eb', fontSize: '10px' }}></i>
+                                                        {c.name}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#475569' }}>
+                                                        <span style={{ backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '10.5px', fontWeight: 600 }}>
+                                                            {c.category || 'Compute CUD'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', color: '#0f172a', fontFamily: 'Consolas, monospace', fontSize: '11px' }}>
+                                                        {c.resourceDetail || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '11px' }}>
+                                                        {c.region || 'global'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#334155', fontWeight: 600 }}>
+                                                        {c.expiryDate || '-'}
+                                                    </td>
+                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                                                        {isExpired ? (
+                                                            <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                만료됨
+                                                            </span>
+                                                        ) : isUrgent ? (
+                                                            <span style={{ backgroundColor: '#ffedd5', color: '#ea580c', border: '1px solid #fed7aa', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                🚨 D-{c.dday}
+                                                            </span>
+                                                        ) : isWarning ? (
+                                                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                ⚠️ D-{c.dday}
+                                                            </span>
+                                                        ) : (
+                                                            <span style={{ backgroundColor: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                ✅ D-{c.dday}
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        <div style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '6px' }}>
+                            * GCP CUD(Committed Use Discounts)는 1년 또는 3년 약정을 통해 Compute Engine, Cloud SQL 등의 기본 인프라 비용을 최대 70% 절감하는 확정 할인 프로그램입니다.
+                        </div>
+                    </div>
+
                     {/* Section 6: GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 */}
                     <div style={{ marginTop: '20px' }}>
                         <DirectAiUsagePanel
@@ -2385,122 +2468,136 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Section 6: GCP Recommender (Active Assist) 3-Card Category-Specific Editing Lists */}
-                    <div className="report-card" style={{ borderTop: '4px solid #0b4885', marginBottom: 0, marginTop: '20px' }}>
-                        <div className="report-card-title">
-                            <span><i className="fas fa-clipboard-list mr-2" style={{ color: '#2563eb' }}></i>정기 점검 권고 사항 (Recommendations - GCP Active Assist)</span>
-                        </div>
+                    {/* Section 8: GCP Recommender (Active Assist) 3-Card Category-Specific Editing Lists */}
+                    {(() => {
+                        const recSecurityItems = editRecSecurity !== ''
+                            ? editRecSecurity.split('\n').map(s => s.trim()).filter(Boolean)
+                            : (reportData.recommendationsSecurityList || []);
+                        const recCostItems = editRecCost !== ''
+                            ? editRecCost.split('\n').map(s => s.trim()).filter(Boolean)
+                            : (reportData.recommendationsCostList || []);
+                        const recPerfItems = editRecPerformance !== ''
+                            ? editRecPerformance.split('\n').map(s => s.trim()).filter(Boolean)
+                            : (reportData.recommendationsPerformanceList || []);
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
-                            {/* 1. Security List Card (Full Width Vertical) */}
-                            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderLeft: '4px solid #ef4444', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                    <span style={{ backgroundColor: '#ef4444', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                        <i className="fas fa-shield-alt"></i>보안 / 컴플라이언스
-                                    </span>
-                                    <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 600 }}>
-                                        {reportData.recommendationsSecurityList ? `${reportData.recommendationsSecurityList.length}건 권고` : '0건'}
-                                    </span>
+                        return (
+                            <div className="report-card" style={{ borderTop: '4px solid #0b4885', marginBottom: 0, marginTop: '20px' }}>
+                                <div className="report-card-title">
+                                    <span><i className="fas fa-clipboard-list mr-2" style={{ color: '#2563eb' }}></i>정기 점검 권고 사항 (Recommendations - GCP Active Assist)</span>
                                 </div>
-                                {isEditMode ? (
-                                    <textarea
-                                        className="edit-textarea-field"
-                                        style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                                        rows={3}
-                                        value={editRecSecurity}
-                                        onChange={(e) => setEditRecSecurity(e.target.value)}
-                                        placeholder="보안 권고사항을 줄바꿈 단위로 입력하세요..."
-                                    />
-                                ) : (reportData.recommendationsSecurityList && reportData.recommendationsSecurityList.length > 0) ? (
-                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
-                                        {reportData.recommendationsSecurityList.map((item, i) => (
-                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
-                                                <i className="fas fa-check-circle text-red-500" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
-                                                {renderRecommendationItem(item)}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', padding: '4px 0', lineHeight: 1.5 }}>
-                                        <i className="fas fa-info-circle" style={{ fontSize: '11px' }}></i>
-                                        <span>해당 카테고리 권고 사항 없음</span>
-                                    </div>
-                                )}
-                            </div>
 
-                            {/* 2. Cost Optimization List Card (Full Width Vertical) */}
-                            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderLeft: '4px solid #2563eb', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                    <span style={{ backgroundColor: '#2563eb', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                        <i className="fas fa-coins"></i>비용 최적화
-                                    </span>
-                                    <span style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600 }}>
-                                        {reportData.recommendationsCostList ? `${reportData.recommendationsCostList.length}건 권고` : '0건'}
-                                    </span>
-                                </div>
-                                {isEditMode ? (
-                                    <textarea
-                                        className="edit-textarea-field"
-                                        style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                                        rows={3}
-                                        value={editRecCost}
-                                        onChange={(e) => setEditRecCost(e.target.value)}
-                                        placeholder="비용 최적화 권고사항을 줄바꿈 단위로 입력하세요..."
-                                    />
-                                ) : (reportData.recommendationsCostList && reportData.recommendationsCostList.length > 0) ? (
-                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
-                                        {reportData.recommendationsCostList.map((item, i) => (
-                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
-                                                <i className="fas fa-check-circle text-blue-600" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
-                                                {renderRecommendationItem(item)}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', padding: '4px 0', lineHeight: 1.5 }}>
-                                        <i className="fas fa-info-circle" style={{ fontSize: '11px' }}></i>
-                                        <span>해당 카테고리 권고 사항 없음</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
+                                    {/* 1. Security List Card (Full Width Vertical) */}
+                                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderLeft: '4px solid #ef4444', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                            <span style={{ backgroundColor: '#ef4444', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                                <i className="fas fa-shield-alt"></i>보안 / 컴플라이언스
+                                            </span>
+                                            <span style={{ fontSize: '11px', color: '#991b1b', fontWeight: 600 }}>
+                                                {`${recSecurityItems.length}건 권고`}
+                                            </span>
+                                        </div>
+                                        {isEditMode ? (
+                                            <textarea
+                                                className="edit-textarea-field"
+                                                style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                                rows={3}
+                                                value={editRecSecurity}
+                                                onChange={(e) => setEditRecSecurity(e.target.value)}
+                                                placeholder="보안 권고사항을 줄바꿈 단위로 입력하세요..."
+                                            />
+                                        ) : recSecurityItems.length > 0 ? (
+                                            <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
+                                                {recSecurityItems.map((item, i) => (
+                                                    <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
+                                                        <i className="fas fa-check-circle text-red-500" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
+                                                        {renderRecommendationItem(item)}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', padding: '4px 0', lineHeight: 1.5 }}>
+                                                <i className="fas fa-info-circle" style={{ fontSize: '11px' }}></i>
+                                                <span>해당 카테고리 권고 사항 없음</span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                            </div>
 
-                            {/* 3. Performance List Card (Full Width Vertical) */}
-                            <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #d1fae5', borderLeft: '4px solid #10b981', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                                    <span style={{ backgroundColor: '#10b981', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                                        <i className="fas fa-tachometer-alt"></i>성능 / 안정성
-                                    </span>
-                                    <span style={{ fontSize: '11px', color: '#065f46', fontWeight: 600 }}>
-                                        {reportData.recommendationsPerformanceList ? `${reportData.recommendationsPerformanceList.length}건 권고` : '0건'}
-                                    </span>
-                                </div>
-                                {isEditMode ? (
-                                    <textarea
-                                        className="edit-textarea-field"
-                                        style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
-                                        rows={3}
-                                        value={editRecPerformance}
-                                        onChange={(e) => setEditRecPerformance(e.target.value)}
-                                        placeholder="성능/안정성 권고사항을 줄바꿈 단위로 입력하세요..."
-                                    />
-                                ) : (reportData.recommendationsPerformanceList && reportData.recommendationsPerformanceList.length > 0) ? (
-                                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
-                                        {reportData.recommendationsPerformanceList.map((item, i) => (
-                                            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
-                                                <i className="fas fa-check-circle text-emerald-500" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
-                                                {renderRecommendationItem(item)}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', padding: '4px 0', lineHeight: 1.5 }}>
-                                        <i className="fas fa-info-circle" style={{ fontSize: '11px' }}></i>
-                                        <span>해당 카테고리 권고 사항 없음</span>
+                                    {/* 2. Cost Optimization List Card (Full Width Vertical) */}
+                                    <div style={{ backgroundColor: '#eff6ff', border: '1px solid #dbeafe', borderLeft: '4px solid #2563eb', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                            <span style={{ backgroundColor: '#2563eb', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                                <i className="fas fa-coins"></i>비용 최적화
+                                            </span>
+                                            <span style={{ fontSize: '11px', color: '#1e40af', fontWeight: 600 }}>
+                                                {`${recCostItems.length}건 권고`}
+                                            </span>
+                                        </div>
+                                        {isEditMode ? (
+                                            <textarea
+                                                className="edit-textarea-field"
+                                                style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                                rows={3}
+                                                value={editRecCost}
+                                                onChange={(e) => setEditRecCost(e.target.value)}
+                                                placeholder="비용 최적화 권고사항을 줄바꿈 단위로 입력하세요..."
+                                            />
+                                        ) : recCostItems.length > 0 ? (
+                                            <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
+                                                {recCostItems.map((item, i) => (
+                                                    <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
+                                                        <i className="fas fa-check-circle text-blue-600" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
+                                                        {renderRecommendationItem(item)}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', padding: '4px 0', lineHeight: 1.5 }}>
+                                                <i className="fas fa-info-circle" style={{ fontSize: '11px' }}></i>
+                                                <span>해당 카테고리 권고 사항 없음</span>
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+
+                                    {/* 3. Performance List Card (Full Width Vertical) */}
+                                    <div style={{ backgroundColor: '#ecfdf5', border: '1px solid #d1fae5', borderLeft: '4px solid #10b981', borderRadius: '8px', padding: '14px 18px', display: 'flex', flexDirection: 'column', width: '100%', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                                            <span style={{ backgroundColor: '#10b981', color: '#ffffff', fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '6px', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                                                <i className="fas fa-tachometer-alt"></i>성능 / 안정성
+                                            </span>
+                                            <span style={{ fontSize: '11px', color: '#065f46', fontWeight: 600 }}>
+                                                {`${recPerfItems.length}건 권고`}
+                                            </span>
+                                        </div>
+                                        {isEditMode ? (
+                                            <textarea
+                                                className="edit-textarea-field"
+                                                style={{ width: '100%', padding: '10px 12px', fontSize: '12px', lineHeight: '1.6', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                                                rows={3}
+                                                value={editRecPerformance}
+                                                onChange={(e) => setEditRecPerformance(e.target.value)}
+                                                placeholder="성능/안정성 권고사항을 줄바꿈 단위로 입력하세요..."
+                                            />
+                                        ) : recPerfItems.length > 0 ? (
+                                            <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '12.5px', color: '#334155' }}>
+                                                {recPerfItems.map((item, i) => (
+                                                    <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '6px', lineHeight: 1.6 }}>
+                                                        <i className="fas fa-check-circle text-emerald-500" style={{ marginTop: '4px', fontSize: '11px', flexShrink: 0 }}></i>
+                                                        {renderRecommendationItem(item)}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', fontSize: '12px', padding: '4px 0', lineHeight: 1.5 }}>
+                                                <i className="fas fa-info-circle" style={{ fontSize: '11px' }}></i>
+                                                <span>해당 카테고리 권고 사항 없음</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
+                        );
+                    })()}
                 </div>
             )}
         </div>

@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -2194,6 +2195,235 @@ public class BigQueryBatchService {
         } catch (Exception e) {
             log.error("Failed to execute Slack notification batch for Azure App Keys expiration", e);
         }
+    }
+
+    /**
+     * 매일 09:00 (KST) 실행: Azure RI 및 GCP CUD 약정 만료 정확히 30일(D-30) 전 Slack 알람 발송
+     */
+    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
+    public void checkReservationsD30ExpiryAndNotifySlack() {
+        checkReservationsD30ExpiryAndNotifySlack(false);
+    }
+
+    /**
+     * Azure RI & GCP CUD 약정 만료 D-30 Slack 알람 발송 (테스트 시 sendMockIfEmpty=true 지원)
+     */
+    public boolean checkReservationsD30ExpiryAndNotifySlack(boolean sendMockIfEmpty) {
+        log.info("Starting Slack notification batch for Azure RI & GCP CUD D-30 expiration check (sendMockIfEmpty: {})", sendMockIfEmpty);
+        try {
+            String query = String.format(
+                "WITH latest_snapshots AS (\n" +
+                "    SELECT customer_name, provider, MAX(snapshot_date) as max_snapshot\n" +
+                "    FROM `%s.%s.daily_reservation_inventory`\n" +
+                "    WHERE provider IN ('GCP', 'AZURE')\n" +
+                "    GROUP BY customer_name, provider\n" +
+                ")\n" +
+                "SELECT r.customer_name, r.provider, r.project_id, r.reservation_name,\n" +
+                "       COALESCE(r.type, r.plan, 'Standard') as commitment_type,\n" +
+                "       r.region, r.resource_detail, r.start_date, r.expiry_date, r.status\n" +
+                "FROM `%s.%s.daily_reservation_inventory` r\n" +
+                "JOIN latest_snapshots l\n" +
+                "    ON r.customer_name = l.customer_name\n" +
+                "   AND r.provider = l.provider\n" +
+                "   AND r.snapshot_date = l.max_snapshot\n" +
+                "WHERE r.provider IN ('GCP', 'AZURE')\n" +
+                "  AND (r.status IS NULL OR r.status = 'ACTIVE' OR r.status = 'Succeeded')\n" +
+                "  AND (r.type IS NULL OR r.type NOT IN ('CLIENT_SECRET', 'CERTIFICATE'))\n" +
+                "  AND DATE_DIFF(PARSE_DATE('%%Y-%%m-%%d', r.expiry_date), CURRENT_DATE('Asia/Seoul'), DAY) = 30\n" +
+                "ORDER BY r.customer_name ASC, r.provider ASC",
+                targetProjectId, datasetName, targetProjectId, datasetName
+            );
+
+            QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query).build();
+            TableResult result = bigQuery.query(queryConfig);
+
+            List<Map<String, String>> d30List = new ArrayList<>();
+            for (FieldValueList row : result.iterateAll()) {
+                Map<String, String> item = new HashMap<>();
+                item.put("customerName", row.get("customer_name").isNull() ? "Unknown" : row.get("customer_name").getStringValue());
+                item.put("provider", row.get("provider").isNull() ? "GCP" : row.get("provider").getStringValue());
+                item.put("projectId", row.get("project_id").isNull() ? "-" : row.get("project_id").getStringValue());
+                item.put("reservationName", row.get("reservation_name").isNull() ? "-" : row.get("reservation_name").getStringValue());
+                item.put("commitmentType", row.get("commitment_type").isNull() ? "CUD/RI" : row.get("commitment_type").getStringValue());
+                item.put("region", row.get("region").isNull() ? "-" : row.get("region").getStringValue());
+                item.put("resourceDetail", row.get("resource_detail").isNull() ? "표준 약정 리소스" : row.get("resource_detail").getStringValue());
+                item.put("startDate", row.get("start_date").isNull() ? "-" : row.get("start_date").getStringValue());
+                item.put("expiryDate", row.get("expiry_date").isNull() ? "" : row.get("expiry_date").getStringValue());
+                d30List.add(item);
+            }
+
+            if (d30List.isEmpty() && sendMockIfEmpty) {
+                log.info("No D-30 expiration data found in DB, generating mock D-30 item for 1-time Slack test verification...");
+                LocalDate today = LocalDate.now();
+                LocalDate mockExpiry = today.plusDays(30);
+
+                Map<String, String> mockItem1 = new HashMap<>();
+                mockItem1.put("customerName", "(주)메가존클라우드 데모 (GCP)");
+                mockItem1.put("provider", "GCP");
+                mockItem1.put("projectId", "mzc-prod-service-485701");
+                mockItem1.put("reservationName", "compute-engine-cud-3yr-n2");
+                mockItem1.put("commitmentType", "COMPUTE_OPTIMIZED_CUD");
+                mockItem1.put("region", "asia-northeast3 (서울)");
+                mockItem1.put("resourceDetail", "vCPU: 64 Core, RAM: 256 GB (N2 계열)");
+                mockItem1.put("startDate", today.minusYears(3).plusDays(30).toString());
+                mockItem1.put("expiryDate", mockExpiry.toString());
+                d30List.add(mockItem1);
+
+                Map<String, String> mockItem2 = new HashMap<>();
+                mockItem2.put("customerName", "(주)메가존클라우드 데모 (Azure)");
+                mockItem2.put("provider", "AZURE");
+                mockItem2.put("projectId", "sub-prod-enterprise-001");
+                mockItem2.put("reservationName", "Standard_D8s_v5_RI_1Year");
+                mockItem2.put("commitmentType", "VirtualMachines (RI)");
+                mockItem2.put("region", "koreacentral");
+                mockItem2.put("resourceDetail", "Standard_D8s_v5 (수량: 4개)");
+                mockItem2.put("startDate", today.minusYears(1).plusDays(30).toString());
+                mockItem2.put("expiryDate", mockExpiry.toString());
+                d30List.add(mockItem2);
+            }
+
+            if (!d30List.isEmpty()) {
+                return sendSlackBlockKitNotification(d30List);
+            } else {
+                log.info("No Azure RI or GCP CUD expiring exactly in 30 days today.");
+                return true;
+            }
+        } catch (Exception e) {
+            log.error("Failed to execute Slack notification batch for D-30 reservations", e);
+            return false;
+        }
+    }
+
+    public boolean sendSlackBlockKitNotification(List<Map<String, String>> items) {
+        String webhookUrl = resolveSlackWebhookUrl();
+        if (webhookUrl == null || webhookUrl.isEmpty()) {
+            log.warn("Slack Webhook URL is not configured. Skipping notification.");
+            return false;
+        }
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> rootPayload = new LinkedHashMap<>();
+            List<Map<String, Object>> blocks = new ArrayList<>();
+
+            // 1. Header Block
+            Map<String, Object> headerBlock = new LinkedHashMap<>();
+            headerBlock.put("type", "header");
+            Map<String, Object> headerText = new LinkedHashMap<>();
+            headerText.put("type", "plain_text");
+            headerText.put("text", "🚨 [클라우드 약정 만료 D-30 알림] Azure RI / GCP CUD 만료 임박 안내");
+            headerText.put("emoji", true);
+            headerBlock.put("text", headerText);
+            blocks.add(headerBlock);
+
+            // 2. Summary Section Block
+            Map<String, Object> summaryBlock = new LinkedHashMap<>();
+            summaryBlock.put("type", "section");
+            Map<String, Object> summaryText = new LinkedHashMap<>();
+            summaryText.put("type", "mrkdwn");
+            summaryText.put("text", "*오늘 기준 만료일이 정확히 30일(D-30) 남은 클라우드 약정 리소스(" + items.size() + "건)가 감지되었습니다.*\n계약 갱신 및 비용 최적화(재약정/인스턴스 반환) 검토를 진행해 주시기 바랍니다.");
+            summaryBlock.put("text", summaryText);
+            blocks.add(summaryBlock);
+
+            // Divider
+            Map<String, Object> divider = new LinkedHashMap<>();
+            divider.put("type", "divider");
+            blocks.add(divider);
+
+            // 3. Item Sections
+            for (Map<String, String> item : items) {
+                Map<String, Object> itemSection = new LinkedHashMap<>();
+                itemSection.put("type", "section");
+
+                List<Map<String, Object>> fields = new ArrayList<>();
+                fields.add(createMrkdwnField("*🏢 고객사명:*\n" + item.get("customerName")));
+                fields.add(createMrkdwnField("*☁️ 벤더/유형:*\n" + item.get("provider") + " (" + item.get("commitmentType") + ")"));
+                fields.add(createMrkdwnField("*📦 약정 리소스 스펙:*\n`" + item.get("resourceDetail") + "`"));
+                fields.add(createMrkdwnField("*⏳ 만료 예정일:*\n`" + item.get("expiryDate") + "` *(D-30)*"));
+                fields.add(createMrkdwnField("*🆔 프로젝트/구독:*\n`" + item.get("projectId") + "`"));
+                fields.add(createMrkdwnField("*🏷️ 약정 식별명:*\n`" + item.get("reservationName") + "`"));
+
+                itemSection.put("fields", fields);
+                blocks.add(itemSection);
+                blocks.add(divider);
+            }
+
+            // 4. Context Footer Block
+            Map<String, Object> contextBlock = new LinkedHashMap<>();
+            contextBlock.put("type", "context");
+            List<Map<String, Object>> contextElements = new ArrayList<>();
+            Map<String, Object> ctxElement = new LinkedHashMap<>();
+            ctxElement.put("type", "mrkdwn");
+            String nowStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            ctxElement.put("text", "🤖 *Cloud Infra Admin 약정 관리 자동화 시스템* | 발송 기준시각: " + nowStr + " (KST)");
+            contextElements.add(ctxElement);
+            contextBlock.put("elements", contextElements);
+            blocks.add(contextBlock);
+
+            rootPayload.put("blocks", blocks);
+            rootPayload.put("text", "🚨 [약정 만료 D-30 알림] " + items.size() + "건의 Azure RI / GCP CUD 만료가 임박했습니다.");
+
+            String jsonPayload = mapper.writeValueAsString(rootPayload);
+
+            HttpURLConnection conn = (HttpURLConnection) new URL(webhookUrl).openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(jsonPayload.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200 || responseCode == 204) {
+                log.info("Successfully sent Slack Block Kit D-30 notification for {} items (HTTP {}).", items.size(), responseCode);
+                return true;
+            } else {
+                log.error("Failed to send Slack Block Kit notification. Response code: {}", responseCode);
+                return false;
+            }
+        } catch (Exception e) {
+            log.error("Error sending Slack Block Kit notification", e);
+            return false;
+        }
+    }
+
+    private String resolveSlackWebhookUrl() {
+        if (slackWebhookUrl != null && !slackWebhookUrl.isEmpty() && !slackWebhookUrl.contains("placeholder") && !slackWebhookUrl.contains("YOUR/SLACK")) {
+            return slackWebhookUrl;
+        }
+        String envUrl = System.getenv("SLACK_WEBHOOK_URL");
+        if (envUrl != null && !envUrl.isEmpty()) {
+            return envUrl;
+        }
+        // Local dev fallback: try reading from k8s/01-secrets-and-config.yaml
+        try {
+            java.io.File k8sFile = new java.io.File("../k8s/01-secrets-and-config.yaml");
+            if (!k8sFile.exists()) {
+                k8sFile = new java.io.File("../../k8s/01-secrets-and-config.yaml");
+            }
+            if (!k8sFile.exists()) {
+                k8sFile = new java.io.File("C:/Users/MZC01-MICHAEL/Desktop/허동진/프로젝트/k8s/01-secrets-and-config.yaml");
+            }
+            if (k8sFile.exists()) {
+                String content = java.nio.file.Files.readString(k8sFile.toPath());
+                for (String line : content.split("\n")) {
+                    if (line.trim().startsWith("SLACK_WEBHOOK_URL:")) {
+                        String url = line.substring(line.indexOf(":") + 1).trim().replace("\"", "").replace("'", "");
+                        if (url.startsWith("http")) {
+                            return url;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private Map<String, Object> createMrkdwnField(String text) {
+        Map<String, Object> field = new LinkedHashMap<>();
+        field.put("type", "mrkdwn");
+        field.put("text", text);
+        return field;
     }
 
     private void sendSlackNotification(String message) {
