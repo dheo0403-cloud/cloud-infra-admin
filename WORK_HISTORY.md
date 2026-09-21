@@ -1,5 +1,32 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] LB 에러 모니터링 범위를 500에서 5XX로 확장 및 관련 UI 텍스트 일괄 수정
+
+### 1. 작업 목적 및 개요
+- **GCP Load Balancer 에러 모니터링 5XX 전면 확장 (`GcpResourceFetcher.java`, `BigQueryBatchService.java`):**
+  - Cloud Logging API 필터를 `httpRequest.status=500` 단일 조건에서 `httpRequest.status>=500 AND httpRequest.status<600` 범위 조건으로 확장하여 500, 502, 503, 504 등 모든 서버 에러 포괄 수집.
+  - Cloud Monitoring API 필터를 `metric.label.response_code = "500"`에서 `metric.label.response_code_class = "500"`으로 교정하고, `getLbHttp5xxLast30DaysCount` 메소드로 전환하여 5XX 전체 클래스를 정확 집계(기존 URL Map 중복 제거 알고리즘 유지).
+- **프론트엔드 UI 텍스트 및 헤더 명칭 일괄 수정:**
+  - `GcpMonthlyReportViewPage.tsx`: 최근 30일 에러 메트릭 카드의 제목 및 안내 문구를 `최근 30일 HTTP 500 에러` → `최근 30일 HTTP 5XX 에러`, `HTTP 500 서버 응답 트래픽 정상` → `HTTP 5XX 서버 응답 트래픽 정상`으로 동기화.
+  - `EndpointServingPanel.tsx`: 헤더 명칭을 `배포된 엔드포인트 인프라 및 실시간 서빙 현황` → `엔드포인트 인프라 및 운영 현황`으로 수정.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/GcpResourceFetcher.java` (Logging 5XX 범위 필터 및 Monitoring response_code_class=500 확장)
+2. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (5XX 수집 로그 및 메소드 연동)
+3. `backend/src/test/java/com/example/infra/GcpLbErrorCountTest.java` (5XX 에러 중복 제거 단위 테스트)
+4. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (HTTP 5XX 에러 텍스트 교체)
+5. `frontend/src/components/EndpointServingPanel.tsx` (엔드포인트 인프라 및 운영 현황 헤더 교체)
+6. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **백엔드 단위 테스트 (`GcpLbErrorCountTest.java`):** HTTP/HTTPS 대표값 선별 및 독립 LB 합산 100% 통과 (`BUILD SUCCESSFUL`).
+- **Puppeteer E2E 브라우저 UI 실측 검증:**
+  - ① LB 메트릭 카드 `최근 30일 HTTP 5XX 에러` 렌더링 100% 확인 (구 `HTTP 500 에러` 잔여 0건).
+  - ② AI 엔드포인트 패널 `엔드포인트 인프라 및 운영 현황` 렌더링 100% 확인 (구 `실시간 서빙 현황` 잔여 0건).
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] 신규 AI 토큰 차트 UI를 기존 표준 차트 디자인 시스템에 맞춰 통일화 & CUD 빈 카드 인쇄 숨김
 
 ### 1. 작업 목적 및 개요

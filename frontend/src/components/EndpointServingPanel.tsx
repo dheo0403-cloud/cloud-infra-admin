@@ -134,7 +134,7 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({ projectId, 
                             {/* Detailed Endpoints Table */}
                             <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', overflowX: 'auto' }}>
                                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '8px' }}>
-                                    <i className="fas fa-server mr-1" style={{ color: '#059669' }}></i>배포된 엔드포인트 인프라 및 실시간 서빙 현황
+                                    <i className="fas fa-server mr-1" style={{ color: '#059669' }}></i>엔드포인트 인프라 및 운영 현황
                                 </span>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'left' }}>
                                     <thead>

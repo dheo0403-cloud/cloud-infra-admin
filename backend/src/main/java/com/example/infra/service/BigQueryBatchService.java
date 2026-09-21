@@ -266,13 +266,13 @@ public class BigQueryBatchService {
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_Health_Healthy_Total", 0);
                         }
 
-                        // Cloud Monitoring 최근 30일 HTTP 500 에러 사전 집계 및 적재
+                        // Cloud Monitoring 최근 30일 HTTP 5XX 에러 사전 집계 및 적재
                         try {
-                            long http500_30d = gcpResourceFetcher.getLbHttp500Last30DaysCount(credentials, projectId);
-                            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http500_30d);
-                            log.info("LB HTTP 500 30-day error count: {} for project {}", http500_30d, projectId);
+                            long http5xx_30d = gcpResourceFetcher.getLbHttp5xxLast30DaysCount(credentials, projectId);
+                            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http5xx_30d);
+                            log.info("LB HTTP 5XX 30-day error count: {} for project {}", http5xx_30d, projectId);
                         } catch (Exception e) {
-                            log.warn("Failed to collect LB HTTP 500 30-day error count for project {}: {}", projectId, e.getMessage());
+                            log.warn("Failed to collect LB HTTP 5XX 30-day error count for project {}: {}", projectId, e.getMessage());
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", 0);
                         }
 
@@ -1331,10 +1331,10 @@ public class BigQueryBatchService {
     }
 
     /**
-     * [1회성 데이터 보정] LB 최근 30일 HTTP 500 에러 교정된 필터로 단독 재수집
+     * [1회성 데이터 보정] LB 최근 30일 HTTP 5XX 에러 교정된 필터로 단독 재수집
      */
     public void resyncLbHttp500Metrics() {
-        log.info("=== 🚀 [1회성 데이터 보정] LB 최근 30일 HTTP 500 에러 교정 필터 기반 재수집 시작 ===");
+        log.info("=== 🚀 [1회성 데이터 보정] LB 최근 30일 HTTP 5XX 에러 교정 필터 기반 재수집 시작 ===");
         String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
         List<InfraEnvironment> environments = environmentService.getAllEnvironments();
@@ -1352,19 +1352,19 @@ public class BigQueryBatchService {
                     String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
 
                     try {
-                        long http500_30d = gcpResourceFetcher.getLbHttp500Last30DaysCount(credentials, projectId);
-                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http500_30d);
-                        log.info("LB HTTP 500 (response_code=500) 30-day count for {} ({}): {}", projectId, customerName, http500_30d);
+                        long http5xx_30d = gcpResourceFetcher.getLbHttp5xxLast30DaysCount(credentials, projectId);
+                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http5xx_30d);
+                        log.info("LB HTTP 5XX (response_code_class=500) 30-day count for {} ({}): {}", projectId, customerName, http5xx_30d);
                     } catch (Exception e) {
-                        log.warn("Failed to collect LB HTTP 500 for project {}: {}", projectId, e.getMessage());
+                        log.warn("Failed to collect LB HTTP 5XX for project {}: {}", projectId, e.getMessage());
                         insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", 0);
                     }
                 }
             } catch (Exception e) {
-                log.error("Failed to resync LB HTTP 500 for environment: {}", env.getEnvironmentName(), e);
+                log.error("Failed to resync LB HTTP 5XX for environment: {}", env.getEnvironmentName(), e);
             }
         }
-        log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 500 에러 재수집 완료 ===");
+        log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 5XX 에러 재수집 완료 ===");
     }
 
     private void insertDailyAssetBatch(String snapshotDate, String projectId, String customerName, String resourceType, int count) {

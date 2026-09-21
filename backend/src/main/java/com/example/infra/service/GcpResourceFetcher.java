@@ -973,17 +973,17 @@ public class GcpResourceFetcher {
     }
 
     /**
-     * GCP Cloud Logging API / Monitoring API - 최근 30일간 Load Balancer HTTP 500 에러 총합 조회
+     * GCP Cloud Logging API / Monitoring API - 최근 30일간 Load Balancer HTTP 5XX 에러 총합 조회
      * GCP Log Explorer 쿼리(resource.type="http_load_balancer" AND httpRequest.status>=500 AND httpRequest.status<600)와
-     * 동일한 조건으로 Cloud Logging API direct query를 수행하여 최근 30일간의 HTTP 500 에러 발생 건수를 수집합니다.
+     * 동일한 조건으로 Cloud Logging API direct query를 수행하여 최근 30일간의 HTTP 5XX 에러(500, 502, 503, 504 등) 발생 건수를 수집합니다.
      * Logging API 실패 시 기존 Cloud Monitoring 시계열 조회를 폴백(fallback)으로 수행합니다.
      *
      * @param credentials GCP 서비스 계정 인증 정보
      * @param projectId   GCP 프로젝트 ID
-     * @return 최근 30일간의 HTTP 500 에러 총 발생 건수
+     * @return 최근 30일간의 HTTP 5XX 에러 총 발생 건수
      */
     /**
-     * Load Balancer - 최근 30일간 HTTP 500 에러 총 건수 집계 (Cloud Logging / Cloud Monitoring)
+     * Load Balancer - 최근 30일간 HTTP 5XX 에러 총 건수 집계 (Cloud Logging / Cloud Monitoring)
      *
      * [데이터 정합성 보정 로직]
      * 동일 URL Map(로드밸런서)에 HTTP(80) 및 HTTPS(443) 포워딩 룰이 페어로 연결된 경우,
@@ -992,10 +992,14 @@ public class GcpResourceFetcher {
      *
      * @param credentials GCP 서비스 계정 인증 정보
      * @param projectId   GCP 프로젝트 ID
-     * @return 최근 30일간의 HTTP 500 에러 총 발생 건수 (중복 제거 완료)
+     * @return 최근 30일간의 HTTP 5XX 에러 총 발생 건수 (중복 제거 완료)
      */
     public long getLbHttp500Last30DaysCount(GoogleCredentials credentials, String projectId) {
-        long total500Count = 0;
+        return getLbHttp5xxLast30DaysCount(credentials, projectId);
+    }
+
+    public long getLbHttp5xxLast30DaysCount(GoogleCredentials credentials, String projectId) {
+        long total5xxCount = 0;
 
         // 1. Cloud Logging API Direct Query 시도
         try {
@@ -1006,9 +1010,9 @@ public class GcpResourceFetcher {
                     .getService();
 
             String thirtyDaysAgoIso = java.time.Instant.now().minus(30, java.time.temporal.ChronoUnit.DAYS).toString();
-            // HTTP 301/302 리다이렉트를 제외한 실제 HTTP 500 에러 및 HTTPS/백엔드 응답 기준 필터링 (status=500 정확 필터링)
+            // HTTP 301/302 리다이렉트를 제외한 실제 HTTP 5XX 서버 에러(500~599) 및 HTTPS/백엔드 응답 기준 필터링
             String logFilter = "(resource.type=\"http_load_balancer\" OR resource.type=\"http_external_lb_rule\" OR resource.type=\"https_lb_rule\") " +
-                    "AND httpRequest.status=500 AND timestamp>=\"" + thirtyDaysAgoIso + "\"";
+                    "AND httpRequest.status>=500 AND httpRequest.status<600 AND timestamp>=\"" + thirtyDaysAgoIso + "\"";
 
             com.google.api.gax.paging.Page<com.google.cloud.logging.LogEntry> entries = logging.listLogEntries(
                     com.google.cloud.logging.Logging.EntryListOption.filter(logFilter),
@@ -1025,11 +1029,11 @@ public class GcpResourceFetcher {
             }
 
             if (count > 0) {
-                log.info("Cloud Logging LB HTTP 500 30-day error count for project {}: {}", projectId, count);
+                log.info("Cloud Logging LB HTTP 5XX 30-day error count for project {}: {}", projectId, count);
                 return count;
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch 30-day HTTP 500 error count from Cloud Logging for project {}. Falling back to Cloud Monitoring: {}", projectId, e.getMessage());
+            log.warn("Failed to fetch 30-day HTTP 5XX error count from Cloud Logging for project {}. Falling back to Cloud Monitoring: {}", projectId, e.getMessage());
         }
 
         // 2. Cloud Monitoring API (Fallback & 고정밀 집계)
@@ -1048,8 +1052,8 @@ public class GcpResourceFetcher {
                         .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
                         .build();
 
-                // 정확한 HTTP 500 에러 응답 코드(response_code = 500) 대상 필터링 (5XX 과대 계상 방지)
-                String filter = "metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code = \"500\"";
+                // HTTP 5XX 에러 클래스(response_code_class = "500" 또는 500~599 전체) 대상 필터링
+                String filter = "metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code_class = \"500\"";
 
                 // 1일(86400초) 단위 ALIGN_SUM 정렬 설정
                 com.google.monitoring.v3.Aggregation aggregation = com.google.monitoring.v3.Aggregation.newBuilder()
@@ -1097,8 +1101,8 @@ public class GcpResourceFetcher {
                     if (ruleCounts.size() == 1) {
                         // 단일 포워딩 룰인 경우 그대로 반영
                         long c = ruleCounts.values().iterator().next();
-                        total500Count += c;
-                        log.debug("LB 500 error single rule [{} / {}]: {}", urlMap, ruleCounts.keySet().iterator().next(), c);
+                        total5xxCount += c;
+                        log.debug("LB 5XX error single rule [{} / {}]: {}", urlMap, ruleCounts.keySet().iterator().next(), c);
                     } else {
                         // 동일 URL Map에 HTTP 및 HTTPS 포워딩 룰이 중복 존재하는 경우:
                         // HTTPS 포워딩 룰(443/https)을 우선 선별하여 중복 합산 방지 (2배 뻥튀기 버그 해결)
@@ -1109,23 +1113,23 @@ public class GcpResourceFetcher {
 
                         if (httpsCount.isPresent()) {
                             long c = httpsCount.get();
-                            total500Count += c;
-                            log.info("LB 500 error deduplicated [{} -> selected HTTPS rule]: {}", urlMap, c);
+                            total5xxCount += c;
+                            log.info("LB 5XX error deduplicated [{} -> selected HTTPS rule]: {}", urlMap, c);
                         } else {
                             // HTTPS 키워드가 명시되지 않은 경우 최대값을 대표값으로 취하여 중복 합산 차단
                             long maxCount = ruleCounts.values().stream().max(Long::compare).orElse(0L);
-                            total500Count += maxCount;
-                            log.info("LB 500 error deduplicated [{} -> max rule count]: {}", urlMap, maxCount);
+                            total5xxCount += maxCount;
+                            log.info("LB 5XX error deduplicated [{} -> max rule count]: {}", urlMap, maxCount);
                         }
                     }
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch 30-day HTTP 500 error count from Cloud Monitoring for project {}: {}", projectId, e.getMessage());
+            log.warn("Failed to fetch 30-day HTTP 5XX error count from Cloud Monitoring for project {}: {}", projectId, e.getMessage());
         }
 
-        log.info("Final deduplicated LB HTTP 500 30-day error count for project {}: {}", projectId, total500Count);
-        return total500Count;
+        log.info("Final deduplicated LB HTTP 5XX 30-day error count for project {}: {}", projectId, total5xxCount);
+        return total5xxCount;
     }
 
     /**
