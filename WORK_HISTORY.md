@@ -1,5 +1,30 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] CUD 약정 현황 컴포넌트 레이아웃 이탈(페이지 변경) 버그 수정 및 만료 데이터 숨김 처리
+
+### 1. 작업 목적 및 개요
+- **CUD 약정 현황 카드 컴포넌트 레이아웃 분리 및 페이지 넘김 버그 해결:**
+  - `GcpMonthlyReportViewPage.tsx`에서 인쇄 CSS의 `.report-card` `break-inside: avoid`와 수많은 만료 데이터가 겹쳐 제목 아래 내용이 다음 페이지로 밀려 거대한 빈 여백이 발생하던 버그 교정.
+  - `@media print`에서 `.report-card`를 `break-inside: auto`로 유연화하고, `.report-card-title`에 `break-after: avoid !important`를 부여하여 제목과 본문 테이블이 항상 밀착 렌더링되도록 수정.
+  - `.table-responsive`에 `overflow: visible !important`를 적용하여 인쇄 시 BFC 분리로 인한 내용 튕김 방지.
+- **과거 만료 CUD 약정 데이터 필터링 (Double-Defense Architecture):**
+  - **백엔드 (`MonthlyReportService.java`):** BigQuery `cud_commitments` 및 `daily_reservation_inventory` 쿼리에 `SAFE_CAST(expiry_date AS DATE) >= CURRENT_DATE('Asia/Seoul')` 및 `(status IS NULL OR status = 'ACTIVE' OR status = 'Succeeded')` 조건을 추가하여 과거 만료 데이터 사전 배제.
+  - **프론트엔드 (`GcpMonthlyReportViewPage.tsx`):** `activeCommitments = commitments.filter(...)`로 오늘 날짜 기준 유효한 활성 약정만 동적으로 렌더링하여 불필요하게 긴 테이블 렌더링 방지.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/MonthlyReportService.java` (CUD BigQuery 쿼리 내 만료일 및 활성 상태 필터링 추가)
+2. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (인쇄 CSS 레이아웃 밀착 교정 및 activeCommitments 필터 적용)
+3. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **Node.js 단위 테스트 검증 (`test_cud_filter.js`):** 과거 만료 2건, 미래 유효 2건 데이터에 대해 미래 유효 2건만 100% 필터링 통과 확인.
+- **Puppeteer E2E 브라우저 UI 실측 검증:** 
+  - 제목과 본문 테이블 간의 수직 여백 `16px`로 정상 밀착 렌더링 확인 (빈 여백 0건, 페이지 이탈 0건).
+  - 화면에 표출된 모든 약정이 오늘 이후 만료되는 100% 활성 데이터임 교차 검증 통과.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] PDF 보고서 편집 상태 롤백 수정, CUD 연동 및 약정 만료 D-30 Slack Block Kit 알람 자동화
 
 ### 1. 작업 목적 및 개요

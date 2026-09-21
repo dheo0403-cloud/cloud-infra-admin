@@ -870,7 +870,7 @@ public class MonthlyReportService {
     private List<CudCommitmentDto> fetchCudCommitments(String projectId) {
         List<CudCommitmentDto> list = new ArrayList<>();
         String selectFields = "commitment_name, category, region, CAST(start_date AS STRING) as start_date, CAST(expiry_date AS STRING) as expiry_date, status, resource_detail";
-        String whereClause = "WHERE project_id = @projectId";
+        String whereClause = "WHERE project_id = @projectId AND (status IS NULL OR status = 'ACTIVE' OR status = 'Succeeded') AND SAFE_CAST(expiry_date AS DATE) >= CURRENT_DATE('Asia/Seoul')";
 
         Map<String, QueryParameterValue> params = new HashMap<>();
         params.put("projectId", QueryParameterValue.string(projectId));
@@ -884,11 +884,14 @@ public class MonthlyReportService {
             log.debug("cud_commitments table query skipped: {}", e.getMessage());
         }
 
-        // daily_reservation_inventory fallback
+        // daily_reservation_inventory fallback (최신 스냅샷 기준 만료되지 않은 활성 CUD만 조회)
         if (list.isEmpty()) {
             try {
                 String resSelect = "reservation_name as commitment_name, COALESCE(type, plan, 'CUD') as category, region, CAST(start_date AS STRING) as start_date, CAST(expiry_date AS STRING) as expiry_date, status, resource_detail";
-                String resWhere = "WHERE provider = 'GCP' AND project_id = @projectId";
+                String resWhere = "WHERE provider = 'GCP' AND project_id = @projectId AND (status IS NULL OR status = 'ACTIVE' OR status = 'Succeeded') " +
+                        "AND (type IS NULL OR type NOT IN ('CLIENT_SECRET', 'CERTIFICATE')) " +
+                        "AND SAFE_CAST(expiry_date AS DATE) >= CURRENT_DATE('Asia/Seoul') " +
+                        "AND snapshot_date = (SELECT MAX(snapshot_date) FROM `" + targetProjectId + "." + datasetName + ".daily_reservation_inventory` WHERE provider = 'GCP' AND project_id = @projectId)";
                 TableResult resResult = queryWithFallback(projectId, "daily_reservation_inventory", resSelect, resWhere, params);
                 if (resResult != null) {
                     parseCudCommitmentsResult(resResult, list);

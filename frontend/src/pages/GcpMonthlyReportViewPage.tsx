@@ -664,9 +664,21 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                     }
-                    .report-card, tr, table, div[style*="gridTemplateColumns"] {
+                    .report-card {
+                        break-inside: auto !important;
+                        page-break-inside: auto !important;
+                    }
+                    .report-card-title {
+                        break-after: avoid !important;
+                        page-break-after: avoid !important;
+                    }
+                    tr, table, div[style*="gridTemplateColumns"] {
                         break-inside: avoid !important;
                         page-break-inside: avoid !important;
+                    }
+                    .table-responsive {
+                        overflow: visible !important;
+                        overflow-x: visible !important;
                     }
                     .print-hide-empty {
                         display: none !important;
@@ -2238,87 +2250,93 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                 })()}
 
                     {/* Section 5.5: GCP CUD (Committed Use Discounts) 확정 사용 할인 약정 현황 */}
-                    <div className="report-card" style={{ marginTop: '20px', marginBottom: 0 }}>
-                        <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span><i className="fas fa-tags mr-2" style={{ color: '#2563eb' }}></i>확정 사용 할인 (CUD) 약정 현황 (Committed Use Discounts)</span>
-                            <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af', backgroundColor: '#dbeafe', padding: '2px 10px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
-                                총 {reportData.commitments?.length || 0}건 약정 보유
-                            </span>
-                        </div>
+                    {(() => {
+                        const todayStr = new Date().toISOString().split('T')[0];
+                        const activeCommitments = (reportData.commitments || []).filter(c => {
+                            if (c.status && c.status.toUpperCase() === 'EXPIRED') return false;
+                            if (c.dday != null && c.dday < 0) return false;
+                            return !c.expiryDate || c.expiryDate >= todayStr;
+                        });
 
-                        {(!reportData.commitments || reportData.commitments.length === 0) ? (
-                            <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px', fontWeight: 600, backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                <i className="fas fa-info-circle mr-2" style={{ color: '#3b82f6' }}></i>현재 프로젝트에 활성화된 확정 사용 할인(CUD) 약정 내역이 없습니다.
-                            </div>
-                        ) : (
-                            <div className="table-responsive" style={{ marginTop: '8px' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
-                                    <thead>
-                                        <tr style={{ backgroundColor: '#0b4885', color: '#ffffff', textAlign: 'center' }}>
-                                            <th style={{ padding: '8px 10px', width: '22%', border: '1px solid #0b4885' }}>약정 식별명 (Name)</th>
-                                            <th style={{ padding: '8px 10px', width: '15%', border: '1px solid #0b4885' }}>약정 구분 (Category)</th>
-                                            <th style={{ padding: '8px 10px', width: '28%', border: '1px solid #0b4885' }}>약정 리소스 스펙 (Detail)</th>
-                                            <th style={{ padding: '8px 10px', width: '13%', border: '1px solid #0b4885' }}>리전 (Region)</th>
-                                            <th style={{ padding: '8px 10px', width: '12%', border: '1px solid #0b4885' }}>만료 예정일</th>
-                                            <th style={{ padding: '8px 10px', width: '10%', border: '1px solid #0b4885' }}>D-Day 상태</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {reportData.commitments.map((c, idx) => {
-                                            const isExpired = c.dday < 0 || c.status?.toUpperCase() === 'EXPIRED';
-                                            const isUrgent = c.dday <= 30 && !isExpired;
-                                            const isWarning = c.dday <= 90 && !isUrgent && !isExpired;
+                        return (
+                            <div className="report-card" style={{ marginTop: '20px', marginBottom: 0 }}>
+                                <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span><i className="fas fa-tags mr-2" style={{ color: '#2563eb' }}></i>확정 사용 할인 (CUD) 약정 현황 (Committed Use Discounts)</span>
+                                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af', backgroundColor: '#dbeafe', padding: '2px 10px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>
+                                        총 {activeCommitments.length}건 유효 약정
+                                    </span>
+                                </div>
 
-                                            return (
-                                                <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
-                                                        <i className="fas fa-bookmark mr-1.5" style={{ color: '#2563eb', fontSize: '10px' }}></i>
-                                                        {c.name}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#475569' }}>
-                                                        <span style={{ backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '10.5px', fontWeight: 600 }}>
-                                                            {c.category || 'Compute CUD'}
-                                                        </span>
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', color: '#0f172a', fontFamily: 'Consolas, monospace', fontSize: '11px' }}>
-                                                        {c.resourceDetail || '-'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '11px' }}>
-                                                        {c.region || 'global'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#334155', fontWeight: 600 }}>
-                                                        {c.expiryDate || '-'}
-                                                    </td>
-                                                    <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                                                        {isExpired ? (
-                                                            <span style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
-                                                                만료됨
-                                                            </span>
-                                                        ) : isUrgent ? (
-                                                            <span style={{ backgroundColor: '#ffedd5', color: '#ea580c', border: '1px solid #fed7aa', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
-                                                                🚨 D-{c.dday}
-                                                            </span>
-                                                        ) : isWarning ? (
-                                                            <span style={{ backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
-                                                                ⚠️ D-{c.dday}
-                                                            </span>
-                                                        ) : (
-                                                            <span style={{ backgroundColor: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
-                                                                ✅ D-{c.dday}
-                                                            </span>
-                                                        )}
-                                                    </td>
+                                {activeCommitments.length === 0 ? (
+                                    <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px', fontWeight: 600, backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                        <i className="fas fa-info-circle mr-2" style={{ color: '#3b82f6' }}></i>현재 프로젝트에 활성화된 확정 사용 할인(CUD) 약정 내역이 없습니다.
+                                    </div>
+                                ) : (
+                                    <div className="table-responsive" style={{ marginTop: '8px', overflow: 'visible' }}>
+                                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                                            <thead>
+                                                <tr style={{ backgroundColor: '#0b4885', color: '#ffffff', textAlign: 'center' }}>
+                                                    <th style={{ padding: '8px 10px', width: '22%', border: '1px solid #0b4885' }}>약정 식별명 (Name)</th>
+                                                    <th style={{ padding: '8px 10px', width: '15%', border: '1px solid #0b4885' }}>약정 구분 (Category)</th>
+                                                    <th style={{ padding: '8px 10px', width: '28%', border: '1px solid #0b4885' }}>약정 리소스 스펙 (Detail)</th>
+                                                    <th style={{ padding: '8px 10px', width: '13%', border: '1px solid #0b4885' }}>리전 (Region)</th>
+                                                    <th style={{ padding: '8px 10px', width: '12%', border: '1px solid #0b4885' }}>만료 예정일</th>
+                                                    <th style={{ padding: '8px 10px', width: '10%', border: '1px solid #0b4885' }}>D-Day 상태</th>
                                                 </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
+                                            </thead>
+                                            <tbody>
+                                                {activeCommitments.map((c, idx) => {
+                                                    const isUrgent = c.dday <= 30;
+                                                    const isWarning = c.dday <= 90 && !isUrgent;
+
+                                                    return (
+                                                        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                                                            <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', fontWeight: 700, color: '#1e293b' }}>
+                                                                <i className="fas fa-bookmark mr-1.5" style={{ color: '#2563eb', fontSize: '10px' }}></i>
+                                                                {c.name}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#475569' }}>
+                                                                <span style={{ backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '10.5px', fontWeight: 600 }}>
+                                                                    {c.category || 'Compute CUD'}
+                                                                </span>
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', border: '1px solid #e2e8f0', color: '#0f172a', fontFamily: 'Consolas, monospace', fontSize: '11px' }}>
+                                                                {c.resourceDetail || '-'}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#64748b', fontSize: '11px' }}>
+                                                                {c.region || 'global'}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0', color: '#334155', fontWeight: 600 }}>
+                                                                {c.expiryDate || '-'}
+                                                            </td>
+                                                            <td style={{ padding: '8px 10px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                                                                {isUrgent ? (
+                                                                    <span style={{ backgroundColor: '#ffedd5', color: '#ea580c', border: '1px solid #fed7aa', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                        🚨 D-{c.dday}
+                                                                    </span>
+                                                                ) : isWarning ? (
+                                                                    <span style={{ backgroundColor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                        ⚠️ D-{c.dday}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span style={{ backgroundColor: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700 }}>
+                                                                        ✅ D-{c.dday}
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                <div style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '6px' }}>
+                                    * GCP CUD(Committed Use Discounts)는 1년 또는 3년 약정을 통해 Compute Engine, Cloud SQL 등의 기본 인프라 비용을 최대 70% 절감하는 확정 할인 프로그램입니다.
+                                </div>
                             </div>
-                        )}
-                        <div style={{ fontSize: '9.5px', color: '#94a3b8', marginTop: '6px' }}>
-                            * GCP CUD(Committed Use Discounts)는 1년 또는 3년 약정을 통해 Compute Engine, Cloud SQL 등의 기본 인프라 비용을 최대 70% 절감하는 확정 할인 프로그램입니다.
-                        </div>
-                    </div>
+                        );
+                    })()}
 
                     {/* Section 6: GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 */}
                     <div style={{ marginTop: '20px' }}>
