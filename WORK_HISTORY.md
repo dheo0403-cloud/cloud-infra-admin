@@ -1,5 +1,34 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] BigQuery 스토리지 및 슬롯 사용량 더미 데이터 잔존 버그 수정 및 데이터 무결성 확보
+
+### 1. 작업 목적 및 개요
+- **BigQuery 최적화 분석 화면 스토리지/슬롯 허위 데이터 표출 버그 교정:**
+  - 쿼리 실행 내역이 없는(0건, 0.00TB) 고객사 조회 시 논리 스토리지 125.0GB / 물리 스토리지 78.5GB 및 당월 슬롯 145/52 Slots가 노출되던 데이터 신뢰성 결함 해결.
+  - **백엔드 DTO 기본값 제로화 (`BigQueryOptimizationService.java`):**
+    - `logicalGb`, `physicalGb`, `physicalTb`, `maxSlots`, `minSlots`, `avgSlots` 변수의 하드코딩 더미 초기값을 `0.0`으로 완전 초기화.
+    - 슬롯 상태 판정 로직에 `maxSlots <= 0` 예외 분기를 추가하여 `"정상 (데이터 없음)"`으로 정확히 반환하도록 교정.
+  - **프론트엔드 슬롯 상태 배너 안전 렌더링 (`BigQueryOptimizationPanel.tsx`):**
+    - `maxSlotUsage <= 0`일 때 회색 안전 뱃지(`color: '#475569'`, `backgroundColor: '#f1f5f9'`, `fa-minus-circle` 아이콘) 및 `'정상 (데이터 없음)'` 텍스트가 표출되도록 방어 로직 강화.
+  - **단위 테스트 및 E2E 실측 검증:**
+    - `BigQueryOptimizationBatchTest`에 무사용 프로젝트 조회 시 스토리지 0.0GB, 슬롯 0 Slots 반환 검증 테스트 케이스 추가 및 100% 통과.
+    - Puppeteer E2E 브라우저 실측으로 논리 스토리지 `0.0 GB`, 물리 스토리지 `0.0 GB(0.000 TB)`, 슬롯 `최대 0 / 평균 0 Slots` 렌더링 교차 검증 통과.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/service/BigQueryOptimizationService.java` (스토리지/슬롯 초기값 0.0 초기화 및 슬롯 상태 예외 분기)
+2. `backend/src/test/java/com/example/infra/BigQueryOptimizationBatchTest.java` (Zero-Data 무결성 테스트 케이스 추가)
+3. `frontend/src/components/BigQueryOptimizationPanel.tsx` (슬롯 0건 뱃지 스타일 및 예외 렌더링 최적화)
+4. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **REST API (`/api/metrics/gcp/bigquery-optimization`) curl 실측:**
+  - `totalLogicalStorageGb: 0`, `totalPhysicalStorageGb: 0`, `maxSlotUsage: 0`, `avgSlotUsage: 0`, `slotHealthStatus: "정상 (데이터 없음)"` 반환 증명.
+- **Puppeteer E2E 브라우저 UI 실측 검증:**
+  - 화면상 논리적 스토리지 `0.0 GB`, 물리적 스토리지 `0.0 GB(0.000 TB)`, 당월 슬롯 사용량 `최대 0 / 평균 0 Slots` 정확 표출 및 콘솔 에러 0건 통과.
+- **백엔드/프론트엔드 통합 빌드:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] PDF 보고서 차트 Zero 데이터 렌더링 숨김 처리 및 AI-BigQuery 섹션 간 여백(Page break) 최적화
 
 ### 1. 작업 목적 및 개요

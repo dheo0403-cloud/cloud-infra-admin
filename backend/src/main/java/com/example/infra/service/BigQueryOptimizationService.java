@@ -323,12 +323,12 @@ public class BigQueryOptimizationService {
         List<Long> jobCountTrend = new ArrayList<>();
         double currentTb = 0.0;
         long currentJobs = 0L;
-        double logicalGb = 125.0;
-        double physicalGb = 78.5;
-        double physicalTb = 0.076;
-        double maxSlots = 145.0;
-        double minSlots = 15.0;
-        double avgSlots = 52.0;
+        double logicalGb = 0.0;
+        double physicalGb = 0.0;
+        double physicalTb = 0.0;
+        double maxSlots = 0.0;
+        double minSlots = 0.0;
+        double avgSlots = 0.0;
 
         try {
             // 1. 4개월 월별 리소스 요약 조회
@@ -413,7 +413,9 @@ public class BigQueryOptimizationService {
                 }
             }
 
-            String slotHealth = (maxSlots > 800) ? "병목주의 (Slot Throttling 감지)" : (maxSlots > 400 ? "안정적 (사용량 높음)" : "정상 (여유 슬롯 확보)");
+            String slotHealth = (maxSlots <= 0)
+                    ? "정상 (데이터 없음)"
+                    : ((maxSlots > 800) ? "병목주의 (Slot Throttling 감지)" : (maxSlots > 400 ? "안정적 (사용량 높음)" : "정상 (여유 슬롯 확보)"));
 
             return BigQueryOptimizationDto.builder()
                     .projectId(effectiveProjectId)

@@ -135,4 +135,31 @@ public class BigQueryOptimizationBatchTest {
         }
         System.out.println("✅ 전체 20개 GCP 프로젝트 대상 4개월치 BigQuery 성능 최적화 데이터 롤업 Upsert 완료!");
     }
+
+    @Test
+    @DisplayName("데이터가 없는 신규/무사용 고객사 프로젝트 조회 시 스토리지 0.0GB, 슬롯 0 Slots 및 정상(데이터 없음) 반환 검증")
+    public void testZeroUsageProjectMetricsReturnZero() {
+        String zeroProjectId = "zero-usage-customer-project";
+        String targetYm = "2026-09";
+
+        BigQueryOptimizationDto dto = bigQueryOptimizationService.getBigQueryOptimizationMetrics(zeroProjectId, targetYm);
+
+        assertNotNull(dto);
+        assertEquals(zeroProjectId, dto.getProjectId());
+        assertEquals(0.0, dto.getCurrentMonthProcessedTb(), 0.001, "사용량이 없는 고객사의 당월 처리량은 0.0TB여야 합니다.");
+        assertEquals(0L, dto.getCurrentMonthJobCount(), "사용량이 없는 고객사의 Job 수는 0이어야 합니다.");
+        assertEquals(0.0, dto.getTotalLogicalStorageGb(), 0.001, "사용량이 없는 고객사의 논리 스토리지는 0.0GB여야 합니다 (125.0GB 더미 방지).");
+        assertEquals(0.0, dto.getTotalPhysicalStorageGb(), 0.001, "사용량이 없는 고객사의 물리 스토리지는 0.0GB여야 합니다 (78.5GB 더미 방지).");
+        assertEquals(0.0, dto.getTotalPhysicalStorageTb(), 0.001, "사용량이 없는 고객사의 물리 스토리지(TB)는 0.0TB여야 합니다.");
+        assertEquals(0.0, dto.getMaxSlotUsage(), 0.001, "사용량이 없는 고객사의 최대 슬롯은 0이어야 합니다 (145 더미 방지).");
+        assertEquals(0.0, dto.getAvgSlotUsage(), 0.001, "사용량이 없는 고객사의 평균 슬롯은 0이어야 합니다 (52 더미 방지).");
+        assertEquals("정상 (데이터 없음)", dto.getSlotHealthStatus(), "슬롯 상태는 '정상 (데이터 없음)'이어야 합니다.");
+        assertTrue(dto.getHighCostQueries().isEmpty(), "고비용 쿼리는 빈 리스트여야 합니다.");
+        assertTrue(dto.getLongDurationQueries().isEmpty(), "장기실행 쿼리는 빈 리스트여야 합니다.");
+
+        System.out.println(String.format("• [Zero-Data 검증 실측] 프로젝트: %s | 논리 스토리지: %.1f GB | 물리 스토리지: %.1f GB | 최대 슬롯: %.0f | 평균 슬롯: %.0f | 슬롯 상태: %s",
+                dto.getProjectId(), dto.getTotalLogicalStorageGb(), dto.getTotalPhysicalStorageGb(),
+                dto.getMaxSlotUsage(), dto.getAvgSlotUsage(), dto.getSlotHealthStatus()));
+        System.out.println("🎉 [Zero-Data 무결성 검증] 스토리지 0.0GB / 슬롯 0 Slots 정상 반환 100% 확인 통과!");
+    }
 }

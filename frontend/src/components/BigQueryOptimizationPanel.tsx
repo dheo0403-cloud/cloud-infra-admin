@@ -257,14 +257,14 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({ p
                                 <span style={{
                                     fontSize: '9.5px',
                                     fontWeight: 700,
-                                    color: (data.maxSlotUsage || 0) > 800 ? '#b91c1c' : '#15803d',
-                                    backgroundColor: (data.maxSlotUsage || 0) > 800 ? '#fee2e2' : '#dcfce7',
+                                    color: (data.maxSlotUsage || 0) <= 0 ? '#475569' : ((data.maxSlotUsage || 0) > 800 ? '#b91c1c' : '#15803d'),
+                                    backgroundColor: (data.maxSlotUsage || 0) <= 0 ? '#f1f5f9' : ((data.maxSlotUsage || 0) > 800 ? '#fee2e2' : '#dcfce7'),
                                     padding: '1px 7px',
                                     borderRadius: '8px',
-                                    border: (data.maxSlotUsage || 0) > 800 ? '1px solid #fca5a5' : '1px solid #86efac'
+                                    border: (data.maxSlotUsage || 0) <= 0 ? '1px solid #cbd5e1' : ((data.maxSlotUsage || 0) > 800 ? '1px solid #fca5a5' : '1px solid #86efac')
                                 }}>
-                                    <i className={`fas ${(data.maxSlotUsage || 0) > 800 ? 'fa-exclamation-triangle' : 'fa-check'} mr-1`}></i>
-                                    {data.slotHealthStatus || '정상 (여유 슬롯 확보)'}
+                                    <i className={`fas ${(data.maxSlotUsage || 0) <= 0 ? 'fa-minus-circle' : ((data.maxSlotUsage || 0) > 800 ? 'fa-exclamation-triangle' : 'fa-check')} mr-1`}></i>
+                                    {data.slotHealthStatus || ((data.maxSlotUsage || 0) <= 0 ? '정상 (데이터 없음)' : '정상 (여유 슬롯 확보)')}
                                 </span>
                             </div>
                         </div>
