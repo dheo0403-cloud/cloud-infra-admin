@@ -668,14 +668,23 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     .report-card {
                         break-inside: auto !important;
                         page-break-inside: auto !important;
+                        padding: 14px 18px !important;
+                        margin-bottom: 12px !important;
                     }
                     .report-card-title {
                         break-after: avoid !important;
                         page-break-after: avoid !important;
                     }
-                    tr, table, div[style*="gridTemplateColumns"] {
+                    .bq-optimization-section, .direct-ai-section {
+                        margin-top: 10px !important;
+                    }
+                    tr, table {
                         break-inside: avoid !important;
                         page-break-inside: avoid !important;
+                    }
+                    div[style*="gridTemplateColumns"] {
+                        break-inside: auto !important;
+                        page-break-inside: auto !important;
                     }
                     .table-responsive {
                         overflow: visible !important;

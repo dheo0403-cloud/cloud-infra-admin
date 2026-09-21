@@ -77,7 +77,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
         : ['26.06', '26.07', '26.08', '26.09'];
 
     return (
-        <div className={isDirectAiEmpty ? "print-hide-empty" : ""} style={{ marginBottom: 0 }}>
+        <div className={`direct-ai-section ${isDirectAiEmpty ? "print-hide-empty" : ""}`} style={{ marginBottom: 0 }}>
             <div className="report-card" style={{ marginBottom: 0, borderTop: '4px solid #2563eb' }}>
                 {/* Header */}
                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

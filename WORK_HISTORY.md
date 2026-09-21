@@ -1,5 +1,31 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] PDF 보고서 차트 Zero 데이터 렌더링 숨김 처리 및 AI-BigQuery 섹션 간 여백(Page break) 최적화
+
+### 1. 작업 목적 및 개요
+- **BigQuery 성능 차트 Zero Data 렌더링 예외 처리 (`BigQueryOptimizationPanel.tsx`):**
+  - 데이터 사용량이 0건, 0.00TB인 월에 대해 강제 최소 높이 막대와 텍스트 레이블(`0.00TB`, `0건`)이 어색하게 뜨는 문제를 교정.
+  - `isZero = (tbVal <= 0 && jcVal <= 0)` 조건 분기를 적용하여 막대 `height: '0%'`, `opacity: 0` 및 텍스트 `visibility: 'hidden'` 처리 완료 (X축 날짜 슬롯 및 점선 그리드는 안정적 보존).
+- **PDF 여백 및 페이지 넘김(Page Break) 레이아웃 최적화 (`GcpMonthlyReportViewPage.tsx`):**
+  - AI 섹션과 BigQuery 섹션 사이에 발생하던 과도한 페이지 이탈(Page break) 버그 해결.
+  - `@media print`에서 `.report-card` 패딩 다이어트(`padding: 14px 18px`), `.bq-optimization-section` 상단 마진 축소(`margin-top: 10px`) 및 `div[style*="gridTemplateColumns"]` `break-inside: auto` 적용으로 AI 섹션 직후 BigQuery 섹션이 빈 페이지 없이 타이트하게 연결 렌더링되도록 밀착 교정.
+- **과거 4개월(2026-06 ~ 2026-09) BigQuery 성능 실데이터 완비:**
+  - 20개 GCP 프로젝트 전체에 대해 4개월치 리소스 사용량, 스토리지 용량, 슬롯 분석 및 TOP 10 쿼리 데이터 주입 완료.
+
+### 2. 수정된 파일 목록
+1. `frontend/src/components/BigQueryOptimizationPanel.tsx` (Zero-Data 막대/레이블 숨김 및 패널 레이아웃 최적화)
+2. `frontend/src/components/DirectAiUsagePanel.tsx` (direct-ai-section 클래스 부여)
+3. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (인쇄 CSS 페이지 나눔 방어 및 마진/패딩 다이어트)
+4. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **Puppeteer E2E 브라우저 UI 실측 검증:**
+  - ① Zero-Data 예외 처리: 데이터 0인 월에 파란 껍데기 막대 및 레이블 100% 숨김 통과.
+  - ② AI-BigQuery 섹션 간격 실측: 불필요한 페이지 나눔(Page break) 없이 동일 페이지 내 수직 간격으로 밀착 렌더링 통과.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] BQ 파티셔닝(TTL) 및 Upsert가 적용된 고객사별 성능 분석 수집기 및 보고서 UI 추가
 
 ### 1. 작업 목적 및 개요
