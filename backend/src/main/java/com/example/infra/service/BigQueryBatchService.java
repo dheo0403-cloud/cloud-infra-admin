@@ -41,6 +41,7 @@ public class BigQueryBatchService {
     private final InfraEnvironmentService environmentService;
     private final GcpResourceFetcher gcpResourceFetcher;
     private final GcpRecommenderService gcpRecommenderService;
+    private final BigQueryOptimizationService bigQueryOptimizationService;
     private final BigQuery bigQuery;
 
     @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
@@ -1000,6 +1001,14 @@ public class BigQueryBatchService {
                         log.info("GCP Endpoint Serving Metrics: successfully collected for project {}", projectId);
                     } catch (Exception e) {
                         log.error("Batch failed for Endpoint Serving Metrics in project {}", projectId, e);
+                    }
+
+                    // 22. GCP BigQuery 성능 및 비용 최적화 분석 메트릭 Upsert 수집 (전체 고객사 프로젝트 순회)
+                    try {
+                        bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapshotDate, projectId, customerName, credentials);
+                        log.info("BigQuery Optimization Metrics: successfully upserted for project {}", projectId);
+                    } catch (Exception e) {
+                        log.error("Batch failed for BigQuery Optimization Metrics in project {}", projectId, e);
                     }
                 }
             } catch (Exception e) {

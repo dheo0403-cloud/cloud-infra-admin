@@ -47,7 +47,7 @@ public class BigQueryTargetProjectRoutingTest {
     @DisplayName("BigQueryBatchService 기본 targetProjectId가 mzc-gcp-managed로 설정되는지 검증")
     public void testBatchServiceTargetProjectId() {
         BigQuery mockBq = mock(BigQuery.class);
-        BigQueryBatchService batchService = new BigQueryBatchService(null, null, null, mockBq);
+        BigQueryBatchService batchService = new BigQueryBatchService(null, null, null, null, mockBq);
 
         ReflectionTestUtils.setField(batchService, "targetProjectId", MANAGED_PROJECT);
         ReflectionTestUtils.setField(batchService, "datasetName", DATASET);

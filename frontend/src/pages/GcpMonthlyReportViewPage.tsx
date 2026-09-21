@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getCustomers, InfraCustomer } from '../services/api';
 import DirectAiUsagePanel from '../components/DirectAiUsagePanel';
 import EndpointServingPanel from '../components/EndpointServingPanel';
+import BigQueryOptimizationPanel from '../components/BigQueryOptimizationPanel';
 
 interface CudCommitment {
     name: string;
@@ -2349,6 +2350,14 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                     {/* Section 6-2: GCP AI 엔드포인트 서빙 (Endpoint Serving) 관제 */}
                     <div>
                         <EndpointServingPanel
+                            projectId={selectedProject || reportData?.projectId || ''}
+                            targetYearMonth={selectedYearMonth}
+                        />
+                    </div>
+
+                    {/* Section 6-3: GCP BigQuery 성능 및 비용 최적화 분석 관제 */}
+                    <div>
+                        <BigQueryOptimizationPanel
                             projectId={selectedProject || reportData?.projectId || ''}
                             targetYearMonth={selectedYearMonth}
                         />

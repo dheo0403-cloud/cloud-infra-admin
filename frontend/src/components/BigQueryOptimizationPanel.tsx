@@ -1,0 +1,329 @@
+import React, { useEffect, useState } from 'react';
+import { getBigQueryOptimizationMetrics, BigQueryOptimizationDto } from '../services/api';
+
+interface BigQueryOptimizationPanelProps {
+    projectId?: string;
+    targetYearMonth?: string;
+}
+
+const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({ projectId, targetYearMonth }) => {
+    const [metrics, setMetrics] = useState<BigQueryOptimizationDto | null>(null);
+    const [loading, setLoading] = useState<boolean>(true);
+
+    const fetchMetrics = async () => {
+        try {
+            const res = await getBigQueryOptimizationMetrics(projectId, targetYearMonth);
+            if (res.data) {
+                setMetrics(res.data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch BigQuery optimization metrics:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchMetrics();
+    }, [projectId, targetYearMonth]);
+
+    const data: BigQueryOptimizationDto = metrics || {
+        projectId: projectId || '',
+        customerName: '고객사 GCP 프로젝트',
+        targetYearMonth: targetYearMonth || '2026-09',
+        dates: ['26.06', '26.07', '26.08', '26.09'],
+        dataProcessedTbTrend: [0, 0, 0, 0],
+        jobCountTrend: [0, 0, 0, 0],
+        currentMonthProcessedTb: 0.0,
+        currentMonthJobCount: 0,
+        totalLogicalStorageGb: 0.0,
+        totalPhysicalStorageGb: 0.0,
+        totalPhysicalStorageTb: 0.0,
+        highCostQueries: [],
+        maxSlotUsage: 0.0,
+        minSlotUsage: 0.0,
+        avgSlotUsage: 0.0,
+        slotHealthStatus: '정상',
+        longDurationQueries: [],
+        lastUpdated: new Date().toLocaleTimeString('ko-KR')
+    };
+
+    const hasData = Boolean(
+        data.currentMonthProcessedTb > 0 ||
+        data.currentMonthJobCount > 0 ||
+        (data.highCostQueries && data.highCostQueries.length > 0) ||
+        (data.longDurationQueries && data.longDurationQueries.length > 0)
+    );
+
+    const maxTb = Math.max(...(data.dataProcessedTbTrend || [0]), 1.0);
+    const displayDates = (data.dates && data.dates.length > 0) ? data.dates : ['26.06', '26.07', '26.08', '26.09'];
+
+    return (
+        <div className={!hasData ? "print-hide-empty" : ""} style={{ marginTop: '20px', marginBottom: 0 }}>
+            <div className="report-card" style={{ borderTop: '4px solid #2563eb', marginBottom: 0 }}>
+                {/* Header Title */}
+                <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center' }}>
+                        <i className="fas fa-database mr-2" style={{ color: '#2563eb' }}></i>
+                        BigQuery 성능 및 비용 최적화 분석 (BigQuery Optimization)
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#10b981', fontWeight: 600, backgroundColor: '#ecfdf5', padding: '3px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                        <i className="fas fa-check-circle mr-1"></i>INFORMATION_SCHEMA 분석 활성
+                    </span>
+                </div>
+
+                <div style={{ marginTop: '14px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                    {/* ========================================================================= */}
+                    {/* [영역 1] 월별 리소스 및 스토리지 현황 (트렌드 모니터링)                      */}
+                    {/* ========================================================================= */}
+                    <div>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: '8px' }}>
+                            <i className="fas fa-chart-bar mr-1" style={{ color: '#3b82f6' }}></i>1. 월별 리소스 및 스토리지 현황 (트렌드 모니터링)
+                        </span>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px' }}>
+                            {/* Left: 4-Month Processed TB & Job Count Chart */}
+                            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>
+                                        월간 데이터 사용량(TB) & Job Count 추이
+                                    </span>
+                                    <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                        당월: <strong>{Number(data.currentMonthProcessedTb || 0).toFixed(2)} TB</strong> / <strong>{(data.currentMonthJobCount || 0).toLocaleString()} Jobs</strong>
+                                    </span>
+                                </div>
+
+                                {/* Bar Chart Area */}
+                                <div style={{ height: '110px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', gap: '12px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '6px' }}>
+                                    {displayDates.map((dateStr, idx) => {
+                                        const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
+                                        const jcVal = data.jobCountTrend?.[idx] || 0;
+                                        const heightPercent = Math.max(12, Math.min(100, Math.round((tbVal / maxTb) * 85)));
+
+                                        return (
+                                            <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#2563eb', marginBottom: '2px' }}>
+                                                    {Number(tbVal).toFixed(2)}TB
+                                                </span>
+                                                <div style={{
+                                                    width: '60%',
+                                                    height: `${heightPercent}%`,
+                                                    background: 'linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)',
+                                                    borderRadius: '4px 4px 0 0',
+                                                    transition: 'height 0.3s ease'
+                                                }}></div>
+                                                <span style={{ fontSize: '8px', color: '#64748b', marginTop: '2px' }}>
+                                                    {jcVal.toLocaleString()}건
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* X-Axis Labels */}
+                                <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                                    {displayDates.map((d, i) => (
+                                        <span key={i} style={{ flex: 1, textAlign: 'center', fontWeight: 600 }}>{d}</span>
+                                    ))}
+                                </div>
+
+                                {/* Standard Bottom-Center Legend */}
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', fontSize: '10px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#2563eb', marginRight: '4px' }}></span>
+                                        데이터 사용량 (TB)
+                                    </span>
+                                    <span style={{ color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '10px', height: '2px', backgroundColor: '#64748b', marginRight: '4px' }}></span>
+                                        실행 Job 수 (건)
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Right: Storage Capacity Summary Cards */}
+                            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569', marginBottom: '8px', display: 'block' }}>
+                                    전체 데이터셋 스토리지 용량
+                                </span>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <div style={{ backgroundColor: '#eff6ff', padding: '8px 10px', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                                        <span style={{ fontSize: '10px', color: '#1e40af', display: 'block', fontWeight: 600 }}>
+                                            <i className="fas fa-bolt mr-1"></i>논리적 스토리지 (활성 요금 기준)
+                                        </span>
+                                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#1d4ed8' }}>
+                                            {Number(data.totalLogicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '10px', fontWeight: 500 }}>GB</span>
+                                        </strong>
+                                    </div>
+
+                                    <div style={{ backgroundColor: '#f0fdf4', padding: '8px 10px', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                                        <span style={{ fontSize: '10px', color: '#166534', display: 'block', fontWeight: 600 }}>
+                                            <i className="fas fa-archive mr-1"></i>물리적 스토리지 (장기 요금 기준)
+                                        </span>
+                                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#15803d' }}>
+                                            {Number(data.totalPhysicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '10px', fontWeight: 500 }}>GB</span>
+                                            <span style={{ fontSize: '10px', fontWeight: 500, color: '#64748b', marginLeft: '6px' }}>({Number(data.totalPhysicalStorageTb || 0).toFixed(3)} TB)</span>
+                                        </strong>
+                                    </div>
+                                </div>
+                                <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '6px', display: 'block' }}>
+                                    * 90일 이상 미수정 테이블은 장기 스토리지 할인 요율 자동 적용
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ========================================================================= */}
+                    {/* [영역 2] 고비용 쿼리 분석 (TOP 10 비용 최적화)                                */}
+                    {/* ========================================================================= */}
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>
+                                <i className="fas fa-coins mr-1" style={{ color: '#d97706' }}></i>2. 고비용 쿼리 분석 (가장 많은 데이터 비용을 사용한 TOP 10)
+                            </span>
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                * 온디맨드 쿼리 요금($6.25/TB) 기준 정렬
+                            </span>
+                        </div>
+
+                        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'left' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                                        <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center', fontWeight: 700 }}>순위</th>
+                                        <th style={{ padding: '6px 8px', width: '70px', fontWeight: 700 }}>실행 일자</th>
+                                        <th style={{ padding: '6px 8px', width: '140px', fontWeight: 700 }}>실행 계정 (IAM)</th>
+                                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>SQL 쿼리문</th>
+                                        <th style={{ padding: '6px 8px', width: '75px', textAlign: 'right', fontWeight: 700 }}>스캔량 (GB)</th>
+                                        <th style={{ padding: '6px 8px', width: '75px', textAlign: 'right', fontWeight: 700 }}>예상 비용</th>
+                                        <th style={{ padding: '6px 8px', width: '70px', textAlign: 'right', fontWeight: 700 }}>실행 시간</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.highCostQueries && data.highCostQueries.length > 0 ? (
+                                        data.highCostQueries.map((item, idx) => (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 800, color: idx < 3 ? '#dc2626' : '#64748b' }}>
+                                                    {item.rank}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', color: '#475569' }}>{item.createdDate}</td>
+                                                <td style={{ padding: '6px 8px', color: '#334155', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.userEmail}>
+                                                    {item.userEmail}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', color: '#0f172a', fontFamily: 'monospace', maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.query}>
+                                                    <span style={{ backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, marginRight: '4px', fontSize: '9px', color: '#2563eb' }}>
+                                                        {item.statementType || 'SELECT'}
+                                                    </span>
+                                                    {item.query}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>
+                                                    {Number(item.bytesProcessedGb || 0).toFixed(1)} GB
+                                                </td>
+                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: '#b45309' }}>
+                                                    ${Number(item.estimatedCostUsd || 0).toFixed(2)}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: '#475569' }}>
+                                                    {Number(item.executionTimeSeconds || 0).toFixed(1)}초
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={7} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>
+                                                조회 대상 연월에 기록된 고비용 쿼리 내역이 없습니다.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* ========================================================================= */}
+                    {/* [영역 3] 쿼리 성능 및 병목 현상 분석 (성능 최적화 & 슬롯 분석)                */}
+                    {/* ========================================================================= */}
+                    <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>
+                                <i className="fas fa-tachometer-alt mr-1" style={{ color: '#059669' }}></i>3. 쿼리 성능 및 병목 현상 분석 (실행 시간 TOP 10 & 슬롯 분석)
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                    당월 슬롯 사용량: 최대 <strong>{data.maxSlotUsage || 0}</strong> / 평균 <strong>{data.avgSlotUsage || 0}</strong> Slots
+                                </span>
+                                <span style={{
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    color: (data.maxSlotUsage || 0) > 800 ? '#b91c1c' : '#15803d',
+                                    backgroundColor: (data.maxSlotUsage || 0) > 800 ? '#fee2e2' : '#dcfce7',
+                                    padding: '2px 8px',
+                                    borderRadius: '10px',
+                                    border: (data.maxSlotUsage || 0) > 800 ? '1px solid #fca5a5' : '1px solid #86efac'
+                                }}>
+                                    <i className={`fas ${(data.maxSlotUsage || 0) > 800 ? 'fa-exclamation-triangle' : 'fa-check'} mr-1`}></i>
+                                    {data.slotHealthStatus || '정상 (여유 슬롯 확보)'}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px', overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'left' }}>
+                                <thead>
+                                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                                        <th style={{ padding: '6px 8px', width: '36px', textAlign: 'center', fontWeight: 700 }}>순위</th>
+                                        <th style={{ padding: '6px 8px', width: '70px', fontWeight: 700 }}>실행 일자</th>
+                                        <th style={{ padding: '6px 8px', width: '140px', fontWeight: 700 }}>실행 계정 (IAM)</th>
+                                        <th style={{ padding: '6px 8px', fontWeight: 700 }}>SQL 쿼리문</th>
+                                        <th style={{ padding: '6px 8px', width: '80px', textAlign: 'right', fontWeight: 700 }}>실행 소요시간</th>
+                                        <th style={{ padding: '6px 8px', width: '70px', textAlign: 'right', fontWeight: 700 }}>평균 슬롯</th>
+                                        <th style={{ padding: '6px 8px', width: '70px', textAlign: 'right', fontWeight: 700 }}>스캔량</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {data.longDurationQueries && data.longDurationQueries.length > 0 ? (
+                                        data.longDurationQueries.map((item, idx) => (
+                                            <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '6px 8px', textAlign: 'center', fontWeight: 800, color: idx < 3 ? '#ea580c' : '#64748b' }}>
+                                                    {item.rank}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', color: '#475569' }}>{item.createdDate}</td>
+                                                <td style={{ padding: '6px 8px', color: '#334155', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.userEmail}>
+                                                    {item.userEmail}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', color: '#0f172a', fontFamily: 'monospace', maxWidth: '320px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.query}>
+                                                    <span style={{ backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: '3px', fontWeight: 600, marginRight: '4px', fontSize: '9px', color: '#059669' }}>
+                                                        {item.statementType || 'QUERY'}
+                                                    </span>
+                                                    {item.query}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 800, color: '#dc2626' }}>
+                                                    {item.executionDurationFormatted || `${item.executionTimeSeconds}초`}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#4f46e5' }}>
+                                                    {Number(item.jobAverageSlots || 0).toFixed(1)}
+                                                </td>
+                                                <td style={{ padding: '6px 8px', textAlign: 'right', color: '#64748b' }}>
+                                                    {Number(item.bytesProcessedGb || 0).toFixed(1)} GB
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={7} style={{ padding: '16px', textAlign: 'center', color: '#94a3b8' }}>
+                                                조회 대상 연월에 기록된 장기 실행 쿼리 내역이 없습니다.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default BigQueryOptimizationPanel;

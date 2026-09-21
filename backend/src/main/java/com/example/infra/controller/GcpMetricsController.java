@@ -1,9 +1,11 @@
 package com.example.infra.controller;
 
+import com.example.infra.dto.BigQueryOptimizationDto;
 import com.example.infra.dto.DirectAiMetricsDto;
 import com.example.infra.dto.EndpointServingMetricsDto;
 import com.example.infra.dto.VertexAiMetricsDto;
 import com.example.infra.dto.VertexEndpointMetricsDto;
+import com.example.infra.service.BigQueryOptimizationService;
 import com.example.infra.service.GcpVertexAiMetricsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +17,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * GCP 클라우드 지표 및 Direct AI Usage & Endpoint Serving 듀얼 AI 관제 컨트롤러 API
+ * GCP 클라우드 지표 및 Direct AI Usage & Endpoint Serving & BigQuery 성능 최적화 관제 컨트롤러 API
  */
 @Slf4j
 @RestController
@@ -25,6 +27,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class GcpMetricsController {
 
     private final GcpVertexAiMetricsService gcpVertexAiMetricsService;
+    private final BigQueryOptimizationService bigQueryOptimizationService;
+
+    /**
+     * GCP BigQuery 성능 및 비용 최적화 관제 메트릭 조회 (트렌드, 고비용 TOP 10, 슬롯/장기실행 TOP 10)
+     */
+    @GetMapping("/bigquery-optimization")
+    public ResponseEntity<BigQueryOptimizationDto> getBigQueryOptimizationMetrics(
+            @RequestParam(required = false) String projectId,
+            @RequestParam(required = false) String targetYearMonth) {
+        log.info("[API] Requesting GCP BigQuery Optimization metrics for target projectId: {}, targetYearMonth: {}", projectId, targetYearMonth);
+        BigQueryOptimizationDto metrics = bigQueryOptimizationService.getBigQueryOptimizationMetrics(projectId, targetYearMonth);
+        return ResponseEntity.ok(metrics);
+    }
 
     /**
      * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 조회

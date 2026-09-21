@@ -202,6 +202,46 @@ export interface EndpointServingMetricsDto {
 export const getEndpointServingMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>
     axios.get<EndpointServingMetricsDto>(`${API_BASE_URL}/metrics/gcp/endpoint-serving`, { params: { projectId, targetYearMonth, period } });
 
+// 3. BigQuery Optimization (BigQuery 성능 및 비용 최적화 분석) Metrics
+export interface BigQueryJobItemDto {
+    rank: number;
+    createdDate: string;
+    jobId: string;
+    userEmail: string;
+    statementType: string;
+    query: string;
+    bytesProcessedGb: number;
+    estimatedCostUsd: number;
+    totalSlotMs: number;
+    executionTimeSeconds: number;
+    executionDurationFormatted: string;
+    jobAverageSlots: number;
+}
+
+export interface BigQueryOptimizationDto {
+    projectId?: string;
+    customerName?: string;
+    targetYearMonth?: string;
+    dates: string[];
+    dataProcessedTbTrend: number[];
+    jobCountTrend: number[];
+    currentMonthProcessedTb: number;
+    currentMonthJobCount: number;
+    totalLogicalStorageGb: number;
+    totalPhysicalStorageGb: number;
+    totalPhysicalStorageTb: number;
+    highCostQueries: BigQueryJobItemDto[];
+    maxSlotUsage: number;
+    minSlotUsage: number;
+    avgSlotUsage: number;
+    slotHealthStatus: string;
+    longDurationQueries: BigQueryJobItemDto[];
+    lastUpdated: string;
+}
+
+export const getBigQueryOptimizationMetrics = (projectId?: string, targetYearMonth?: string) =>
+    axios.get<BigQueryOptimizationDto>(`${API_BASE_URL}/metrics/gcp/bigquery-optimization`, { params: { projectId, targetYearMonth } });
+
 // Legacy Aliases for Backward Compatibility
 export type VertexAiMetricsDto = DirectAiMetricsDto;
 export const getVertexAiMetrics = getDirectAiMetrics;

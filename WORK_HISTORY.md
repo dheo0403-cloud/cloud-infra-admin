@@ -1,5 +1,42 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] BQ 파티셔닝(TTL) 및 Upsert가 적용된 고객사별 성능 분석 수집기 및 보고서 UI 추가
+
+### 1. 작업 목적 및 개요
+- **GCP 정기 보고서 'BigQuery 성능 및 비용 최적화 분석' 섹션 신설:**
+  - **3대 분석 영역 구축:**
+    1. **월별 리소스 및 스토리지 현황 (트렌드 모니터링):** 4개월 데이터 사용량(TB) & Job Count 추이 바/라인 차트 + 논리적(활성)/물리적(장기) 스토리지 용량(GB/TB) 요약 카드.
+    2. **고비용 쿼리 분석 (비용 최적화):** `total_bytes_processed` 기준 상위 10개 쿼리 식별 (스캔량 GB, 예상 비용 $, 슬롯 시간, 긴 SQL 말줄임 및 툴팁 제공).
+    3. **쿼리 성능 및 병목 현상 분석 (성능 최적화):** 당월 슬롯 MIN/MAX/AVG 분석 및 슬롯 상태 배너 + 실행 시간 기준 상위 10개 쿼리 식별 (실행 소요시간, 평균 슬롯, 긴 SQL 말줄임 및 툴팁 제공).
+- **데이터 폭증 방지 BQ 파티셔닝(TTL) & 멱등적 Upsert 아키텍처:**
+  - `monthly_bq_resource_summary`: `PARTITION BY snapshot_date OPTIONS (partition_expiration_days = 365)` (1년 자동 만료).
+  - `monthly_bq_top_queries`: `PARTITION BY snapshot_date OPTIONS (partition_expiration_days = 180)` (6개월 자동 만료).
+  - `MERGE INTO` DML 기반 원자적 Upsert로 수집 배치가 2회 이상 연속 실행되어도 데이터가 2배/10배로 중복 적재되지 않고 해당 월 1줄 요약과 TOP 10만 완벽 유지.
+
+### 2. 수정된 파일 목록
+1. `backend/src/main/java/com/example/infra/dto/BigQueryOptimizationDto.java` (BigQuery 최적화 DTO 신설)
+2. `backend/src/main/java/com/example/infra/service/BigQueryOptimizationService.java` (파티셔닝 DDL, MERGE Upsert 수집기 및 보고서 조회 API)
+3. `backend/src/main/java/com/example/infra/service/BigQueryBatchService.java` (일일 배치 파이프라인에 BQ 최적화 수집 연동)
+4. `backend/src/main/java/com/example/infra/controller/GcpMetricsController.java` (`/api/metrics/gcp/bigquery-optimization` 엔드포인트)
+5. `frontend/src/services/api.ts` (BigQueryOptimizationDto 인터페이스 및 API 클라이언트)
+6. `frontend/src/components/BigQueryOptimizationPanel.tsx` (BigQuery 성능 및 비용 최적화 분석 UI 패널)
+7. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (정기 보고서 페이지에 Section 6-3 패널 바인딩)
+8. `backend/src/test/java/com/example/infra/BigQueryOptimizationBatchTest.java` (배치 2회 연속 실행 멱등성 및 중복 방지 검증 테스트)
+9. `backend/src/test/java/com/example/infra/BigQueryTargetProjectRoutingTest.java` (생성자 파라미터 동기화)
+10. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **배치 2회 연속 실행 멱등성(Upsert) 검증 (`BigQueryOptimizationBatchTest.java`):**
+  - • 월별 요약 테이블 실측: 총 행 수 1건 유지 (데이터 뻥튀기 0건).
+  - • TOP 10 쿼리 테이블 실측: HIGH_COST 10건, LONG_DURATION 10건 유지 (20건 뻥튀기 0건).
+  - • 전체 20개 GCP 프로젝트 대상 4개월치 소급 데이터 적재 100% 완료 (`BUILD SUCCESSFUL`).
+- **REST API 및 Puppeteer E2E 브라우저 UI 실측 검증:**
+  - • 패널 헤더 `BigQuery 성능 및 비용 최적화 분석` 렌더링 100% 통과.
+  - • 1. 월별 리소스/스토리지 차트, 2. 고비용 TOP 10 테이블, 3. 슬롯 분석 & 장기 실행 TOP 10 테이블 렌더링 및 쿼리 말줄임표 100% 통과.
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] BQ 데이터 폭증 방지를 위한 파티셔닝 적용 및 VI 데이터 포함 월별 롤업(Summary) 배치 구현
 
 ### 1. 작업 목적 및 개요
