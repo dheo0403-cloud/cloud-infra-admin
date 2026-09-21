@@ -2259,7 +2259,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         });
 
                         return (
-                            <div className="report-card" style={{ marginTop: '20px', marginBottom: 0 }}>
+                            <div className={`report-card ${activeCommitments.length === 0 ? 'print-hide-empty' : ''}`} style={{ marginTop: '20px', marginBottom: 0 }}>
                                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span><i className="fas fa-tags mr-2" style={{ color: '#2563eb' }}></i>확정 사용 할인 (CUD) 약정 현황 (Committed Use Discounts)</span>
                                     <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af', backgroundColor: '#dbeafe', padding: '2px 10px', borderRadius: '12px', border: '1px solid #bfdbfe' }}>

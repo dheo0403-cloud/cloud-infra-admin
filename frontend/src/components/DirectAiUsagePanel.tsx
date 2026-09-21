@@ -72,6 +72,10 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
 
     const isDirectAiEmpty = !hasData || (Number(data.totalTokens || 0) === 0 && Number(data.totalPretrainedApiCalls || 0) === 0 && Number(data.trainingNodeHours || 0) === 0);
 
+    const displayDates: string[] = (data.dates && data.dates.length > 0)
+        ? data.dates
+        : ['26.06', '26.07', '26.08', '26.09'];
+
     return (
         <div className={isDirectAiEmpty ? "print-hide-empty" : ""} style={{ marginBottom: 0 }}>
             <div className="report-card" style={{ marginBottom: 0, borderTop: '4px solid #2563eb' }}>
@@ -79,7 +83,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ display: 'flex', alignItems: 'center' }}>
                         <i className="fas fa-brain mr-2" style={{ color: '#2563eb' }}></i>
-                        AI 서비스 직접 사용 (Direct AI Usage) 관제
+                        Direct AI Usage (AI 서비스 직접 사용)
                     </span>
                     <div>
                         {hasData && !isDirectAiEmpty ? (
@@ -140,91 +144,80 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
 
                 {/* 2-Column Split Body */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '16px' }}>
-                    {/* Left: Token & API Usage Trend Chart */}
-                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
-                                <i className="fas fa-chart-bar mr-1" style={{ color: '#2563eb' }}></i>월별 토큰 및 Pre-trained API 호출 트렌드 (최근 4개월)
+                    {/* Left: Token & API Usage Trend Chart (Aligned with Cloud SQL Standard Chart Style) */}
+                    <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>
+                                <i className="fas fa-chart-bar mr-1.5" style={{ color: '#2563eb' }}></i>월별 토큰 및 Pre-trained API 호출 트렌드 (최근 4개월)
                             </span>
-                            <div style={{ display: 'flex', gap: '10px', fontSize: '9px', fontWeight: 600 }}>
-                                <span style={{ display: 'flex', alignItems: 'center' }}>
-                                    <span style={{ width: '8px', height: '8px', backgroundColor: '#3b82f6', borderRadius: '2px', marginRight: '4px' }}></span>
-                                    Input 토큰
-                                </span>
-                                <span style={{ display: 'flex', alignItems: 'center' }}>
-                                    <span style={{ width: '8px', height: '8px', backgroundColor: '#10b981', borderRadius: '2px', marginRight: '4px' }}></span>
-                                    Output 토큰
-                                </span>
-                            </div>
                         </div>
 
-                        {hasData && data.dates.length > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'flex-end', height: '140px', gap: '16px', paddingBottom: '20px', position: 'relative' }}>
-                                {data.dates.map((date, idx) => {
+                        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '115px' }}>
+                            {/* Bar Area with standard dashed bottom grid line */}
+                            <div style={{ display: 'flex', flexGrow: 1, minHeight: '65px', alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                                {displayDates.map((date, idx) => {
                                     const inTok = Number(data.inputTokensTrend?.[idx] || 0);
                                     const outTok = Number(data.outputTokensTrend?.[idx] || 0);
-                                    const inHeight = inTok > 0 ? Math.max((inTok / maxTokenValue) * 100, 8) : 0;
-                                    const outHeight = outTok > 0 ? Math.max((outTok / maxTokenValue) * 100, 8) : 0;
+                                    const inHeight = inTok > 0 ? Math.max((inTok / maxTokenValue) * 100, 12) : 0;
+                                    const outHeight = outTok > 0 ? Math.max((outTok / maxTokenValue) * 100, 12) : 0;
 
                                     return (
-                                        <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                            <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', width: '100%', height: '100%', justifyContent: 'center' }}>
-                                                {/* Input Token Bar */}
-                                                <div style={{ width: '22px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative' }}>
-                                                    {inTok > 0 && (
-                                                        <span style={{
-                                                            fontSize: '8px',
-                                                            fontWeight: 700,
-                                                            color: '#1d4ed8',
-                                                            marginBottom: '2px',
-                                                            whiteSpace: 'nowrap',
-                                                            lineHeight: 1
-                                                        }}>
-                                                            {(inTok / 1000000).toFixed(1)}M
-                                                        </span>
-                                                    )}
-                                                    <div style={{
-                                                        width: '100%',
-                                                        height: `${inHeight}%`,
-                                                        backgroundColor: inHeight > 0 ? '#3b82f6' : 'transparent',
-                                                        borderRadius: '3px 3px 0 0',
-                                                        transition: 'height 0.3s'
-                                                    }}></div>
-                                                </div>
-
-                                                {/* Output Token Bar */}
-                                                <div style={{ width: '22px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', position: 'relative' }}>
-                                                    {outTok > 0 && (
-                                                        <span style={{
-                                                            fontSize: '8px',
-                                                            fontWeight: 700,
-                                                            color: '#047857',
-                                                            marginBottom: '2px',
-                                                            whiteSpace: 'nowrap',
-                                                            lineHeight: 1
-                                                        }}>
-                                                            {(outTok / 1000000).toFixed(1)}M
-                                                        </span>
-                                                    )}
-                                                    <div style={{
-                                                        width: '100%',
-                                                        height: `${outHeight}%`,
-                                                        backgroundColor: outHeight > 0 ? '#10b981' : 'transparent',
-                                                        borderRadius: '3px 3px 0 0',
-                                                        transition: 'height 0.3s'
-                                                    }}></div>
-                                                </div>
+                                        <div key={idx} style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', justifyContent: 'center', flex: 1, height: '100%' }}>
+                                            {/* Input Token Bar */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                                                {inTok > 0 && (
+                                                    <span style={{ fontSize: '8px', fontWeight: 700, color: '#2563eb', marginBottom: '1px', lineHeight: 1 }}>
+                                                        {(inTok / 1000000).toFixed(1)}M
+                                                    </span>
+                                                )}
+                                                <div style={{
+                                                    width: '12px',
+                                                    height: `${inHeight}%`,
+                                                    backgroundColor: inHeight > 0 ? '#3b82f6' : 'transparent',
+                                                    borderRadius: '3px 3px 0 0'
+                                                }}></div>
                                             </div>
-                                            <span style={{ fontSize: '10px', color: '#475569', marginTop: '6px', fontWeight: 700 }}>{date}</span>
+
+                                            {/* Output Token Bar */}
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                                                {outTok > 0 && (
+                                                    <span style={{ fontSize: '8px', fontWeight: 700, color: '#059669', marginBottom: '1px', lineHeight: 1 }}>
+                                                        {(outTok / 1000000).toFixed(1)}M
+                                                    </span>
+                                                )}
+                                                <div style={{
+                                                    width: '12px',
+                                                    height: `${outHeight}%`,
+                                                    backgroundColor: outHeight > 0 ? '#10b981' : 'transparent',
+                                                    borderRadius: '3px 3px 0 0'
+                                                }}></div>
+                                            </div>
                                         </div>
                                     );
                                 })}
                             </div>
-                        ) : (
-                            <div style={{ height: '140px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '11px' }}>
-                                조회 기간 내 Direct AI 토큰 호출 기록이 없습니다.
+
+                            {/* X-axis Date Labels */}
+                            <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                                {displayDates.map((m, idx) => (
+                                    <span key={idx} style={{ flex: 1, textAlign: 'center', fontWeight: idx === displayDates.length - 1 ? 700 : 400, color: idx === displayDates.length - 1 ? '#2563eb' : '#64748b' }}>
+                                        {m}
+                                    </span>
+                                ))}
                             </div>
-                        )}
+
+                            {/* Standard Bottom-Center Legend matching Cloud SQL / PD style */}
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', fontSize: '11px', marginTop: '6px' }}>
+                                <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                    <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#3b82f6', marginRight: '4px' }}></span>
+                                    Input 토큰
+                                </span>
+                                <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                    <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#10b981', marginRight: '4px' }}></span>
+                                    Output 토큰
+                                </span>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Right: AI Workload Breakdown & Quota */}

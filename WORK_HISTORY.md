@@ -1,5 +1,31 @@
 # 작업 이력 (WORK_HISTORY.md)
 
+## [2026-09-21] 신규 AI 토큰 차트 UI를 기존 표준 차트 디자인 시스템에 맞춰 통일화 & CUD 빈 카드 인쇄 숨김
+
+### 1. 작업 목적 및 개요
+- **AI 토큰 및 API 호출 트렌드 차트 UI 표준화 (`DirectAiUsagePanel.tsx`):**
+  - 신규 차트의 상단 우측 범례를 폐기하고, 기존 표준 레퍼런스('Cloud SQL 수량', 'Persistent Disk')와 동일하게 **하단 중앙(Bottom Center)** 에 배치(`display: flex, justifyContent: center, gap: 14px`).
+  - 차트 하단에 표준 점선 그리드(`border-bottom: 1px dashed #e2e8f0`) 및 X축 연월 행 분리 배치를 적용하여 이질감 완전 해소.
+  - 데이터 결측 시에도 4개월 기본 슬롯 및 축 기준선이 안정적으로 표출되도록 `displayDates` 폴백 보장.
+- **AI 관제 패널 헤더 명칭 변경:**
+  - `AI 서비스 직접 사용 (Direct AI Usage) 관제` → `Direct AI Usage (AI 서비스 직접 사용)`으로 직관적 변경.
+- **CUD 약정 0건 시 PDF/인쇄 출력 제외 (`GcpMonthlyReportViewPage.tsx`):**
+  - 활성 CUD 데이터가 0건(`activeCommitments.length === 0`)인 경우, `.report-card`에 `print-hide-empty` 클래스를 부여하여 웹 화면에서는 안내 문구를 유지하되 PDF 인쇄/저장 시에는 완전히 숨겨지도록 최적화.
+
+### 2. 수정된 파일 목록
+1. `frontend/src/components/DirectAiUsagePanel.tsx` (차트 레이아웃, 하단 범례, 점선 기준선 및 타이틀 변경)
+2. `frontend/src/pages/GcpMonthlyReportViewPage.tsx` (CUD 빈 카드 print-hide-empty 바인딩)
+3. `WORK_HISTORY.md`
+
+### 3. 검증 결과
+- **Puppeteer E2E 브라우저 UI 실측 검증:** 
+  - ① 패널 타이틀 `Direct AI Usage (AI 서비스 직접 사용)` 변경 100% 확인.
+  - ② 하단 점선 베이스라인 그리드 및 `["Input 토큰", "Output 토큰"]` 하단 중앙 범례 동기화 확인.
+  - ③ 일반 화면 모드 `display: block` → 인쇄 모드 `display: none` (PDF 인쇄 시 0건 CUD 카드 완벽 숨김 통과).
+- **통합 빌드 및 패키징:** `./gradlew clean bootJar` 및 `npm run build` 100% 성공.
+
+---
+
 ## [2026-09-21] CUD 약정 현황 컴포넌트 레이아웃 이탈(페이지 변경) 버그 수정 및 만료 데이터 숨김 처리
 
 ### 1. 작업 목적 및 개요
