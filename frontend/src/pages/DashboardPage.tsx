@@ -33,7 +33,7 @@ const DashboardPage: React.FC = () => {
         fetchData();
     }, []);
 
-    // Calculate metrics
+    // 지표 계산
     const totalCustomers = customers.length;
     let gcpEnvCount = 0;
     let azureEnvCount = 0;
@@ -52,114 +52,206 @@ const DashboardPage: React.FC = () => {
     const azurePercent = totalEnvs > 0 ? Math.round((azureEnvCount / totalEnvs) * 100) : 0;
     const upcomingCount = upcomingReservations.length;
 
-    // Helper to calculate D-Day
-    const getDDay = (expiryDateStr: string) => {
-        if (!expiryDateStr) return { text: '-', class: 'badge-secondary' };
+    // D-Day 계산 헬퍼 함수
+    const getDDayInfo = (expiryDateStr: string) => {
+        if (!expiryDateStr) return { text: '-', class: 'badge-secondary', days: 999 };
         const expiry = new Date(expiryDateStr);
         const today = new Date();
         const diffTime = expiry.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-        if (diffDays < 0) return { text: `만료됨 (${Math.abs(diffDays)}일 전)`, class: 'badge-bd-pink' };
-        if (diffDays <= 7) return { text: `D-${diffDays}`, class: 'badge-bd-warning font-weight-bold' };
-        if (diffDays <= 30) return { text: `D-${diffDays}`, class: 'badge-bd-warning' };
-        return { text: `D-${diffDays}`, class: 'badge-bd-teal' };
+        if (diffDays < 0) {
+            return { text: `만료됨 (${Math.abs(diffDays)}일 전)`, class: 'badge-bd-pink font-weight-bold', days: diffDays };
+        }
+        if (diffDays <= 7) {
+            return { text: `D-${diffDays}`, class: 'badge-danger font-weight-bold', days: diffDays };
+        }
+        if (diffDays <= 30) {
+            return { text: `D-${diffDays}`, class: 'badge-bd-warning font-weight-bold', days: diffDays };
+        }
+        return { text: `D-${diffDays}`, class: 'badge-bd-teal font-weight-bold', days: diffDays };
     };
 
+    // 긴급 만료 건수 집계 (D-7 이내, D-30 이내)
+    let urgent7DaysCount = 0;
+    let warning30DaysCount = 0;
+
+    upcomingReservations.forEach(res => {
+        const info = getDDayInfo(res.expiryDate);
+        if (info.days <= 7) urgent7DaysCount++;
+        else if (info.days <= 30) warning30DaysCount++;
+    });
+
+    // SVG 링 게이지 계산
+    const radius = 38;
+    const circumference = 2 * Math.PI * radius;
+    const gcpOffset = circumference - (circumference * gcpPercent) / 100;
+
     return (
-        <div className="container-fluid">
-            {/* Top Page Header */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h5 className="card-category m-0" style={{ letterSpacing: '1px' }}>MegazoneCloud Operations</h5>
-                    <h2 className="text-white font-weight-300 m-0" style={{ fontFamily: 'Poppins, sans-serif' }}>
-                        <i className="fas fa-atom text-primary mr-2"></i>Cloud Infra Admin Dashboard
-                    </h2>
-                </div>
-                <div>
-                    <Link to="/management/register" className="btn btn-blue">
-                        <i className="fas fa-plus mr-2"></i>신규 고객사 및 환경 등록
-                    </Link>
-                </div>
-            </div>
-
-            {/* 1. Black Dashboard React Signature Big Summary Chart Card */}
-            <div className="card mb-4">
-                <div className="card-header border-0 d-flex flex-wrap justify-content-between align-items-center">
+        <div className="container-fluid px-0">
+            {/* 1. System Overview: Multi-Cloud Interactive Visualizer Card */}
+            <div className="card mb-4" style={{ background: 'linear-gradient(145deg, #27293d 0%, #1e1e2f 100%)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                <div className="card-header border-0 d-flex flex-wrap justify-content-between align-items-center pb-2">
                     <div>
-                        <h5 className="card-category">System Overview</h5>
-                        <h3 className="card-title text-white font-weight-300">
-                            <i className="fas fa-chart-line text-info mr-2"></i>
-                            {activeSummaryTab === 'ALL' && '전체 클라우드 인프라 자원 통합 현황'}
-                            {activeSummaryTab === 'GCP' && 'GCP (Google Cloud) 프로젝트 및 자원 점검 현황'}
-                            {activeSummaryTab === 'AZURE' && 'Azure 구독 및 자원 점검 현황'}
-                        </h3>
+                        <div className="d-flex align-items-center">
+                            <span className="badge badge-bd-blue px-2 py-1 mr-2" style={{ fontSize: '0.7rem' }}>Overview</span>
+                            <h3 className="card-title text-white font-weight-400 m-0" style={{ fontSize: '1.25rem' }}>
+                                <i className="fas fa-layer-group text-primary mr-2"></i>
+                                {activeSummaryTab === 'ALL' && '전체 클라우드 인프라 자원 통합 현황'}
+                                {activeSummaryTab === 'GCP' && 'GCP (Google Cloud) 프로젝트 및 자원 점검 현황'}
+                                {activeSummaryTab === 'AZURE' && 'Azure 구독 및 자원 점검 현황'}
+                            </h3>
+                        </div>
+                        <p className="text-muted small mt-1 mb-0">멀티 클라우드 환경의 실시간 프로젝트 분포 및 인프라 상태를 모니터링합니다.</p>
                     </div>
-                    <div className="btn-group btn-group-toggle mt-2 mt-sm-0" data-toggle="buttons">
-                        <button 
-                            className={`btn btn-sm ${activeSummaryTab === 'ALL' ? 'btn-blue' : 'btn-outline-secondary text-light'}`}
-                            onClick={() => setActiveSummaryTab('ALL')}
-                        >
-                            전체 요약
-                        </button>
-                        <button 
-                            className={`btn btn-sm ${activeSummaryTab === 'GCP' ? 'btn-blue' : 'btn-outline-secondary text-light'}`}
-                            onClick={() => setActiveSummaryTab('GCP')}
-                        >
-                            GCP ({gcpEnvCount})
-                        </button>
-                        <button 
-                            className={`btn btn-sm ${activeSummaryTab === 'AZURE' ? 'btn-blue' : 'btn-outline-secondary text-light'}`}
-                            onClick={() => setActiveSummaryTab('AZURE')}
-                        >
-                            Azure ({azureEnvCount})
-                        </button>
+                    <div className="d-flex align-items-center mt-3 mt-md-0">
+                        {/* Tab Toggle Buttons */}
+                        <div className="btn-group btn-group-toggle mr-3">
+                            <button
+                                className={`btn btn-sm ${activeSummaryTab === 'ALL' ? 'btn-blue' : 'btn-outline-secondary text-light'}`}
+                                onClick={() => setActiveSummaryTab('ALL')}
+                                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                            >
+                                전체 요약
+                            </button>
+                            <button
+                                className={`btn btn-sm ${activeSummaryTab === 'GCP' ? 'btn-blue' : 'btn-outline-secondary text-light'}`}
+                                onClick={() => setActiveSummaryTab('GCP')}
+                                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                            >
+                                GCP ({gcpEnvCount})
+                            </button>
+                            <button
+                                className={`btn btn-sm ${activeSummaryTab === 'AZURE' ? 'btn-blue' : 'btn-outline-secondary text-light'}`}
+                                onClick={() => setActiveSummaryTab('AZURE')}
+                                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                            >
+                                Azure ({azureEnvCount})
+                            </button>
+                        </div>
+                        {/* New Customer / Env Registration Action Button */}
+                        <Link to="/management/register" className="btn btn-blue btn-sm" style={{ padding: '6px 14px', fontSize: '0.8rem' }}>
+                            <i className="fas fa-plus mr-1"></i>고객사 및 환경 등록
+                        </Link>
                     </div>
                 </div>
-                <div className="card-body">
+
+                <div className="card-body pt-3">
                     <div className="row align-items-center">
-                        <div className="col-md-8 mb-3 mb-md-0">
-                            <div className="d-flex justify-content-between mb-2 small font-weight-600">
-                                <span><i className="fab fa-google text-danger mr-1"></i>GCP 인프라 ({gcpEnvCount}개 환경 / {gcpPercent}%)</span>
-                                <span><i className="fab fa-microsoft text-info mr-1"></i>Azure 인프라 ({azureEnvCount}개 환경 / {azurePercent}%)</span>
-                            </div>
-                            <div className="progress" style={{ height: '18px', backgroundColor: '#1d1e2c', borderRadius: '0.2857rem' }}>
-                                <div 
-                                    className="progress-bar" 
-                                    role="progressbar" 
-                                    style={{ width: `${gcpPercent}%`, background: 'linear-gradient(90deg, #1d8cf8, #00f2c3)' }}
-                                >
-                                    {gcpPercent > 0 ? `${gcpPercent}%` : ''}
+                        {/* Left: SVG Ring Gauge & Multi-Cloud Stats */}
+                        <div className="col-lg-8 col-md-7 mb-3 mb-md-0">
+                            <div className="d-flex flex-wrap align-items-center">
+                                {/* SVG Ring Gauge Visualizer */}
+                                <div className="position-relative d-flex align-items-center justify-content-center mr-4 my-2" style={{ width: '96px', height: '96px' }}>
+                                    <svg width="96" height="96" viewBox="0 0 96 96" className="transform -rotate-90" style={{ transform: 'rotate(-90deg)' }}>
+                                        <circle
+                                            cx="48"
+                                            cy="48"
+                                            r={radius}
+                                            stroke="rgba(29, 140, 248, 0.2)"
+                                            strokeWidth="9"
+                                            fill="transparent"
+                                        />
+                                        <circle
+                                            cx="48"
+                                            cy="48"
+                                            r={radius}
+                                            stroke="#00f2c3"
+                                            strokeWidth="9"
+                                            strokeDasharray={circumference}
+                                            strokeDashoffset={gcpOffset}
+                                            strokeLinecap="round"
+                                            fill="transparent"
+                                            style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                                        />
+                                    </svg>
+                                    <div className="position-absolute text-center" style={{ pointerEvents: 'none' }}>
+                                        <div className="text-white font-weight-bold" style={{ fontSize: '1.05rem', lineHeight: 1.1 }}>{totalEnvs}</div>
+                                        <div className="text-muted" style={{ fontSize: '0.65rem' }}>Environments</div>
+                                    </div>
                                 </div>
-                                <div 
-                                    className="progress-bar" 
-                                    role="progressbar" 
-                                    style={{ width: `${azurePercent}%`, background: 'linear-gradient(90deg, #3358f4, #1d8cf8)' }}
-                                >
-                                    {azurePercent > 0 ? `${azurePercent}%` : ''}
+
+                                {/* Progress Bars & CSP Details */}
+                                <div className="flex-grow-1" style={{ minWidth: '220px' }}>
+                                    <div className="d-flex justify-content-between align-items-center mb-2 small font-weight-600">
+                                        <span className="d-flex align-items-center">
+                                            <i className="fab fa-google text-teal mr-2" style={{ color: '#00f2c3' }}></i>
+                                            <span className="text-white">GCP 인프라</span>
+                                            <span className="badge badge-bd-teal ml-2">{gcpEnvCount}개 프로젝트 ({gcpPercent}%)</span>
+                                        </span>
+                                        <span className="d-flex align-items-center">
+                                            <i className="fab fa-microsoft text-info mr-2" style={{ color: '#1d8cf8' }}></i>
+                                            <span className="text-white">Azure 인프라</span>
+                                            <span className="badge badge-bd-azure ml-2">{azureEnvCount}개 구독 ({azurePercent}%)</span>
+                                        </span>
+                                    </div>
+
+                                    {/* Multi-Segment Gradient Bar */}
+                                    <div className="progress" style={{ height: '14px', backgroundColor: '#1d1e2c', borderRadius: '10px', overflow: 'hidden' }}>
+                                        <div
+                                            className="progress-bar"
+                                            role="progressbar"
+                                            style={{
+                                                width: `${gcpPercent}%`,
+                                                background: 'linear-gradient(90deg, #00f2c3, #00d2d3)',
+                                                boxShadow: '0 0 10px rgba(0, 242, 195, 0.4)'
+                                            }}
+                                            title={`GCP: ${gcpPercent}%`}
+                                        >
+                                            {gcpPercent > 15 ? `${gcpPercent}%` : ''}
+                                        </div>
+                                        <div
+                                            className="progress-bar"
+                                            role="progressbar"
+                                            style={{
+                                                width: `${azurePercent}%`,
+                                                background: 'linear-gradient(90deg, #1d8cf8, #3358f4)',
+                                                boxShadow: '0 0 10px rgba(29, 140, 248, 0.4)'
+                                            }}
+                                            title={`Azure: ${azurePercent}%`}
+                                        >
+                                            {azurePercent > 15 ? `${azurePercent}%` : ''}
+                                        </div>
+                                    </div>
+
+                                    <div className="d-flex justify-content-between text-muted small mt-2">
+                                        <span><i className="fas fa-circle mr-1" style={{ color: '#00f2c3', fontSize: '0.6rem' }}></i>Google Cloud Platform</span>
+                                        <span><i className="fas fa-circle mr-1" style={{ color: '#1d8cf8', fontSize: '0.6rem' }}></i>Microsoft Azure</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div className="col-md-4 text-md-right border-left border-secondary pl-md-4">
-                            <div className="card-category">실시간 상태</div>
-                            <div className="d-flex align-items-center justify-content-md-end mt-1">
-                                <i className="fas fa-check-circle text-success fa-lg mr-2"></i>
-                                <span className="text-white font-weight-bold">배치 엔진 및 수집 API 정상 가동</span>
+
+                        {/* Right: Engine Status & Synchronization Info */}
+                        <div className="col-lg-4 col-md-5 text-md-right border-left border-secondary pl-md-4">
+                            <div className="card-category text-muted" style={{ letterSpacing: '1px' }}>시스템 실시간 상태</div>
+                            <div className="d-flex align-items-center justify-content-md-end mt-2">
+                                <span className="badge badge-success px-2 py-1 mr-2" style={{ backgroundColor: 'rgba(0, 242, 195, 0.15)', color: '#00f2c3', border: '1px solid rgba(0, 242, 195, 0.3)' }}>
+                                    <i className="fas fa-heartbeat mr-1"></i>Healthy
+                                </span>
+                                <span className="text-white font-weight-bold" style={{ fontSize: '0.92rem' }}>배치 엔진 & 수집 API 정상 가동</span>
                             </div>
-                            <small className="text-muted d-block mt-1">마지막 동기화: {new Date().toLocaleDateString('ko-KR')} 최신</small>
+                            <div className="text-muted small mt-2">
+                                <i className="fas fa-sync-alt fa-spin mr-1" style={{ animationDuration: '4s' }}></i>
+                                마지막 동기화: <span className="text-light">{new Date().toLocaleDateString('ko-KR')}</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 2. 4 Color-coded Stat Cards (Black Dashboard Style) */}
+            {/* 2. 4 Color-coded High-Impact Stat Cards */}
             <div className="row">
+                {/* Total Customers Card */}
                 <div className="col-lg-3 col-md-6 col-sm-6 mb-4">
-                    <div className="card p-3 h-100">
+                    <div className="card p-3 h-100" style={{ borderLeft: '3px solid #1d8cf8' }}>
                         <div className="d-flex justify-content-between align-items-center">
                             <div>
                                 <div className="card-category">Total Customers</div>
-                                <h2 className="text-white font-weight-600 m-0">{loading ? '...' : totalCustomers}</h2>
+                                <h2 className="text-white font-weight-600 m-0" style={{ fontSize: '1.8rem' }}>
+                                    {loading ? '...' : totalCustomers}
+                                    <span className="small font-weight-normal text-muted ml-1" style={{ fontSize: '0.9rem' }}>개사</span>
+                                </h2>
                             </div>
                             <div className="p-3 rounded" style={{ background: 'rgba(29, 140, 248, 0.15)', color: '#1d8cf8' }}>
                                 <i className="fas fa-building fa-2x"></i>
@@ -169,17 +261,21 @@ const DashboardPage: React.FC = () => {
                             <Link to="/management" className="text-decoration-none small font-weight-600" style={{ color: '#1d8cf8' }}>
                                 고객사 관리 <i className="fas fa-arrow-right ml-1"></i>
                             </Link>
-                            <span className="badge badge-bd-blue">Active</span>
+                            <span className="badge badge-bd-blue">Active Managed</span>
                         </div>
                     </div>
                 </div>
 
+                {/* GCP Projects Card */}
                 <div className="col-lg-3 col-md-6 col-sm-6 mb-4">
-                    <div className="card p-3 h-100">
+                    <div className="card p-3 h-100" style={{ borderLeft: '3px solid #00f2c3' }}>
                         <div className="d-flex justify-content-between align-items-center">
                             <div>
                                 <div className="card-category">GCP Projects</div>
-                                <h2 className="text-white font-weight-600 m-0">{loading ? '...' : gcpEnvCount}</h2>
+                                <h2 className="text-white font-weight-600 m-0" style={{ fontSize: '1.8rem' }}>
+                                    {loading ? '...' : gcpEnvCount}
+                                    <span className="small font-weight-normal text-muted ml-1" style={{ fontSize: '0.9rem' }}>개 프로젝트</span>
+                                </h2>
                             </div>
                             <div className="p-3 rounded" style={{ background: 'rgba(0, 242, 195, 0.15)', color: '#00f2c3' }}>
                                 <i className="fab fa-google fa-2x"></i>
@@ -189,19 +285,23 @@ const DashboardPage: React.FC = () => {
                             <Link to="/gcp-report" className="text-decoration-none small font-weight-600" style={{ color: '#00f2c3' }}>
                                 점검 및 보고서 <i className="fas fa-arrow-right ml-1"></i>
                             </Link>
-                            <span className="badge badge-bd-teal">Google Cloud</span>
+                            <span className="badge badge-bd-teal">{gcpPercent}% 점유율</span>
                         </div>
                     </div>
                 </div>
 
+                {/* Azure Subscriptions Card */}
                 <div className="col-lg-3 col-md-6 col-sm-6 mb-4">
-                    <div className="card p-3 h-100">
+                    <div className="card p-3 h-100" style={{ borderLeft: '3px solid #3358f4' }}>
                         <div className="d-flex justify-content-between align-items-center">
                             <div>
                                 <div className="card-category">Azure Subscriptions</div>
-                                <h2 className="text-white font-weight-600 m-0">{loading ? '...' : azureEnvCount}</h2>
+                                <h2 className="text-white font-weight-600 m-0" style={{ fontSize: '1.8rem' }}>
+                                    {loading ? '...' : azureEnvCount}
+                                    <span className="small font-weight-normal text-muted ml-1" style={{ fontSize: '0.9rem' }}>개 구독</span>
+                                </h2>
                             </div>
-                            <div className="p-3 rounded" style={{ background: 'rgba(29, 140, 248, 0.15)', color: '#1d8cf8' }}>
+                            <div className="p-3 rounded" style={{ background: 'rgba(51, 88, 244, 0.15)', color: '#3358f4' }}>
                                 <i className="fab fa-microsoft fa-2x"></i>
                             </div>
                         </div>
@@ -209,17 +309,21 @@ const DashboardPage: React.FC = () => {
                             <Link to="/azure-report" className="text-decoration-none small font-weight-600" style={{ color: '#1d8cf8' }}>
                                 점검 및 보고서 <i className="fas fa-arrow-right ml-1"></i>
                             </Link>
-                            <span className="badge badge-bd-blue">Azure Cloud</span>
+                            <span className="badge badge-bd-azure">{azurePercent}% 점유율</span>
                         </div>
                     </div>
                 </div>
 
+                {/* Expiring Reservations Card (CUD / RI) */}
                 <div className="col-lg-3 col-md-6 col-sm-6 mb-4">
-                    <div className="card p-3 h-100">
+                    <div className="card p-3 h-100" style={{ borderLeft: '3px solid #ff3860' }}>
                         <div className="d-flex justify-content-between align-items-center">
                             <div>
                                 <div className="card-category">Expiring Reservations</div>
-                                <h2 className="text-white font-weight-600 m-0">{loading ? '...' : upcomingCount}</h2>
+                                <h2 className="text-white font-weight-600 m-0" style={{ fontSize: '1.8rem' }}>
+                                    {loading ? '...' : upcomingCount}
+                                    <span className="small font-weight-normal text-muted ml-1" style={{ fontSize: '0.9rem' }}>건</span>
+                                </h2>
                             </div>
                             <div className="p-3 rounded" style={{ background: 'rgba(255, 56, 96, 0.15)', color: '#ff3860' }}>
                                 <i className="fas fa-exclamation-triangle fa-2x"></i>
@@ -229,21 +333,34 @@ const DashboardPage: React.FC = () => {
                             <Link to="/reservations" className="text-decoration-none small font-weight-600" style={{ color: '#ff3860' }}>
                                 CUD/RI 예약 관리 <i className="fas fa-arrow-right ml-1"></i>
                             </Link>
-                            <span className="badge badge-danger font-weight-bold" style={{ backgroundColor: '#ff3860', color: '#ffffff' }}>100일 미만</span>
+                            <div>
+                                {urgent7DaysCount > 0 ? (
+                                    <span className="badge badge-danger mr-1" style={{ backgroundColor: '#ff3860' }}>
+                                        🚨 7일내 {urgent7DaysCount}건
+                                    </span>
+                                ) : null}
+                                {warning30DaysCount > 0 ? (
+                                    <span className="badge badge-warning" style={{ backgroundColor: '#ff8d72', color: '#1e1e2f' }}>
+                                        ⚠️ 30일내 {warning30DaysCount}건
+                                    </span>
+                                ) : (
+                                    <span className="badge badge-bd-teal">안정</span>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* 3. Bottom 3 Grid Cards */}
+            {/* 3. Bottom 3-Column Intelligent Grid */}
             <div className="row">
-                {/* Left Card: Customer Overview */}
+                {/* Left Card: Customer Overview (Top 5) */}
                 <div className="col-lg-4 mb-4">
                     <div className="card h-100">
                         <div className="card-header d-flex justify-content-between align-items-center">
                             <div>
                                 <h5 className="card-category">Management</h5>
-                                <h4 className="card-title"><i className="fas fa-users text-info mr-2"></i>등록 고객사</h4>
+                                <h4 className="card-title text-white"><i className="fas fa-users text-info mr-2"></i>등록 고객사</h4>
                             </div>
                             <Link to="/management" className="btn btn-sm btn-outline-secondary text-light">전체보기</Link>
                         </div>
@@ -270,11 +387,15 @@ const DashboardPage: React.FC = () => {
                                                     <td><strong className="text-white">{cust.name}</strong></td>
                                                     <td><span style={{ color: '#cbd5e1' }}>{cust.contactPerson || '-'}</span></td>
                                                     <td>
-                                                        {cust.environments && cust.environments.map((env, idx) => (
-                                                            <span key={idx} className={`badge ${env.providerType === 'GCP' ? 'badge-bd-gcp' : 'badge-bd-azure'} mr-1`}>
-                                                                {env.providerType}
-                                                            </span>
-                                                        ))}
+                                                        {cust.environments && cust.environments.length > 0 ? (
+                                                            cust.environments.map((env, idx) => (
+                                                                <span key={idx} className={`badge ${env.providerType === 'GCP' ? 'badge-bd-gcp' : 'badge-bd-azure'} mr-1`}>
+                                                                    {env.providerType}
+                                                                </span>
+                                                            ))
+                                                        ) : (
+                                                            <span className="text-muted small">-</span>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -291,27 +412,43 @@ const DashboardPage: React.FC = () => {
                     <div className="card h-100">
                         <div className="card-header">
                             <h5 className="card-category">Quick Tasks</h5>
-                            <h4 className="card-title"><i className="fas fa-bolt text-warning mr-2"></i>자동화 작업 수행</h4>
+                            <h4 className="card-title text-white"><i className="fas fa-bolt text-warning mr-2"></i>자동화 작업 수행</h4>
                         </div>
-                        <div className="card-body d-flex flex-column justify-content-between">
-                            <div className="mb-3">
-                                <div className="p-3 mb-3 rounded" style={{ background: '#1d1e2c', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <div className="d-flex align-items-center mb-2">
+                        <div className="card-body d-flex flex-column justify-content-between p-3">
+                            {/* Task 1: GCP Monthly Report */}
+                            <div className="p-3 mb-2 rounded" style={{ background: '#1d1e2c', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div className="d-flex align-items-center justify-content-between mb-1">
+                                    <div className="d-flex align-items-center">
                                         <i className="fab fa-google text-danger fa-lg mr-2"></i>
-                                        <strong className="text-white">GCP 인프라 월간 보고서</strong>
+                                        <strong className="text-white" style={{ fontSize: '0.9rem' }}>GCP 인프라 월간 보고서</strong>
                                     </div>
-                                    <p className="text-muted small mb-2">GCP VM, 디스크, DB 및 네트워크 점검 결과를 PPTX로 자동 생성합니다.</p>
-                                    <Link to="/gcp-report" className="btn btn-blue btn-sm btn-block">보고서 생성</Link>
+                                    <Link to="/gcp-report" className="btn btn-blue btn-sm" style={{ padding: '3px 10px', fontSize: '0.75rem' }}>바로가기</Link>
                                 </div>
+                                <p className="text-muted small mb-0">VM, Direct AI & 서빙 엔드포인트 지표를 웹/PDF 보고서로 생성합니다.</p>
+                            </div>
 
-                                <div className="p-3 rounded" style={{ background: '#1d1e2c', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <div className="d-flex align-items-center mb-2">
+                            {/* Task 2: Azure Checklist */}
+                            <div className="p-3 mb-2 rounded" style={{ background: '#1d1e2c', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div className="d-flex align-items-center justify-content-between mb-1">
+                                    <div className="d-flex align-items-center">
                                         <i className="fab fa-microsoft text-info fa-lg mr-2"></i>
-                                        <strong className="text-white">Azure 온보딩 점검표</strong>
+                                        <strong className="text-white" style={{ fontSize: '0.9rem' }}>Azure 온보딩 점검표</strong>
                                     </div>
-                                    <p className="text-muted small mb-2">Azure 구독 내 VM 인스턴스, 보안 및 자원 점검표를 생성합니다.</p>
-                                    <Link to="/azure-checklist" className="btn btn-blue btn-sm btn-block">점검표 생성</Link>
+                                    <Link to="/azure-checklist" className="btn btn-blue btn-sm" style={{ padding: '3px 10px', fontSize: '0.75rem' }}>바로가기</Link>
                                 </div>
+                                <p className="text-muted small mb-0">Azure 구독 내 VM 인스턴스, 보안 및 자원 점검표를 생성합니다.</p>
+                            </div>
+
+                            {/* Task 3: CUD / RI Reservation Manager */}
+                            <div className="p-3 rounded" style={{ background: '#1d1e2c', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                <div className="d-flex align-items-center justify-content-between mb-1">
+                                    <div className="d-flex align-items-center">
+                                        <i className="fas fa-calendar-alt text-warning fa-lg mr-2"></i>
+                                        <strong className="text-white" style={{ fontSize: '0.9rem' }}>CUD / RI 예약 관리</strong>
+                                    </div>
+                                    <Link to="/reservations" className="btn btn-blue btn-sm" style={{ padding: '3px 10px', fontSize: '0.75rem' }}>바로가기</Link>
+                                </div>
+                                <p className="text-muted small mb-0">약정 만료 임박 모니터링 및 신규 약정 예약을 등록·관리합니다.</p>
                             </div>
                         </div>
                     </div>
@@ -323,7 +460,7 @@ const DashboardPage: React.FC = () => {
                         <div className="card-header d-flex justify-content-between align-items-center">
                             <div>
                                 <h5 className="card-category">Notifications</h5>
-                                <h4 className="card-title"><i className="fas fa-clock text-warning mr-2"></i>만료 예정 예약</h4>
+                                <h4 className="card-title text-white"><i className="fas fa-clock text-warning mr-2"></i>만료 예정 예약</h4>
                             </div>
                             <Link to="/reservations" className="btn btn-sm btn-outline-secondary text-light">전체보기</Link>
                         </div>
@@ -333,7 +470,7 @@ const DashboardPage: React.FC = () => {
                                     <i className="fas fa-spinner fa-spin mr-2"></i>조회 중...
                                 </div>
                             ) : upcomingReservations.length === 0 ? (
-                                <div className="text-center py-4 text-muted small">
+                                <div className="text-center py-5 text-muted small">
                                     <i className="fas fa-check-circle text-success mr-1"></i>만료 예정인 예약이 없습니다.
                                 </div>
                             ) : (
@@ -348,11 +485,11 @@ const DashboardPage: React.FC = () => {
                                         </thead>
                                         <tbody>
                                             {upcomingReservations.slice(0, 5).map((res, i) => {
-                                                const dday = getDDay(res.expiryDate);
+                                                const dday = getDDayInfo(res.expiryDate);
                                                 return (
                                                     <tr key={i}>
                                                         <td><strong className="text-white">{res.customerName}</strong></td>
-                                                        <td><strong className="text-white">{res.reservationName}</strong></td>
+                                                        <td><span className="text-light">{res.reservationName}</span></td>
                                                         <td>
                                                             <span className={`badge ${dday.class}`}>
                                                                 {dday.text}

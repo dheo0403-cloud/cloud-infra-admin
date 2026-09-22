@@ -59,21 +59,10 @@ const MainLayout: React.FC = () => {
       {/* Black Dashboard React Floating Sidebar */}
       <div className={`sidebar-wrapper-panel no-print ${isSidebarOpen ? '' : 'mini-sidebar'}`}>
         <div className="logo">
-          <Link to="/" className="logo-content" title="Black Dashboard Home">
+          <Link to="/" className="logo-content" title="Multi Cloud Home">
             <i className="fas fa-atom fa-lg mr-2" style={{ color: '#1d8cf8' }}></i>
-            <span className="logo-text">Black Dashboard</span>
+            <span className="logo-text">Multi Cloud</span>
           </Link>
-
-          {/* 사이드바 내부 인라인 접기 버튼 */}
-          <button
-            type="button"
-            className="sidebar-toggle-inline-btn"
-            onClick={toggleSidebar}
-            title="메뉴 접기 (사이드바 축소)"
-            aria-label="사이드바 축소"
-          >
-            <i className="fas fa-chevron-left"></i>
-          </button>
         </div>
 
         <ul className="nav">
@@ -154,7 +143,7 @@ const MainLayout: React.FC = () => {
             </button>
 
             <h4 className="text-white font-weight-300 m-0" style={{ letterSpacing: '0.5px' }}>
-              MegazoneCloud Infra Management
+              Cloud Infra Dashboard
             </h4>
           </div>
           <div className="d-flex align-items-center">
