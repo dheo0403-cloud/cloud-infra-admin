@@ -149,6 +149,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(false);
     const [refreshing, setRefreshing] = useState<boolean>(false);
     const [isEditMode, setIsEditMode] = useState<boolean>(false);
+    const [isBqSectionVisible, setIsBqSectionVisible] = useState<boolean>(true);
     const [reportDuration, setReportDuration] = useState<number | null>(null);
 
     // Editable text states
@@ -2371,13 +2372,43 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         />
                     </div>
 
-                    {/* Section 6-3: GCP BigQuery 성능 및 비용 최적화 분석 관제 */}
-                    <div>
-                        <BigQueryOptimizationPanel
-                            projectId={selectedProject || reportData?.projectId || ''}
-                            targetYearMonth={selectedYearMonth}
-                        />
-                    </div>
+                    {/* Section 6-3: GCP BigQuery 성능 및 비용 최적화 분석 관제 (편집 모드에서 UI 전용 숨김/복원 지원) */}
+                    {isBqSectionVisible ? (
+                        <div>
+                            <BigQueryOptimizationPanel
+                                projectId={selectedProject || reportData?.projectId || ''}
+                                targetYearMonth={selectedYearMonth}
+                                isEditMode={isEditMode}
+                                onHideSection={() => setIsBqSectionVisible(false)}
+                            />
+                        </div>
+                    ) : (
+                        isEditMode && (
+                            <div style={{
+                                marginTop: '16px',
+                                padding: '12px 16px',
+                                backgroundColor: '#f8fafc',
+                                border: '1px dashed #94a3b8',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                            }}>
+                                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
+                                    <i className="fas fa-eye-slash mr-2" style={{ color: '#94a3b8' }}></i>
+                                    [숨김 처리됨] BigQuery 성능 및 비용 최적화 분석 섹션 (PDF 및 화면 출력 제외)
+                                </span>
+                                <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-primary font-weight-bold"
+                                    style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px' }}
+                                    onClick={() => setIsBqSectionVisible(true)}
+                                >
+                                    <i className="fas fa-eye mr-1"></i>섹션 다시 표시 (복원)
+                                </button>
+                            </div>
+                        )
+                    )}
 
                     {/* Section 7: Work Status Table (Jira Integrated + Editable) */}
                     <div className="report-card" style={{ borderTop: '4px solid #0b4885', marginTop: '20px', marginBottom: 0 }}>
