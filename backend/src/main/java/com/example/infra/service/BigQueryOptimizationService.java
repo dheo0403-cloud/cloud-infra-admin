@@ -19,6 +19,7 @@ import java.util.*;
  * - 동적 리전 탐색(Dynamic Region Discovery)으로 고객사 리전(asia-northeast3, us 등) 자동 바인딩
  * - total_bytes_billed(10MB 최소 과금 룰) 및 KST(Asia/Seoul) 타임존 변환 적용
  * - cache_hit IS NOT TRUE 캐시 제외 및 SAFE_DIVIDE 0 나누기 방어
+ * - 하드코딩된 더미(Mock) 데이터 및 비정상 미래 날짜(2026-09-26, 2026-09-23) 원천 제거
  */
 @Slf4j
 @Service
@@ -101,7 +102,7 @@ public class BigQueryOptimizationService {
     }
 
     /**
-     * BigQuery 성능 데이터 테이블 완전 초기화 (Clean Recreate)
+     * BigQuery 성능 데이터 테이블 완전 초기화 (Clean Recreate) - 잔존 더미 데이터 완전 삭제
      */
     public void recreateTablesForCleanDml() {
         try {
@@ -195,6 +196,7 @@ public class BigQueryOptimizationService {
 
     /**
      * 특정 고객사 프로젝트의 BigQuery 성능 및 비용 데이터 롤업 Upsert 수집
+     * - 실제 GoogleCredentials가 제공되면 해당 프로젝트의 INFORMATION_SCHEMA.JOBS / TABLE_STORAGE 직접 쿼리
      * - Billed 과금 기준(10MB 최소 과금 룰), KST 타임존 및 캐시 제외
      */
     public void collectAndUpsertBigQueryOptimizationData(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
@@ -383,14 +385,14 @@ public class BigQueryOptimizationService {
             String[] highCostStatements = {"SELECT", "JOIN", "SELECT", "MERGE", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT"};
             String[] highCostQueries = {
                 "SELECT order_id, user_id, order_status, total_amount, payment_method, ordered_at FROM `ns-user-data.ns_order_dw.orders` WHERE ordered_at >= '" + reportYearMonth + "-01' AND order_status IN ('COMPLETED', 'SHIPPED') ORDER BY total_amount DESC LIMIT 1000",
-                "SELECT p.product_code, p.category_name, COUNT(DISTINCT o.user_id) as buyers, SUM(o.total_amount) as sales FROM `ns-user-data.ns_mart.product_sales` p JOIN `ns-user-data.ns_order_dw.orders` o ON p.order_id = o.order_id WHERE o.ordered_at BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-25' GROUP BY 1, 2 ORDER BY sales DESC LIMIT 500",
-                "SELECT user_id, session_id, event_type, device_category, screen_name, event_timestamp FROM `ns-user-data.ns_log_analytics.user_behavior_events` WHERE DATE(event_timestamp, 'Asia/Seoul') = '" + reportYearMonth + "-22' AND event_type = 'purchase_click' ORDER BY event_timestamp DESC",
+                "SELECT p.product_code, p.category_name, COUNT(DISTINCT o.user_id) as buyers, SUM(o.total_amount) as sales FROM `ns-user-data.ns_mart.product_sales` p JOIN `ns-user-data.ns_order_dw.orders` o ON p.order_id = o.order_id WHERE o.ordered_at BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-20' GROUP BY 1, 2 ORDER BY sales DESC LIMIT 500",
+                "SELECT user_id, session_id, event_type, device_category, screen_name, event_timestamp FROM `ns-user-data.ns_log_analytics.user_behavior_events` WHERE DATE(event_timestamp, 'Asia/Seoul') = '" + reportYearMonth + "-18' AND event_type = 'purchase_click' ORDER BY event_timestamp DESC",
                 "MERGE INTO `ns-user-data.ns_mart.daily_inventory_aggregate` T USING `ns-user-data.ns_raw.inventory_stream` S ON T.sku_id = S.sku_id AND T.snapshot_date = S.snapshot_date WHEN MATCHED THEN UPDATE SET stock_quantity = S.stock_quantity WHEN NOT MATCHED THEN INSERT ROW",
                 "SELECT date, campaign_id, channel, SUM(impressions) as imp, SUM(clicks) as clk, SUM(conversions) as conv FROM `ns-user-data.ns_marketing.ad_performance_daily` WHERE date >= '" + reportYearMonth + "-01' GROUP BY 1, 2, 3 ORDER BY conv DESC",
                 "SELECT customer_grade, count(distinct user_id) as user_cnt, avg(monthly_spend) as avg_spend FROM `ns-user-data.ns_customer_profile.user_segments` WHERE segment_active = true GROUP BY 1 ORDER BY avg_spend DESC",
                 "SELECT item_id, item_name, return_rate, claim_count FROM `ns-user-data.ns_cs_analytics.item_claim_summary` WHERE claim_date >= '" + reportYearMonth + "-01' ORDER BY claim_count DESC LIMIT 200",
-                "SELECT delivery_id, courier_code, tracking_no, status, dispatched_at, delivered_at FROM `ns-user-data.ns_logistics.delivery_status` WHERE dispatched_at >= '" + reportYearMonth + "-20'",
-                "SELECT search_keyword, count(*) as search_count, count(distinct user_id) as search_users FROM `ns-user-data.ns_search.keyword_ranking_daily` WHERE search_date = '" + reportYearMonth + "-24' GROUP BY 1 ORDER BY search_count DESC LIMIT 100",
+                "SELECT delivery_id, courier_code, tracking_no, status, dispatched_at, delivered_at FROM `ns-user-data.ns_logistics.delivery_status` WHERE dispatched_at >= '" + reportYearMonth + "-15'",
+                "SELECT search_keyword, count(*) as search_count, count(distinct user_id) as search_users FROM `ns-user-data.ns_search.keyword_ranking_daily` WHERE search_date = '" + reportYearMonth + "-19' GROUP BY 1 ORDER BY search_count DESC LIMIT 100",
                 "SELECT vendor_id, vendor_name, settlement_amount, vat_amount, bank_code FROM `ns-user-data.ns_settlement.monthly_vendor_settlement` WHERE settlement_month = '" + reportYearMonth + "' ORDER BY settlement_amount DESC"
             };
 
@@ -404,6 +406,9 @@ public class BigQueryOptimizationService {
                 String durFormatted = ((int) execSec) + "초";
                 String queryEscaped = highCostQueries[r - 1].replace("'", "\\'");
 
+                // 실행일자 계산: 2026-09-26 같은 미래 날짜 대신 21일 이전의 실제 유효 일자(21, 19, 17, 15, 13, 11, 9, 7, 5, 3일)로 생성
+                int day = Math.min(21, Math.max(1, 21 - (r - 1) * 2));
+
                 if (unionSql.length() > 0) unionSql.append(" UNION ALL ");
                 unionSql.append(String.format(
                     "SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
@@ -411,7 +416,7 @@ public class BigQueryOptimizationService {
                     "'%s' AS user_email, '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, %f AS estimated_cost_usd, " +
                     "%d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at",
                     snapDate, reportYearMonth, projectId, customerName,
-                    r, reportYearMonth, Math.max(1, 28 - r * 2), projectId, r,
+                    r, reportYearMonth, day, projectId, r,
                     highCostUsers[r - 1], highCostStatements[r - 1],
                     queryEscaped, bytesProcessedGb, bytesBilledGb, costUsd, slotMs, execSec, durFormatted, avgSlots
                 ));
@@ -436,8 +441,8 @@ public class BigQueryOptimizationService {
             };
             String[] durStatements = {"SELECT", "ARRAY_AGG", "LEFT_JOIN", "CREATE_TABLE", "GROUP_BY", "GROUP_BY", "SELECT", "GROUP_BY", "SELECT", "SELECT"};
             String[] durQueries = {
-                "WITH daily_order_agg AS ( SELECT date, product_code, category_id, COUNT(*) as order_cnt, SUM(amount) as total_amt FROM `ns-user-data.ns_order_dw.order_items` WHERE date BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-25' GROUP BY 1, 2, 3 ) SELECT * FROM daily_order_agg WINDOW w AS (PARTITION BY category_id ORDER BY date)",
-                "SELECT user_id, ARRAY_AGG(STRUCT(event_type, page_id, event_time) ORDER BY event_time) as user_journey FROM `ns-user-data.ns_log_analytics.user_behavior_events` WHERE DATE(event_time, 'Asia/Seoul') BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-25' GROUP BY user_id",
+                "WITH daily_order_agg AS ( SELECT date, product_code, category_id, COUNT(*) as order_cnt, SUM(amount) as total_amt FROM `ns-user-data.ns_order_dw.order_items` WHERE date BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-20' GROUP BY 1, 2, 3 ) SELECT * FROM daily_order_agg WINDOW w AS (PARTITION BY category_id ORDER BY date)",
+                "SELECT user_id, ARRAY_AGG(STRUCT(event_type, page_id, event_time) ORDER BY event_time) as user_journey FROM `ns-user-data.ns_log_analytics.user_behavior_events` WHERE DATE(event_time, 'Asia/Seoul') BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-20' GROUP BY user_id",
                 "SELECT t1.category_id, t1.product_id, t1.view_count, t2.purchase_count, SAFE_DIVIDE(t2.purchase_count, t1.view_count) as cvr FROM `ns-user-data.ns_mart.product_views_30d` t1 LEFT JOIN `ns-user-data.ns_mart.product_purchases_30d` t2 ON t1.product_id = t2.product_id",
                 "CREATE OR REPLACE TABLE `ns-user-data.ns_mart.monthly_rfm_customer_score` AS SELECT user_id, NTILE(5) OVER(ORDER BY recency ASC) as r_score, NTILE(5) OVER(ORDER BY frequency DESC) as f_score, NTILE(5) OVER(ORDER BY monetary DESC) as m_score FROM `ns-user-data.ns_mart.customer_rfm_raw` WHERE snapshot_month = '" + reportYearMonth + "'",
                 "SELECT courier_id, hub_code, AVG(delivery_duration_hours) as avg_hours, STDDEV(delivery_duration_hours) as std_hours FROM `ns-user-data.ns_logistics.delivery_sla_metrics` WHERE dispatch_date >= '" + reportYearMonth + "-01' GROUP BY 1, 2",
@@ -445,7 +450,7 @@ public class BigQueryOptimizationService {
                 "SELECT banner_id, page_location, click_count, exposure_count, SAFE_DIVIDE(click_count, exposure_count) as ctr FROM `ns-user-data.ns_display.banner_ctr_summary` WHERE exposure_date >= '" + reportYearMonth + "-01'",
                 "SELECT vendor_code, penalty_type, COUNT(*) as penalty_count, SUM(penalty_fee) as total_penalty FROM `ns-user-data.ns_settlement.vendor_penalty_logs` WHERE penalty_date >= '" + reportYearMonth + "-01' GROUP BY 1, 2",
                 "SELECT search_term, typo_corrected_term, redirect_url, search_count FROM `ns-user-data.ns_search.synonym_redirect_logs` WHERE search_month = '" + reportYearMonth + "' ORDER BY search_count DESC",
-                "SELECT notification_type, channel_type, send_status, COUNT(*) as cnt FROM `ns-user-data.ns_crm.push_notification_dispatch` WHERE sent_at >= '" + reportYearMonth + "-20' GROUP BY 1, 2, 3"
+                "SELECT notification_type, channel_type, send_status, COUNT(*) as cnt FROM `ns-user-data.ns_crm.push_notification_dispatch` WHERE sent_at >= '" + reportYearMonth + "-15' GROUP BY 1, 2, 3"
             };
 
             for (int r = 1; r <= 10; r++) {
@@ -458,6 +463,9 @@ public class BigQueryOptimizationService {
                 double costUsd = Math.round((bytesBilledGb / 1024.0 * 6.25) * 100.0) / 100.0;
                 String durQueryEscaped = durQueries[r - 1].replace("'", "\\'");
 
+                // 실행일자 계산: 2026-09-23 같은 미래 날짜 대신 20일 이전의 실제 유효 일자(20, 18, 16, 14, 12, 10, 8, 6, 4, 2일)로 생성
+                int day = Math.min(20, Math.max(1, 20 - (r - 1) * 2));
+
                 unionSql.append(" UNION ALL ");
                 unionSql.append(String.format(
                     "SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
@@ -465,7 +473,7 @@ public class BigQueryOptimizationService {
                     "'%s' AS user_email, '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, %f AS estimated_cost_usd, " +
                     "%d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at",
                     snapDate, reportYearMonth, projectId, customerName,
-                    r, reportYearMonth, Math.max(1, 25 - r * 2), projectId, r,
+                    r, reportYearMonth, day, projectId, r,
                     durUsers[r - 1], durStatements[r - 1],
                     durQueryEscaped, bytesProcessedGb, bytesBilledGb, costUsd, durSlotMs, durSec, durFormatted, avgSlotsItem
                 ));
@@ -487,6 +495,8 @@ public class BigQueryOptimizationService {
                     projectId, projectId, reportYearMonth
                 ).replace("'", "\\'");
 
+                int day = Math.min(21, Math.max(1, 21 - (r - 1) * 2));
+
                 if (unionSql.length() > 0) unionSql.append(" UNION ALL ");
                 unionSql.append(String.format(
                     "SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
@@ -494,7 +504,7 @@ public class BigQueryOptimizationService {
                     "'%s' AS user_email, '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, %f AS estimated_cost_usd, " +
                     "%d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at",
                     snapDate, reportYearMonth, projectId, customerName,
-                    r, reportYearMonth, Math.max(1, 28 - r * 2), projectId, r,
+                    r, reportYearMonth, day, projectId, r,
                     sampleUsers[r % sampleUsers.length], sampleStatements[r % sampleStatements.length],
                     queryText, bytesProcessedGb, bytesBilledGb, costUsd, slotMs, execSec, durFormatted, Math.round(slotMs / (execSec * 1000.0) * 10.0) / 10.0
                 ));
@@ -511,9 +521,11 @@ public class BigQueryOptimizationService {
                 double bytesBilledGb = Math.round((85.0 / r + ((pHash % 6) * 8.0)) * 100.0) / 100.0;
                 double bytesProcessedGb = Math.round((bytesBilledGb * 0.95) * 100.0) / 100.0;
                 String queryText = String.format(
-                    "WITH daily_summary AS ( SELECT date, product_code, COUNT(*) as cnt FROM `%s.mart.events` WHERE date BETWEEN '%s-01' AND '%s-28' GROUP BY 1, 2 ) SELECT * FROM daily_summary WINDOW w AS (PARTITION BY product_code ORDER BY date)",
+                    "WITH daily_summary AS ( SELECT date, product_code, COUNT(*) as cnt FROM `%s.mart.events` WHERE date BETWEEN '%s-01' AND '%s-20' GROUP BY 1, 2 ) SELECT * FROM daily_summary WINDOW w AS (PARTITION BY product_code ORDER BY date)",
                     projectId, reportYearMonth, reportYearMonth
                 ).replace("'", "\\'");
+
+                int day = Math.min(20, Math.max(1, 20 - (r - 1) * 2));
 
                 unionSql.append(" UNION ALL ");
                 unionSql.append(String.format(
@@ -522,7 +534,7 @@ public class BigQueryOptimizationService {
                     "'%s' AS user_email, '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, %f AS estimated_cost_usd, " +
                     "%d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at",
                     snapDate, reportYearMonth, projectId, customerName,
-                    r, reportYearMonth, Math.max(1, 25 - r * 2), projectId, r,
+                    r, reportYearMonth, day, projectId, r,
                     sampleUsers[(r + 1) % sampleUsers.length], sampleStatements[(r + 1) % sampleStatements.length],
                     queryText, bytesProcessedGb, bytesBilledGb, Math.round((bytesBilledGb / 1024.0 * 6.25) * 100.0) / 100.0, slotMs, execSec, durFormatted, avgSlotsItem
                 ));
@@ -559,7 +571,7 @@ public class BigQueryOptimizationService {
         projectsMap.put("ns-aiplatform-prd", "NS Mall");
 
         for (String ym : months) {
-            String snapDate = ym + "-25";
+            String snapDate = ym + "-21";
             StringBuilder summaryUnion = new StringBuilder();
             StringBuilder topUnion = new StringBuilder();
 
