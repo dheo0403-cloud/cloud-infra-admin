@@ -86,9 +86,15 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                 <i className="fas fa-eye-slash mr-1"></i>섹션 숨기기 (PDF 제외)
                             </button>
                         )}
-                        <span style={{ fontSize: '10.5px', color: '#10b981', fontWeight: 600, backgroundColor: '#ecfdf5', padding: '2px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
-                            <i className="fas fa-check-circle mr-1"></i>INFORMATION_SCHEMA 분석 활성
-                        </span>
+                        {hasData ? (
+                            <span style={{ fontSize: '10.5px', color: '#10b981', fontWeight: 600, backgroundColor: '#ecfdf5', padding: '2px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                                <i className="fas fa-check-circle mr-1"></i>INFORMATION_SCHEMA 분석 활성
+                            </span>
+                        ) : (
+                            <span style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 600, backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                <i className="fas fa-minus-circle mr-1"></i>분석 비활성 (데이터 없음)
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -103,7 +109,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                         </span>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '16px' }}>
-                            {/* Left: 4-Month Processed TB & Job Count Chart (Standardized Layout) */}
+                            {/* Left: 4-Month Processed TB & Job Count Chart (Standardized IAM Height 170px) */}
                             <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
@@ -114,9 +120,9 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                     </span>
                                 </div>
 
-                                {/* Bar Chart Area with Standard Fixed Width and Proportions */}
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '115px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, minHeight: '65px', alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                                {/* Bar Chart Area Standardized to IAM Height 170px */}
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {displayDates.map((dateStr, idx) => {
                                             const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
                                             const jcVal = data.jobCountTrend?.[idx] || 0;

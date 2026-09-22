@@ -90,11 +90,11 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                             <span style={{
                                 fontSize: '10px',
                                 fontWeight: 700,
-                                color: '#1e40af',
-                                backgroundColor: '#dbeafe',
+                                color: '#10b981',
+                                backgroundColor: '#ecfdf5',
                                 padding: '2px 8px',
-                                borderRadius: '4px',
-                                border: '1px solid #bfdbfe'
+                                borderRadius: '12px',
+                                border: '1px solid #a7f3d0'
                             }}>
                                 <i className="fas fa-check-circle mr-1"></i>Direct AI 서비스 활성
                             </span>
@@ -152,9 +152,10 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                             </span>
                         </div>
 
-                        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '115px' }}>
+                        {/* Bar Chart Area Standardized to IAM Height 170px */}
+                        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
                             {/* Bar Area with standard dashed bottom grid line */}
-                            <div style={{ display: 'flex', flexGrow: 1, minHeight: '65px', alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px' }}>
+                            <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                 {displayDates.map((date, idx) => {
                                     const inTok = Number(data.inputTokensTrend?.[idx] || 0);
                                     const outTok = Number(data.outputTokensTrend?.[idx] || 0);
