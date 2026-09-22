@@ -43,7 +43,7 @@ public class BigQueryOptimizationBatchTest {
 
         // 3. 월별 요약 테이블 검증 (정확히 1건 유지 여부)
         String countSummarySql = String.format(
-            "SELECT COUNT(*) AS total_rows, MAX(total_tb_processed) AS tb, MAX(job_count) AS jobs, " +
+            "SELECT COUNT(*) AS total_rows, MAX(total_tb_billed) AS tb_billed, MAX(total_tb_processed) AS tb, MAX(job_count) AS jobs, " +
             "       MAX(total_logical_gb) AS logical_gb, MAX(total_physical_gb) AS physical_gb " +
             "FROM `%s.%s.monthly_bq_resource_summary` " +
             "WHERE report_year_month = '%s' AND project_id = '%s'",
