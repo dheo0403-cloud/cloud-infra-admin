@@ -1334,8 +1334,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-server mr-2" style={{ color: '#2563eb' }}></i>Compute VM 수량</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {(reportData.vmTotalTrend || [0, 0, 0, (reportData.vmTotal || 0)]).map((val, idx) => {
                                             const maxV = Math.max(1, ...((reportData.vmTotalTrend || [1])));
                                             const hPct = Math.max(15, Math.round((val / maxV) * 100));
@@ -1475,8 +1475,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-project-diagram mr-2" style={{ color: '#0284c7' }}></i>VPC Network & Subnet 수량</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {(reportData.months || get4MonthsArray(selectedYearMonth)).map((_, idx) => {
                                             const netVal = (reportData.vpcTrend && reportData.vpcTrend.length > idx) ? reportData.vpcTrend[idx] : 0;
                                             const subVal = (reportData.vpcSubnetTrend && reportData.vpcSubnetTrend.length > idx) ? reportData.vpcSubnetTrend[idx] : 0;
@@ -1585,8 +1585,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-network-wired mr-2" style={{ color: '#0d9488' }}></i>Load Balancing 수량</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {((reportData.lbTrend && reportData.lbTrend.length > 0) ? reportData.lbTrend : [(reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0)]).map((val, idx) => {
                                             const maxV = Math.max(1, ...((reportData.lbTrend && reportData.lbTrend.length > 0) ? reportData.lbTrend : [(reportData.lbTotal || 1)]));
                                             const hPct = Math.max(15, Math.round((val / maxV) * 100));
@@ -1724,8 +1724,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 수량</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {((reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [(reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0)]).map((val, idx) => {
                                             const maxV = Math.max(1, ...((reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [1]));
                                             const hPct = Math.max(15, Math.round((val / maxV) * 100));
@@ -1802,8 +1802,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-bolt mr-2" style={{ color: '#d97706' }}></i>Cloud Run 서비스 수량</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {((reportData.serverlessTrend && reportData.serverlessTrend.length > 0) ? reportData.serverlessTrend : [(reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0)]).map((val, idx) => {
                                             const maxV = Math.max(1, ...((reportData.serverlessTrend && reportData.serverlessTrend.length > 0) ? reportData.serverlessTrend : [1]));
                                             const hPct = Math.max(15, Math.round((val / maxV) * 100));
@@ -1964,8 +1964,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-hdd mr-2" style={{ color: '#d97706' }}></i>Persistent Disk (블록 스토리지)</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {(reportData.months || get4MonthsArray(selectedYearMonth)).map((_, idx) => {
                                             const dVal = (reportData.diskTrend && reportData.diskTrend.length > idx) ? reportData.diskTrend[idx] : 0;
                                             const sVal = (reportData.snapshotTrend && reportData.snapshotTrend.length > idx) ? reportData.snapshotTrend[idx] : 0;
@@ -2102,8 +2102,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 <div className="report-card-title">
                                     <span><i className="fas fa-database mr-2" style={{ color: '#059669' }}></i>Cloud SQL 수량</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                             {((reportData.sqlTotalTrend && reportData.sqlTotalTrend.length > 0) ? reportData.sqlTotalTrend : [(reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0)]).map((val, idx) => {
                                                 const maxV = Math.max(1, ...((reportData.sqlTotalTrend && reportData.sqlTotalTrend.length > 0) ? reportData.sqlTotalTrend : [(reportData.sqlTotal || 1)]));
                                                 const hPct = Math.max(15, Math.round((val / maxV) * 100));

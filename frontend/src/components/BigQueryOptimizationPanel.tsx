@@ -121,8 +121,8 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                 </div>
 
                                 {/* Bar Chart Area Standardized to IAM Height 170px */}
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                         {displayDates.map((dateStr, idx) => {
                                             const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
                                             const jcVal = data.jobCountTrend?.[idx] || 0;

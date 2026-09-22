@@ -153,9 +153,9 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                         </div>
 
                         {/* Bar Chart Area Standardized to IAM Height 170px */}
-                        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '170px' }}>
+                        <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                             {/* Bar Area with standard dashed bottom grid line */}
-                            <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
                                 {displayDates.map((date, idx) => {
                                     const inTok = Number(data.inputTokensTrend?.[idx] || 0);
                                     const outTok = Number(data.outputTokensTrend?.[idx] || 0);
