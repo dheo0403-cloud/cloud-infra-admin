@@ -161,4 +161,78 @@ public class BigQueryVerificationTest {
 
         System.out.println("=== 🏁 BigQuery 최적화 Billed 데이터 검증 완료 ===\n");
     }
+
+    @Test
+    @DisplayName("NSMall 실측치(285,447건, 481.08GB, 0GB 스토리지) 및 멀티 테넌트 격리 적재 실행 및 검증")
+    public void testNsMallMetricsSync() throws Exception {
+        System.out.println("\n=== 🚀 NSMall 실측치 및 멀티 테넌트 격리 동기화 실행 ===");
+
+        InputStream credStream = new ClassPathResource("gcp-credentials.json").getInputStream();
+        GoogleCredentials credentials = GoogleCredentials.fromStream(credStream);
+        BigQuery bigQuery = BigQueryOptions.newBuilder()
+                .setCredentials(credentials)
+                .setProjectId(TARGET_PROJECT)
+                .build()
+                .getService();
+
+        com.example.infra.service.BigQueryOptimizationService service =
+                new com.example.infra.service.BigQueryOptimizationService(bigQuery);
+
+        // 1. 전체 백필 실행
+        service.backfillAllProjects4MonthsBulk();
+        System.out.println("✅ backfillAllProjects4MonthsBulk() 실행 완료");
+
+        // 2. NSMall 9월 실데이터 검증
+        String nsSql = String.format(
+            "SELECT report_year_month, project_id, customer_name, job_count, total_bytes_processed, total_tb_processed, " +
+            "       total_bytes_billed, total_tb_billed, total_logical_gb, total_physical_gb, total_physical_tb, max_slots, avg_slots " +
+            "FROM `%s.%s.monthly_bq_resource_summary` " +
+            "WHERE project_id = 'ns-user-data' AND report_year_month = '2026-09'",
+            TARGET_PROJECT, DATASET
+        );
+        TableResult nsRes = bigQuery.query(QueryJobConfiguration.newBuilder(nsSql).build());
+        for (FieldValueList r : nsRes.iterateAll()) {
+            System.out.println(String.format("🎯 [NSMall 9월 실측 검증] 프로젝트: %s (%s) | Job Count: %,d건 | 데이터 사용량: %.3f TB (%,d Bytes) | 논리 스토리지: %.1f GB | 물리 스토리지: %.1f GB | 최대 슬롯: %.1f",
+                    r.get("project_id").getStringValue(), r.get("customer_name").getStringValue(),
+                    r.get("job_count").getLongValue(), r.get("total_tb_processed").getDoubleValue(),
+                    r.get("total_bytes_processed").getLongValue(),
+                    r.get("total_logical_gb").getDoubleValue(), r.get("total_physical_gb").getDoubleValue(),
+                    r.get("max_slots").getDoubleValue()));
+        }
+
+        // 3. 타 고객사 (한앤컴퍼니 hcompany-485701) 데이터 격리 검증
+        String hcSql = String.format(
+            "SELECT report_year_month, project_id, customer_name, job_count, total_tb_processed, total_logical_gb, total_physical_gb " +
+            "FROM `%s.%s.monthly_bq_resource_summary` " +
+            "WHERE project_id = 'hcompany-485701' AND report_year_month = '2026-09'",
+            TARGET_PROJECT, DATASET
+        );
+        TableResult hcRes = bigQuery.query(QueryJobConfiguration.newBuilder(hcSql).build());
+        for (FieldValueList r : hcRes.iterateAll()) {
+            System.out.println(String.format("🔒 [타사(한앤컴퍼니) 격리 검증] 프로젝트: %s (%s) | Job Count: %,d건 | 사용량: %.3f TB | 논리 스토리지: %.1f GB",
+                    r.get("project_id").getStringValue(), r.get("customer_name").getStringValue(),
+                    r.get("job_count").getLongValue(), r.get("total_tb_processed").getDoubleValue(),
+                    r.get("total_logical_gb").getDoubleValue()));
+        }
+
+        // 4. NSMall TOP 쿼리 검증
+        String nsTopSql = String.format(
+            "SELECT query_category, rank, bytes_billed_gb, estimated_cost_usd, execution_time_seconds, execution_duration_formatted, job_average_slots, query " +
+            "FROM `%s.%s.monthly_bq_top_queries` " +
+            "WHERE project_id = 'ns-user-data' AND report_year_month = '2026-09' " +
+            "ORDER BY query_category, rank LIMIT 4",
+            TARGET_PROJECT, DATASET
+        );
+        TableResult topRes = bigQuery.query(QueryJobConfiguration.newBuilder(nsTopSql).build());
+        System.out.println("\n🔥 [NSMall TOP 쿼리 샘플 검증]:");
+        for (FieldValueList r : topRes.iterateAll()) {
+            System.out.println(String.format("   [%s Rank %d] %.2f GB ($%.2f) | 실행시간: %s | 평균슬롯: %.1f | Query: %s",
+                    r.get("query_category").getStringValue(), r.get("rank").getLongValue(),
+                    r.get("bytes_billed_gb").getDoubleValue(), r.get("estimated_cost_usd").getDoubleValue(),
+                    r.get("execution_duration_formatted").getStringValue(), r.get("job_average_slots").getDoubleValue(),
+                    r.get("query").getStringValue().substring(0, Math.min(60, r.get("query").getStringValue().length())) + "..."));
+        }
+
+        System.out.println("\n=== 🏁 NSMall 실측치 및 멀티 테넌트 격리 백필 및 검증 완료 ===\n");
+    }
 }

@@ -150,4 +150,49 @@ public class BigQueryOptimizationBatchTest {
                 dto.getMaxSlotUsage(), dto.getAvgSlotUsage(), dto.getSlotHealthStatus()));
         System.out.println("🎉 [Zero-Data 무결성 검증] 스토리지 0.0GB / 슬롯 0 Slots 정상 반환 100% 확인 통과!");
     }
+
+    @Test
+    @DisplayName("NSMall(ns-user-data) 콘솔 실측치(285,447건, 481.08GB/0.470TB, 스토리지 0GB) 및 타 고객사 멀티 테넌트 데이터 격리 무결성 검증")
+    public void testNsMallMeasuredDataAndTenantIsolation() {
+        System.out.println("\n=== 🔍 [NSMall & 멀티 테넌트 데이터 격리 투명성 실측 검증] ===");
+
+        // 1. 전체 백필 실행
+        bigQueryOptimizationService.backfillAllProjects4MonthsBulk();
+
+        // 2. NSMall (ns-user-data, 2026-09) 실측치 검증
+        BigQueryOptimizationDto nsDto = bigQueryOptimizationService.getBigQueryOptimizationMetrics("ns-user-data", "2026-09");
+        assertNotNull(nsDto);
+        assertEquals("ns-user-data", nsDto.getProjectId());
+        assertEquals(285447L, nsDto.getCurrentMonthJobCount(), "NSMall 9월 Job Count는 콘솔 실측치인 285,447건이어야 합니다.");
+        assertEquals(0.470, nsDto.getCurrentMonthProcessedTb(), 0.005, "NSMall 9월 데이터 사용량은 481.08GB (0.470TB)여야 합니다.");
+        assertEquals(0.0, nsDto.getTotalLogicalStorageGb(), 0.001, "NSMall 논리 스토리지 용량은 0.0 GB여야 합니다.");
+        assertEquals(0.0, nsDto.getTotalPhysicalStorageGb(), 0.001, "NSMall 물리 스토리지 용량은 0.0 GB여야 합니다.");
+        assertEquals(0.0, nsDto.getTotalPhysicalStorageTb(), 0.001, "NSMall 물리 스토리지(TB) 용량은 0.0 TB여야 합니다.");
+        assertEquals(10, nsDto.getHighCostQueries().size(), "고비용 TOP 10 쿼리가 10건이어야 합니다.");
+        assertEquals(10, nsDto.getLongDurationQueries().size(), "장기실행 TOP 10 쿼리가 10건이어야 합니다.");
+
+        System.out.println(String.format("• [① NSMall 실측치 검증 통과] Project: %s | 9월 Job Count: %,d건 (기대: 285,447건) | 데이터 사용량: %.3f TB (481.08 GB) | 스토리지: %.1f GB (기대: 0.0 GB)",
+                nsDto.getProjectId(), nsDto.getCurrentMonthJobCount(), nsDto.getCurrentMonthProcessedTb(), nsDto.getTotalLogicalStorageGb()));
+
+        // 3. 타 고객사 (한앤컴퍼니 hcompany-485701) 데이터 격리 검증
+        BigQueryOptimizationDto hcDto = bigQueryOptimizationService.getBigQueryOptimizationMetrics("hcompany-485701", "2026-09");
+        assertNotNull(hcDto);
+        assertEquals("hcompany-485701", hcDto.getProjectId());
+        assertNotEquals(nsDto.getCurrentMonthJobCount(), hcDto.getCurrentMonthJobCount(), "타 고객사의 Job 수는 NSMall 데이터와 혼입되지 않아야 합니다.");
+        assertTrue(hcDto.getTotalLogicalStorageGb() > 0, "스토리지를 사용하는 타 고객사는 논리 스토리지가 정상 표출되어야 합니다.");
+
+        System.out.println(String.format("• [② 타 고객사(한앤컴퍼니) 격리 검증 통과] Project: %s | 9월 Job Count: %,d건 | 스토리지: %.1f GB (격리 유지)",
+                hcDto.getProjectId(), hcDto.getCurrentMonthJobCount(), hcDto.getTotalLogicalStorageGb()));
+
+        // 4. 타 고객사 (밸로프 infra-platform) 데이터 격리 검증
+        BigQueryOptimizationDto vlfDto = bigQueryOptimizationService.getBigQueryOptimizationMetrics("infra-platform", "2026-09");
+        assertNotNull(vlfDto);
+        assertEquals("infra-platform", vlfDto.getProjectId());
+        assertNotEquals(nsDto.getCurrentMonthJobCount(), vlfDto.getCurrentMonthJobCount());
+
+        System.out.println(String.format("• [③ 타 고객사(밸로프) 격리 검증 통과] Project: %s | 9월 Job Count: %,d건 | 스토리지: %.1f GB (격리 유지)",
+                vlfDto.getProjectId(), vlfDto.getCurrentMonthJobCount(), vlfDto.getTotalLogicalStorageGb()));
+
+        System.out.println("🎉 [멀티 테넌트 교차 검증 완료] NSMall 실측치 일치 및 타 고객사 데이터 격리 무결성 100% 확인!\n");
+    }
 }
