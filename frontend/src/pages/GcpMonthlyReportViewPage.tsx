@@ -1169,13 +1169,13 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="report-card" style={{ marginBottom: 0 }}>
+                        <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                             <div className="report-card-title">
                                 <span><i className="fas fa-users-cog mr-2" style={{ color: '#2563eb' }}></i>계정 및 키 보안 감사 지표</span>
                                 <i className="fas fa-lock" style={{ color: '#cbd5e1' }}></i>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '12px', padding: '8px 0 4px 0', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 'auto 0' }}>
                                 {/* Box 1: 90일 초과 미갱신 SA 키 — Compute VM Status '실행 중 vs 중지' 행과 동일 크기 */}
                                 <div style={{
                                     display: 'flex',
@@ -1184,11 +1184,11 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     width: '100%',
                                     backgroundColor: '#fef2f2',
                                     border: '1px solid #fecaca',
-                                    borderRadius: '10px',
-                                    padding: '10px 12px',
+                                    borderRadius: '8px',
+                                    padding: '8px 12px',
                                     position: 'relative'
                                 }}>
-                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#ef4444', borderRadius: '10px 0 0 10px' }}></div>
+                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#ef4444', borderRadius: '8px 0 0 8px' }}></div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
                                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ef4444', fontSize: '12px' }}>
                                             <i className="fas fa-key"></i>
@@ -1222,11 +1222,11 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     width: '100%',
                                     backgroundColor: '#fffbeb',
                                     border: '1px solid #fef3c7',
-                                    borderRadius: '10px',
-                                    padding: '10px 12px',
+                                    borderRadius: '8px',
+                                    padding: '8px 12px',
                                     position: 'relative'
                                 }}>
-                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#f59e0b', borderRadius: '10px 0 0 10px' }}></div>
+                                    <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: '#f59e0b', borderRadius: '8px 0 0 8px' }}></div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
                                         <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706', fontSize: '12px' }}>
                                             <i className="fas fa-user-shield"></i>
@@ -1329,40 +1329,36 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                                 {/* Row 1: Compute VM Split (Placed right between IAM and VPC Network) */}
                                 <div className={isVmEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                    {/* Left Box: Compute VM Trend Chart (Standardized IAM Height 170px) */}
-                                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                <div className="report-card-title">
-                                    <span><i className="fas fa-server mr-2" style={{ color: '#2563eb' }}></i>Compute VM 수량</span>
-                                </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {(reportData.vmTotalTrend || [0, 0, 0, (reportData.vmTotal || 0)]).map((val, idx) => {
-                                            const maxV = Math.max(1, ...((reportData.vmTotalTrend || [1])));
-                                            const hPct = Math.max(15, Math.round((val / maxV) * 100));
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                                                    {val > 0 ? (
-                                                        <>
-                                                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#2563eb', marginBottom: '2px' }}>{val}</span>
-                                                            <div style={{ width: '22px', height: `${hPct}%`, backgroundColor: '#3b82f6', borderRadius: '4px 4px 0 0' }}></div>
-                                                        </>
-                                                    ) : null}
-                                                </div>
-                                            );
-                                        })}
+                                    {/* Left Box: Compute VM Trend Chart (Standardized IAM Structure & Height 170px) */}
+                                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
+                                        <div className="report-card-title">
+                                            <span><i className="fas fa-server mr-2" style={{ color: '#2563eb' }}></i>Compute VM 수량</span>
+                                            <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
+                                        </div>
+                                        <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                            {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                                const trendArr = reportData.vmTotalTrend || [0, 0, 0, (reportData.vmTotal || 0)];
+                                                const val = trendArr[idx] || 0;
+                                                const maxV = Math.max(1, ...trendArr);
+                                                const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                                return (
+                                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                            <div style={{ width: '20px', backgroundColor: '#3b82f6', borderRadius: '4px 4px 0 0', height: `${hPct}%`, position: 'relative' }}>
+                                                                {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1e3a8a' }}>{val}</span>}
+                                                            </div>
+                                                        </div>
+                                                        <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                            <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6', marginRight: '5px' }}></span>Compute VM 수량
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                            <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                        ))}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'center', fontSize: '11px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6', marginRight: '5px' }}></span>Compute VM 수량
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
 
                             {/* Right Box: Compute VM Status (Matching IAM Card Design) */}
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
@@ -1471,58 +1467,41 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                         {/* Row 2: VPC Network */}
                         <div className={isVpcEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-project-diagram mr-2" style={{ color: '#0284c7' }}></i>VPC Network & Subnet 수량</span>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((_, idx) => {
-                                            const netVal = (reportData.vpcTrend && reportData.vpcTrend.length > idx) ? reportData.vpcTrend[idx] : 0;
-                                            const subVal = (reportData.vpcSubnetTrend && reportData.vpcSubnetTrend.length > idx) ? reportData.vpcSubnetTrend[idx] : 0;
-                                            
-                                            const maxV = Math.max(1, ...((reportData.vpcTrend || [1])), ...((reportData.vpcSubnetTrend || [1])));
-                                            const netPct = Math.max(12, Math.round((netVal / maxV) * 100));
-                                            const subPct = Math.max(12, Math.round((subVal / maxV) * 100));
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        const netVal = (reportData.vpcTrend && reportData.vpcTrend.length > idx) ? reportData.vpcTrend[idx] : 0;
+                                        const subVal = (reportData.vpcSubnetTrend && reportData.vpcSubnetTrend.length > idx) ? reportData.vpcSubnetTrend[idx] : 0;
+                                        const maxV = Math.max(1, ...((reportData.vpcTrend || [1])), ...((reportData.vpcSubnetTrend || [1])));
+                                        const netPct = netVal > 0 ? Math.max(12, Math.round((netVal / maxV) * 100)) : 0;
+                                        const subPct = subVal > 0 ? Math.max(12, Math.round((subVal / maxV) * 100)) : 0;
 
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', justifyContent: 'center', flex: 1, height: '100%' }}>
-                                                    {/* Network Bar */}
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                        {netVal > 0 ? (
-                                                            <>
-                                                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#3b82f6', marginBottom: '1px' }}>{netVal}</span>
-                                                                <div style={{ width: '12px', height: `${netPct}%`, backgroundColor: '#60a5fa', borderRadius: '3px 3px 0 0' }}></div>
-                                                            </>
-                                                        ) : null}
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '14px', backgroundColor: '#60a5fa', borderRadius: '3px 3px 0 0', height: `${netPct}%`, position: 'relative' }}>
+                                                        {netVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#2563eb' }}>{netVal}</span>}
                                                     </div>
-                                                    {/* Subnet Bar */}
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                        {subVal > 0 ? (
-                                                            <>
-                                                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#1d4ed8', marginBottom: '1px' }}>{subVal}</span>
-                                                                <div style={{ width: '12px', height: `${subPct}%`, backgroundColor: '#1d4ed8', borderRadius: '3px 3px 0 0' }}></div>
-                                                            </>
-                                                        ) : null}
+                                                    <div style={{ width: '14px', backgroundColor: '#1d4ed8', borderRadius: '3px 3px 0 0', height: `${subPct}%`, position: 'relative' }}>
+                                                        {subVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1d4ed8' }}>{subVal}</span>}
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                            <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                        ))}
-                                    </div>
-                                    {/* Bottom Legend */}
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#60a5fa', marginRight: '5px' }}></span>VPC Network
-                                        </span>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#1d4ed8', marginRight: '5px' }}></span>Subnet
-                                        </span>
-                                    </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#60a5fa', marginRight: '5px' }}></span>VPC Network
+                                    </span>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#1d4ed8', marginRight: '5px' }}></span>Subnet
+                                    </span>
                                 </div>
                             </div>
 
@@ -1581,37 +1560,33 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                         {/* Row 3: Load Balancing */}
                         <div className={isLbEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-network-wired mr-2" style={{ color: '#0d9488' }}></i>Load Balancing 수량</span>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {((reportData.lbTrend && reportData.lbTrend.length > 0) ? reportData.lbTrend : [(reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0)]).map((val, idx) => {
-                                            const maxV = Math.max(1, ...((reportData.lbTrend && reportData.lbTrend.length > 0) ? reportData.lbTrend : [(reportData.lbTotal || 1)]));
-                                            const hPct = Math.max(15, Math.round((val / maxV) * 100));
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                                                    {val > 0 ? (
-                                                        <>
-                                                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#059669', marginBottom: '2px' }}>{val}</span>
-                                                            <div style={{ width: '22px', height: `${hPct}%`, backgroundColor: '#10b981', borderRadius: '4px 4px 0 0' }}></div>
-                                                        </>
-                                                    ) : null}
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        const trendArr = (reportData.lbTrend && reportData.lbTrend.length > 0) ? reportData.lbTrend : [(reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0)];
+                                        const val = trendArr[idx] || 0;
+                                        const maxV = Math.max(1, ...trendArr);
+                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '20px', backgroundColor: '#10b981', borderRadius: '4px 4px 0 0', height: `${hPct}%`, position: 'relative' }}>
+                                                        {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#059669' }}>{val}</span>}
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                            <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                        ))}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'center', fontSize: '11px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>로드밸런서
-                                        </span>
-                                    </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>로드밸런서
+                                    </span>
                                 </div>
                             </div>
 
@@ -1720,37 +1695,33 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                         {/* Row 4: GKE Cluster */}
                         <div className={isGkeEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 수량</span>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {((reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [(reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0)]).map((val, idx) => {
-                                            const maxV = Math.max(1, ...((reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [1]));
-                                            const hPct = Math.max(15, Math.round((val / maxV) * 100));
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                                                    {val > 0 ? (
-                                                        <>
-                                                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#7c3aed', marginBottom: '2px' }}>{val}</span>
-                                                            <div style={{ width: '22px', height: `${hPct}%`, backgroundColor: '#7c3aed', borderRadius: '4px 4px 0 0' }}></div>
-                                                        </>
-                                                    ) : null}
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        const trendArr = (reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [(reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0)];
+                                        const val = trendArr[idx] || 0;
+                                        const maxV = Math.max(1, ...trendArr);
+                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '20px', backgroundColor: '#7c3aed', borderRadius: '4px 4px 0 0', height: `${hPct}%`, position: 'relative' }}>
+                                                        {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#7c3aed' }}>{val}</span>}
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                            <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                        ))}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'center', fontSize: '11px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#7c3aed', marginRight: '5px' }}></span>GKE 클러스터
-                                        </span>
-                                    </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#7c3aed', marginRight: '5px' }}></span>GKE 클러스터
+                                    </span>
                                 </div>
                             </div>
 
@@ -1798,37 +1769,33 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                         {/* Row 5: Cloud Run */}
                         <div className={isCloudRunEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-bolt mr-2" style={{ color: '#d97706' }}></i>Cloud Run 서비스 수량</span>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {((reportData.serverlessTrend && reportData.serverlessTrend.length > 0) ? reportData.serverlessTrend : [(reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0)]).map((val, idx) => {
-                                            const maxV = Math.max(1, ...((reportData.serverlessTrend && reportData.serverlessTrend.length > 0) ? reportData.serverlessTrend : [1]));
-                                            const hPct = Math.max(15, Math.round((val / maxV) * 100));
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                                                    {val > 0 ? (
-                                                        <>
-                                                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#d97706', marginBottom: '2px' }}>{val}</span>
-                                                            <div style={{ width: '22px', height: `${hPct}%`, backgroundColor: '#d97706', borderRadius: '4px 4px 0 0' }}></div>
-                                                        </>
-                                                    ) : null}
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        const trendArr = (reportData.serverlessTrend && reportData.serverlessTrend.length > 0) ? reportData.serverlessTrend : [(reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0)];
+                                        const val = trendArr[idx] || 0;
+                                        const maxV = Math.max(1, ...trendArr);
+                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '20px', backgroundColor: '#d97706', borderRadius: '4px 4px 0 0', height: `${hPct}%`, position: 'relative' }}>
+                                                        {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#b45309' }}>{val}</span>}
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                            <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                        ))}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'center', fontSize: '11px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#d97706', marginRight: '5px' }}></span>Cloud Run 서비스
-                                        </span>
-                                    </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#d97706', marginRight: '5px' }}></span>Cloud Run 서비스
+                                    </span>
                                 </div>
                             </div>
 
@@ -1960,57 +1927,41 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         {/* Row 6: Persistent Disk (Left) & Cloud VPN (Right) */}
                         <div className={isDiskVpnEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             {/* Left Box: Persistent Disk */}
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
-                                    <span><i className="fas fa-hdd mr-2" style={{ color: '#d97706' }}></i>Persistent Disk (블록 스토리지)</span>
+                                    <span><i className="fas fa-hdd mr-2" style={{ color: '#d97706' }}></i>Persistent Disk & 스냅샷 수량</span>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((_, idx) => {
-                                            const dVal = (reportData.diskTrend && reportData.diskTrend.length > idx) ? reportData.diskTrend[idx] : 0;
-                                            const sVal = (reportData.snapshotTrend && reportData.snapshotTrend.length > idx) ? reportData.snapshotTrend[idx] : 0;
-                                            
-                                            const maxV = Math.max(1, ...((reportData.diskTrend || [1])), ...((reportData.snapshotTrend || [1])));
-                                            const dPct = Math.max(12, Math.round((dVal / maxV) * 100));
-                                            const sPct = Math.max(12, Math.round((sVal / maxV) * 100));
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        const dVal = (reportData.diskTrend && reportData.diskTrend.length > idx) ? reportData.diskTrend[idx] : 0;
+                                        const sVal = (reportData.snapshotTrend && reportData.snapshotTrend.length > idx) ? reportData.snapshotTrend[idx] : 0;
+                                        const maxV = Math.max(1, ...((reportData.diskTrend || [1])), ...((reportData.snapshotTrend || [1])));
+                                        const dPct = dVal > 0 ? Math.max(12, Math.round((dVal / maxV) * 100)) : 0;
+                                        const sPct = sVal > 0 ? Math.max(12, Math.round((sVal / maxV) * 100)) : 0;
 
-                                            return (
-                                                <div key={idx} style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', justifyContent: 'center', flex: 1, height: '100%' }}>
-                                                    {/* Disk Bar */}
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                        {dVal > 0 ? (
-                                                            <>
-                                                                <span style={{ fontSize: '8px', fontWeight: 700, color: '#0891b2', marginBottom: '1px' }}>{dVal}</span>
-                                                                <div style={{ width: '12px', height: `${dPct}%`, backgroundColor: '#06b6d4', borderRadius: '3px 3px 0 0' }}></div>
-                                                            </>
-                                                        ) : null}
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '14px', backgroundColor: '#06b6d4', borderRadius: '3px 3px 0 0', height: `${dPct}%`, position: 'relative' }}>
+                                                        {dVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#0891b2' }}>{dVal}</span>}
                                                     </div>
-                                                    {/* Snapshot Bar */}
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                        {sVal > 0 ? (
-                                                            <>
-                                                                <span style={{ fontSize: '8px', fontWeight: 700, color: '#d97706', marginBottom: '1px' }}>{sVal}</span>
-                                                                <div style={{ width: '12px', height: `${sPct}%`, backgroundColor: '#f59e0b', borderRadius: '3px 3px 0 0' }}></div>
-                                                            </>
-                                                        ) : null}
+                                                    <div style={{ width: '14px', backgroundColor: '#f59e0b', borderRadius: '3px 3px 0 0', height: `${sPct}%`, position: 'relative' }}>
+                                                        {sVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#d97706' }}>{sVal}</span>}
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                            <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                        ))}
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', fontSize: '11px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#06b6d4', marginRight: '4px' }}></span>PD 수량
-                                        </span>
-                                        <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#f59e0b', marginRight: '4px' }}></span>스냅샷 수량
-                                        </span>
-                                    </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#06b6d4', marginRight: '5px' }}></span>PD 수량
+                                    </span>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#f59e0b', marginRight: '5px' }}></span>스냅샷 수량
+                                    </span>
                                 </div>
                             </div>
 
@@ -2098,39 +2049,35 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         {/* Row 7: Cloud SQL Split (2-Column Grid) */}
                         <div className={isSqlEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             {/* Left Box: Cloud SQL Trend Chart */}
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-database mr-2" style={{ color: '#059669' }}></i>Cloud SQL 수량</span>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                            {((reportData.sqlTotalTrend && reportData.sqlTotalTrend.length > 0) ? reportData.sqlTotalTrend : [(reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0)]).map((val, idx) => {
-                                                const maxV = Math.max(1, ...((reportData.sqlTotalTrend && reportData.sqlTotalTrend.length > 0) ? reportData.sqlTotalTrend : [(reportData.sqlTotal || 1)]));
-                                                const hPct = Math.max(15, Math.round((val / maxV) * 100));
-                                                return (
-                                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                                                        {val > 0 ? (
-                                                            <>
-                                                                <span style={{ fontSize: '9px', fontWeight: 700, color: '#4f46e5', marginBottom: '2px' }}>{val}</span>
-                                                                <div style={{ width: '22px', height: `${hPct}%`, backgroundColor: '#6366f1', borderRadius: '4px 4px 0 0' }}></div>
-                                                            </>
-                                                        ) : null}
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        const trendArr = (reportData.sqlTotalTrend && reportData.sqlTotalTrend.length > 0) ? reportData.sqlTotalTrend : [(reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0)];
+                                        const val = trendArr[idx] || 0;
+                                        const maxV = Math.max(1, ...trendArr);
+                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '20px', backgroundColor: '#6366f1', borderRadius: '4px 4px 0 0', height: `${hPct}%`, position: 'relative' }}>
+                                                        {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#4338ca' }}>{val}</span>}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                            {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => (
-                                                <span key={idx} style={{ flex: 1, textAlign: 'center' }}>{m}</span>
-                                            ))}
-                                        </div>
-                                        <div style={{ display: 'flex', justifyContent: 'center', fontSize: '11px', marginTop: '6px' }}>
-                                            <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#6366f1', marginRight: '5px' }}></span>Cloud SQL 인스턴스
-                                            </span>
-                                        </div>
-                                    </div>
+                                                </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#6366f1', marginRight: '5px' }}></span>Cloud SQL 인스턴스
+                                    </span>
+                                </div>
+                            </div>
 
                                 {/* Right Box: Cloud SQL Core Metrics (3 Horizontal Cards) */}
                                 <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>

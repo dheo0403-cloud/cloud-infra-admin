@@ -109,65 +109,50 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                         </span>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '16px' }}>
-                            {/* Left: 4-Month Processed TB & Job Count Chart (Standardized IAM Height 170px) */}
-                            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
-                                        월간 데이터 사용량(TB) & Job Count 추이
+                            {/* Left: 4-Month Processed TB & Job Count Chart (Standardized IAM Structure & Height 170px) */}
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
+                                <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <span>
+                                        <i className="fas fa-chart-line mr-2" style={{ color: '#2563eb' }}></i>월간 데이터 사용량(TB) & Job Count 추이
                                     </span>
-                                    <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>
                                         당월: <strong>{Number(data.currentMonthProcessedTb || 0).toFixed(2)} TB</strong> / <strong>{(data.currentMonthJobCount || 0).toLocaleString()} Jobs</strong>
                                     </span>
                                 </div>
 
-                                {/* Bar Chart Area Standardized to IAM Height 170px */}
-                                <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                    <div style={{ display: 'flex', flexGrow: 1, alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', borderBottom: '1px dashed #e2e8f0', paddingBottom: '4px', paddingTop: '16px' }}>
-                                        {displayDates.map((dateStr, idx) => {
-                                            const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
-                                            const jcVal = data.jobCountTrend?.[idx] || 0;
-                                            const isZero = tbVal <= 0 && jcVal <= 0;
-                                            const heightPercent = isZero ? 0 : Math.max(12, Math.min(100, Math.round((tbVal / maxTb) * 85)));
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {displayDates.map((dateStr, idx) => {
+                                        const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
+                                        const jcVal = data.jobCountTrend?.[idx] || 0;
+                                        const heightPercent = tbVal > 0 ? Math.max(12, Math.min(100, Math.round((tbVal / maxTb) * 85))) : 0;
 
-                                            return (
-                                                <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                                                    <span style={{ fontSize: '8.5px', fontWeight: 700, color: '#2563eb', marginBottom: '2px', visibility: isZero ? 'hidden' : 'visible' }}>
-                                                        {Number(tbVal).toFixed(2)}TB
-                                                    </span>
+                                        return (
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                                     <div style={{
-                                                        width: '22px',
+                                                        width: '20px',
                                                         height: `${heightPercent}%`,
-                                                        background: isZero ? 'transparent' : 'linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)',
+                                                        background: tbVal > 0 ? 'linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)' : 'transparent',
                                                         borderRadius: '4px 4px 0 0',
-                                                        opacity: isZero ? 0 : 1,
-                                                        transition: 'height 0.3s ease'
-                                                    }}></div>
-                                                    <span style={{ fontSize: '8px', color: '#64748b', marginTop: '2px', visibility: isZero ? 'hidden' : 'visible' }}>
-                                                        {jcVal.toLocaleString()}건
-                                                    </span>
+                                                        position: 'relative'
+                                                    }}>
+                                                        {tbVal > 0 && (
+                                                            <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1e3a8a', whiteSpace: 'nowrap' }}>
+                                                                {Number(tbVal).toFixed(2)}TB
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{dateStr}</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
 
-                                    {/* X-Axis Labels */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-around', fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                        {displayDates.map((d, i) => (
-                                            <span key={i} style={{ flex: 1, textAlign: 'center', fontWeight: 600 }}>{d}</span>
-                                        ))}
-                                    </div>
-
-                                    {/* Standard Bottom-Center Legend */}
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '14px', fontSize: '10.5px', marginTop: '6px' }}>
-                                        <span style={{ color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#2563eb', marginRight: '4px' }}></span>
-                                            데이터 사용량 (TB)
-                                        </span>
-                                        <span style={{ color: '#1e293b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                                            <span style={{ display: 'inline-block', width: '10px', height: '2px', backgroundColor: '#64748b', marginRight: '4px' }}></span>
-                                            실행 Job 수 (건)
-                                        </span>
-                                    </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#2563eb', marginRight: '5px' }}></span>데이터 사용량 (TB)
+                                    </span>
                                 </div>
                             </div>
 

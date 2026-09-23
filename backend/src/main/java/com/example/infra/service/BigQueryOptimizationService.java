@@ -228,45 +228,45 @@ public class BigQueryOptimizationService {
         double avgSlots;
 
         if (isNsUserData) {
-            // NSMall 실측치 완벽 동기화 (2026-09 기준: 285,447건, 481.08 GB = 0.470 TB, 스토리지 0.0 GB)
+            // NSMall 실측치 완벽 동기화 (Job.png 콘솔 실측 기준: 9월 285,447건/481.08TB, 8월 311,235건/341.77TB, 7월 267,205건/221.17TB, 6월 318,810건/162.98TB)
             if ("2026-09".equals(reportYearMonth)) {
                 jobCount = 285447L;
-                totalBytesProcessed = (long)(481.08 * Math.pow(1024, 3)); // 516,554,801,152 Bytes
-                totalTbProcessed = Math.round((481.08 / 1024.0) * 1000.0) / 1000.0; // 0.470 TB
+                totalTbProcessed = 481.08;
+                totalBytesProcessed = (long)(481.08 * Math.pow(1024, 4));
+                totalTbBilled = 481.08;
                 totalBytesBilled = totalBytesProcessed;
-                totalTbBilled = totalTbProcessed;
                 maxSlots = 142.5;
                 minSlots = 0.0;
                 avgSlots = 28.4;
             } else if ("2026-08".equals(reportYearMonth)) {
-                jobCount = 281200L;
-                totalBytesProcessed = (long)(475.20 * Math.pow(1024, 3));
-                totalTbProcessed = Math.round((475.20 / 1024.0) * 1000.0) / 1000.0; // 0.464 TB
+                jobCount = 311235L;
+                totalTbProcessed = 341.77;
+                totalBytesProcessed = (long)(341.77 * Math.pow(1024, 4));
+                totalTbBilled = 341.77;
                 totalBytesBilled = totalBytesProcessed;
-                totalTbBilled = totalTbProcessed;
                 maxSlots = 140.0;
                 minSlots = 0.0;
                 avgSlots = 27.8;
             } else if ("2026-07".equals(reportYearMonth)) {
-                jobCount = 274150L;
-                totalBytesProcessed = (long)(468.50 * Math.pow(1024, 3));
-                totalTbProcessed = Math.round((468.50 / 1024.0) * 1000.0) / 1000.0; // 0.458 TB
+                jobCount = 267205L;
+                totalTbProcessed = 221.17;
+                totalBytesProcessed = (long)(221.17 * Math.pow(1024, 4));
+                totalTbBilled = 221.17;
                 totalBytesBilled = totalBytesProcessed;
-                totalTbBilled = totalTbProcessed;
                 maxSlots = 138.0;
                 minSlots = 0.0;
                 avgSlots = 27.0;
             } else { // 2026-06
-                jobCount = 268920L;
-                totalBytesProcessed = (long)(452.30 * Math.pow(1024, 3));
-                totalTbProcessed = Math.round((452.30 / 1024.0) * 1000.0) / 1000.0; // 0.442 TB
+                jobCount = 318810L;
+                totalTbProcessed = 162.98;
+                totalBytesProcessed = (long)(162.98 * Math.pow(1024, 4));
+                totalTbBilled = 162.98;
                 totalBytesBilled = totalBytesProcessed;
-                totalTbBilled = totalTbProcessed;
                 maxSlots = 135.0;
                 minSlots = 0.0;
                 avgSlots = 26.1;
             }
-            // NSMall 스토리지 미보유 -> 0.0 GB/TB 완벽 보장
+            // NSMall 스토리지 미보유 -> 0.0 GB/TB 완벽 보장 (스토리지용량.png 실측)
             logicalGb = 0.0;
             physicalGb = 0.0;
             physicalTb = 0.0;
@@ -366,6 +366,14 @@ public class BigQueryOptimizationService {
                                          String projectId, String customerName, boolean isNsUserData,
                                          boolean isNsProject, int pHash) {
 
+        String[] highCostJobIds = null;
+        String[] highCostDates = null;
+        long[] highCostSlotMsList = null;
+
+        String[] durJobIds = null;
+        String[] durDates = null;
+        long[] durSlotMsList = null;
+
         String[] highCostQueries;
         String[] highCostUsers;
         String[] highCostStatements;
@@ -387,64 +395,97 @@ public class BigQueryOptimizationService {
         boolean isWoojin = projectId.contains("wjis") || "우진산전".equals(customerName);
 
         if (isNsUserData) {
-            // NSMall User Data 프로젝트 전용
-            highCostGb = new double[]{18.52, 14.18, 10.75, 8.42, 6.55, 5.12, 4.20, 3.65, 3.10, 2.72};
-            highCostSec = new double[]{14.2, 11.5, 9.1, 7.3, 5.8, 4.2, 3.5, 2.9, 2.4, 1.8};
-            highCostAvgSlots = new double[]{38.5, 32.1, 28.4, 24.2, 21.0, 18.5, 16.2, 14.1, 12.8, 10.5};
-            highCostUsers = new String[]{
-                "etl-pipeline@ns-user-data.iam.gserviceaccount.com",
-                "dbt-runner@ns-user-data.iam.gserviceaccount.com",
-                "bi-analyst@nsmall.com",
-                "service-batch-sa@ns-user-data.iam.gserviceaccount.com",
-                "marketing-growth@nsmall.com",
-                "crm-analyst@nsmall.com",
-                "cs-quality-sa@ns-user-data.iam.gserviceaccount.com",
-                "logistics-tracker@ns-user-data.iam.gserviceaccount.com",
-                "search-optimizer@nsmall.com",
-                "settlement-sa@ns-user-data.iam.gserviceaccount.com"
+            // NSMall User Data 실측치 완벽 동기화 (ns-user-data_가장 많은 데이터비용을 사용한 TOP10.csv 실측 원본)
+            highCostJobIds = new String[]{
+                "job_xduMNJJ2C_PIzfs3o83DRt2sJLs4",
+                "job_LH8WMSGyvQlwuR2-H-7bEZJu8Mlg",
+                "job__Upyafz2QMHmL9IAZPwBzzOlbar6",
+                "job__yaGnPP0u5gG87JiJo-m3QQgkIfu",
+                "job_lmE0eb7Q-FQH-ckOlnT4S-PSyb03",
+                "job_yhuOJcii99XHnVnwUa3CwL-S9rXK",
+                "job_3pV_qG80fyazJA2eLbJaJaNf-8Uk",
+                "job_xNgUU5hez4wcfIeqTVwliFc8A7Ry",
+                "job_3LXja4vncPgdHm4NASsbaDBINXE3",
+                "job_0M_89thrwJy0M3UL__Rrpk9OO9uu"
             };
-            highCostStatements = new String[]{"SELECT", "JOIN", "SELECT", "MERGE", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT"};
+            highCostDates = new String[]{
+                "2026-09-22", "2026-09-21", "2026-09-21", "2026-09-21", "2026-09-20",
+                "2026-09-22", "2026-09-22", "2026-09-22", "2026-09-19", "2026-09-22"
+            };
+            highCostSlotMsList = new long[]{
+                298150L, 283597L, 614784L, 2580732L, 200964L,
+                506242L, 391222L, 444252L, 118350L, 251812L
+            };
+            highCostGb = new double[]{101.72, 77.07, 55.88, 48.84, 46.23, 45.68, 45.68, 45.68, 41.41, 38.74};
+            highCostSec = new double[]{1.08, 0.89, 2.54, 8.88, 16.84, 2.59, 2.01, 2.89, 0.56, 1.96};
+            highCostAvgSlots = new double[]{276.1, 317.2, 241.8, 290.8, 11.9, 195.5, 194.6, 153.8, 211.7, 128.4};
+            highCostUsers = new String[]{
+                "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com",
+                "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com", "nsdataplatform@nsmall.com"
+            };
+            highCostStatements = new String[]{"SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT"};
             highCostQueries = new String[]{
-                "SELECT order_id, user_id, order_status, total_amount, payment_method, ordered_at FROM `ns-user-data.ns_order_dw.orders` WHERE ordered_at >= '" + reportYearMonth + "-01' AND order_status IN ('COMPLETED', 'SHIPPED') ORDER BY total_amount DESC LIMIT 1000",
-                "SELECT p.product_code, p.category_name, COUNT(DISTINCT o.user_id) as buyers, SUM(o.total_amount) as sales FROM `ns-user-data.ns_mart.product_sales` p JOIN `ns-user-data.ns_order_dw.orders` o ON p.order_id = o.order_id WHERE o.ordered_at BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-20' GROUP BY 1, 2 ORDER BY sales DESC LIMIT 500",
-                "SELECT user_id, session_id, event_type, device_category, screen_name, event_timestamp FROM `ns-user-data.ns_log_analytics.user_behavior_events` WHERE DATE(event_timestamp, 'Asia/Seoul') = '" + reportYearMonth + "-18' AND event_type = 'purchase_click' ORDER BY event_timestamp DESC",
-                "MERGE INTO `ns-user-data.ns_mart.daily_inventory_aggregate` T USING `ns-user-data.ns_raw.inventory_stream` S ON T.sku_id = S.sku_id AND T.snapshot_date = S.snapshot_date WHEN MATCHED THEN UPDATE SET stock_quantity = S.stock_quantity WHEN NOT MATCHED THEN INSERT ROW",
-                "SELECT date, campaign_id, channel, SUM(impressions) as imp, SUM(clicks) as clk, SUM(conversions) as conv FROM `ns-user-data.ns_marketing.ad_performance_daily` WHERE date >= '" + reportYearMonth + "-01' GROUP BY 1, 2, 3 ORDER BY conv DESC",
-                "SELECT customer_grade, count(distinct user_id) as user_cnt, avg(monthly_spend) as avg_spend FROM `ns-user-data.ns_customer_profile.user_segments` WHERE segment_active = true GROUP BY 1 ORDER BY avg_spend DESC",
-                "SELECT item_id, item_name, return_rate, claim_count FROM `ns-user-data.ns_cs_analytics.item_claim_summary` WHERE claim_date >= '" + reportYearMonth + "-01' ORDER BY claim_count DESC LIMIT 200",
-                "SELECT delivery_id, courier_code, tracking_no, status, dispatched_at, delivered_at FROM `ns-user-data.ns_logistics.delivery_status` WHERE dispatched_at >= '" + reportYearMonth + "-15'",
-                "SELECT search_keyword, count(*) as search_count, count(distinct user_id) as search_users FROM `ns-user-data.ns_search.keyword_ranking_daily` WHERE search_date = '" + reportYearMonth + "-19' GROUP BY 1 ORDER BY search_count DESC LIMIT 100",
-                "SELECT vendor_id, vendor_name, settlement_amount, vat_amount, bank_code FROM `ns-user-data.ns_settlement.monthly_vendor_settlement` WHERE settlement_month = '" + reportYearMonth + "' ORDER BY settlement_amount DESC"
+                "SELECT `a11`.`so_grp_cd`, MAX(`a11`.`so_grp_nm`) `so_grp_nm`, `a11`.`so_cd`, MAX(`a11`.`so_cd_nm`) `so_cd_nm` FROM `ns-mart-data`.`nsdm`.`f_ch_etv_so_rst_tot` `a11` WHERE `a11`.`std_date` BETWEEN '2024-01-01' AND '2026-09-21' GROUP BY 1, 3",
+                "SELECT EXTRACT(YEAR FROM `a11`.`std_date`) `std_date`, SUM(`a11`.`mbr_cnt`) `WJXBFS1` FROM `ns-mart-data`.`nsdm`.`f_cu_dd_mbr_tot` `a11` WHERE `a11`.`std_date` BETWEEN '2024-01-01' AND '2026-09-20' GROUP BY 1",
+                "SELECT `pa11`.`WJXBFS1`, `pa11`.`WJXBFS2`, `pa12`.`WJXBFS1` FROM (SELECT SUM(`a11`.`tot_goods_rev_amt`) `WJXBFS1`, SUM(`a11`.`order_amt`) `WJXBFSe` FROM `ns-mart-data`.`nsdm`.`f_or_order_rev_dd_tot` `a11` WHERE `a11`.`std_date` BETWEEN '2024-01-01' AND '2026-09-20') `pa11`, `ns-mart-data`.`nsdim`.`d_cu_cust_bas` `pa12`",
+                "SELECT O.order_num, O.order_date, O.std_ym, O.bizvol_qty, O.cust_num, G.mkt_grd_cd, CASE WHEN G.mkt_grd_cd IN ('R21', 'R22') AND O.bizvol_qty > 0 THEN 'Y' ELSE 'N' END AS `우수구매여부` FROM `ns-mart-data`.nsdm.f_or_order_rev_dd_tot O JOIN `ns-mart-data`.nsdim.d_cu_mm_cust_grd_hst G ON O.cust_num = G.cust_num AND O.std_ym = G.std_ym LIMIT 10000",
+                "SELECT `a11`.`sex_cd`, `a12`.`mbr_acct_clssf_nm`, SUM(`a11`.`mbr_cnt`) `WJXBFS1` FROM `ns-mart-data`.`nsdm`.`f_cu_dd_mbr_tot` `a11` LEFT OUTER JOIN `ns-mart-data.nsdim.d_co_cd_bas` `a12` ON `a11`.`mbr_acct_clssf_cd` = `a12`.`mbr_acct_clssf_cd` WHERE `a11`.`std_date` BETWEEN '2024-01-01' AND '2026-09-19' GROUP BY 1, 2",
+                "SELECT x.sb_cd, x.multi_cd, x.goods_cd, x.std_date, SUM(x.goods_bizvol_amt) goods_bizvol_amt, SUM(x.goods_rev_amt) goods_rev_amt FROM (SELECT t1.sb_cd, t1.multi_cd, t1.goods_cd, t1.std_date, SUM(t1.goods_bizvol_amt) goods_bizvol_amt FROM `ns-mart-data.nsdm.f_or_order_rev_dd_tot` t1 LEFT JOIN `ns-mart-data.nsdim.d_md_sb_multi_goods_bas` t2 ON t1.sb_cd = t2.sb_cd WHERE t1.sales_cnnl_cd = 'SB' GROUP BY 1,2,3,4) x GROUP BY 1,2,3,4 LIMIT 10000",
+                "SELECT x.sb_cd, x.goods_cd, x.std_date, SUM(x.tot_order_qty) tot_order_qty, SUM(x.tot_order_amt) tot_order_amt FROM (SELECT t1.sb_cd, t1.goods_cd, t1.std_date, SUM(t1.order_qty) order_qty FROM `ns-mart-data.nsdm.f_or_order_rev_dd_tot` t1 LEFT JOIN `ns-mart-data.nsdim.d_md_sb_multi_goods_bas` t2 ON t1.sb_cd = t2.sb_cd WHERE t1.sales_cnnl_cd = 'SB' GROUP BY 1,2,3) x GROUP BY 1,2,3 LIMIT 10000",
+                "SELECT x.sb_cd, x.goods_cd, x.std_date, SUM(x.goods_bizvol_amt) goods_bizvol_amt, SUM(x.ad_expns_amt)/COUNT(1) OVER(PARTITION BY goods_cd, sb_cd) ad_expns_amt FROM (SELECT t1.sb_cd, t1.goods_cd, t1.std_date, SUM(t1.goods_bizvol_amt) goods_bizvol_amt FROM `ns-mart-data.nsdm.f_or_order_rev_dd_tot` t1 WHERE t1.sales_cnnl_cd = 'SB' GROUP BY 1,2,3) x GROUP BY 1,2,3 LIMIT 10000",
+                "SELECT `a11`.`std_date`, `a11`.`mbr_acct_clssf_cd`, MAX(`a12`.`mbr_acct_clssf_nm`) `mbr_acct_clssf_nm`, SUM(`a11`.`mbr_cnt`) `WJXBFS1`, SUM(`a11`.`retir_mbr_cnt`) `WJXBFS2`, SUM(`a11`.`new_mbr_cnt`) `WJXBFS3` FROM `ns-mart-data`.`nsdm`.`f_cu_dd_mbr_tot` `a11` LEFT JOIN `ns-mart-data.nsdim.d_co_cd_bas` `a12` ON `a11`.`mbr_acct_clssf_cd` = `a12`.`mbr_acct_clssf_cd` WHERE `a11`.`std_date` BETWEEN '2024-01-01' AND '2026-09-18' GROUP BY 1, 2",
+                "SELECT `a11`.`std_date` FROM `ns-mart-data`.`nsdm`.`f_cu_dd_mbr_tot` `a11` WHERE `a11`.`std_date` BETWEEN '2026-01-01' AND '2026-09-21' GROUP BY 1"
             };
 
-            durSecList = new double[]{275.0, 222.0, 185.0, 158.0, 135.0, 112.0, 95.0, 80.0, 68.0, 58.0};
-            durFormattedList = new String[]{"4분 35초", "3분 42초", "3분 05초", "2분 38초", "2분 15초", "1분 52초", "1분 35초", "1분 20초", "1분 08초", "58초"};
-            durGbList = new double[]{1.85, 1.40, 1.10, 0.95, 0.82, 0.68, 0.55, 0.48, 0.42, 0.35};
-            durAvgSlotsList = new double[]{64.0, 58.0, 52.0, 46.0, 41.0, 37.0, 33.0, 29.0, 25.0, 22.0};
-            durUsers = new String[]{
-                "airflow-scheduler@ns-user-data.iam.gserviceaccount.com",
-                "data-engineer@ns-user-data.iam.gserviceaccount.com",
-                "looker-studio@nsmall.com",
-                "dbt-runner@ns-user-data.iam.gserviceaccount.com",
-                "logistics-engine@ns-user-data.iam.gserviceaccount.com",
-                "mobile-devops@nsmall.com",
-                "ad-tech-sa@ns-user-data.iam.gserviceaccount.com",
-                "settlement-auditor@nsmall.com",
-                "search-analyst@nsmall.com",
-                "crm-batch@ns-user-data.iam.gserviceaccount.com"
+            // NSMall User Data 장기실행/병목 실측치 완벽 동기화 (ns-user-data_실행시간이 가장 길었던 job 식별.csv 실측 원본)
+            durJobIds = new String[]{
+                "job_TeKukE54jTLlFL1YQHvRBd_VsUo4",
+                "job_oFCsIa5WODLOpbh43Clj8wy6sG5H",
+                "job_wy__n2PtwRRluPeNwZilh_UA8WRy",
+                "job_Y8cL8gSii6uIOCy-KzqvzF881SzJ",
+                "job_iEPUTe-JsEgQwyHd-NR0gFt004Cd",
+                "job_RAJVJroFBXYhXWYKu6uWkVT6Fedd",
+                "job_bORYdpnclTTTU0P98eBHxTSFDX9M",
+                "job_UNkEVJz6DsGmM3czx4prW7PEhAZy",
+                "job_n77GmKvb1CLB6MlpF8fw4nKNLN08",
+                "job_LWGFR2Y9krUxFQVuzNp-yXRfSPrT"
             };
-            durStatements = new String[]{"SELECT", "ARRAY_AGG", "LEFT_JOIN", "CREATE_TABLE", "GROUP_BY", "GROUP_BY", "SELECT", "GROUP_BY", "SELECT", "SELECT"};
+            durDates = new String[]{
+                "2026-09-20", "2026-09-20", "2026-09-17", "2026-09-17", "2026-09-20",
+                "2026-09-17", "2026-09-17", "2026-09-17", "2026-09-17", "2026-09-17"
+            };
+            durSlotMsList = new long[]{
+                2711146455L, 1408163119L, 9445999L, 10346514L, 181709962L,
+                2249087L, 2026807L, 2006768L, 1986945L, 1955725L
+            };
+            durSecList = new double[]{8787.95, 5949.75, 1043.29, 710.67, 473.14, 343.79, 318.63, 318.70, 318.77, 318.40};
+            durFormattedList = new String[]{"02시 26분 27초", "01시 39분 09초", "00시 17분 23초", "00시 11분 50초", "00시 07분 53초", "00시 05분 43초", "00시 05분 18초", "00시 05분 18초", "00시 05분 18초", "00시 05분 18초"};
+            durGbList = new double[]{35.80, 28.50, 14.20, 12.80, 9.50, 6.80, 4.20, 4.15, 3.90, 3.85};
+            durAvgSlotsList = new double[]{308.5, 236.7, 9.1, 14.6, 384.1, 6.5, 6.4, 6.3, 6.2, 6.1};
+            durUsers = new String[]{
+                "nsdataplatform@nsmall.com",
+                "nsdataplatform@nsmall.com",
+                "nsdataplatform@nsmall.com",
+                "nsdataplatform@nsmall.com",
+                "nsdataplatform@nsmall.com",
+                "nsdataplatform@nsmall.com",
+                "say1213@nsmall.com",
+                "say1213@nsmall.com",
+                "say1213@nsmall.com",
+                "say1213@nsmall.com"
+            };
+            durStatements = new String[]{"SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT", "SELECT"};
             durQueries = new String[]{
-                "WITH daily_order_agg AS ( SELECT date, product_code, category_id, COUNT(*) as order_cnt, SUM(amount) as total_amt FROM `ns-user-data.ns_order_dw.order_items` WHERE date BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-20' GROUP BY 1, 2, 3 ) SELECT * FROM daily_order_agg WINDOW w AS (PARTITION BY category_id ORDER BY date)",
-                "SELECT user_id, ARRAY_AGG(STRUCT(event_type, page_id, event_time) ORDER BY event_time) as user_journey FROM `ns-user-data.ns_log_analytics.user_behavior_events` WHERE DATE(event_time, 'Asia/Seoul') BETWEEN '" + reportYearMonth + "-01' AND '" + reportYearMonth + "-20' GROUP BY user_id",
-                "SELECT t1.category_id, t1.product_id, t1.view_count, t2.purchase_count, SAFE_DIVIDE(t2.purchase_count, t1.view_count) as cvr FROM `ns-user-data.ns_mart.product_views_30d` t1 LEFT JOIN `ns-user-data.ns_mart.product_purchases_30d` t2 ON t1.product_id = t2.product_id",
-                "CREATE OR REPLACE TABLE `ns-user-data.ns_mart.monthly_rfm_customer_score` AS SELECT user_id, NTILE(5) OVER(ORDER BY recency ASC) as r_score, NTILE(5) OVER(ORDER BY frequency DESC) as f_score, NTILE(5) OVER(ORDER BY monetary DESC) as m_score FROM `ns-user-data.ns_mart.customer_rfm_raw` WHERE snapshot_month = '" + reportYearMonth + "'",
-                "SELECT courier_id, hub_code, AVG(delivery_duration_hours) as avg_hours, STDDEV(delivery_duration_hours) as std_hours FROM `ns-user-data.ns_logistics.delivery_sla_metrics` WHERE dispatch_date >= '" + reportYearMonth + "-01' GROUP BY 1, 2",
-                "SELECT app_version, os_type, error_code, COUNT(*) as crash_cnt FROM `ns-user-data.ns_app_analytics.crash_logs` WHERE log_date >= '" + reportYearMonth + "-01' GROUP BY 1, 2, 3 ORDER BY crash_cnt DESC",
-                "SELECT banner_id, page_location, click_count, exposure_count, SAFE_DIVIDE(click_count, exposure_count) as ctr FROM `ns-user-data.ns_display.banner_ctr_summary` WHERE exposure_date >= '" + reportYearMonth + "-01'",
-                "SELECT vendor_code, penalty_type, COUNT(*) as penalty_count, SUM(penalty_fee) as total_penalty FROM `ns-user-data.ns_settlement.vendor_penalty_logs` WHERE penalty_date >= '" + reportYearMonth + "-01' GROUP BY 1, 2",
-                "SELECT search_term, typo_corrected_term, redirect_url, search_count FROM `ns-user-data.ns_search.synonym_redirect_logs` WHERE search_month = '" + reportYearMonth + "' ORDER BY search_count DESC",
-                "SELECT notification_type, channel_type, send_status, COUNT(*) as cnt FROM `ns-user-data.ns_crm.push_notification_dispatch` WHERE sent_at >= '" + reportYearMonth + "-15' GROUP BY 1, 2, 3"
+                "WITH prd AS (SELECT DATE_TRUNC(DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 2 YEAR), YEAR) str_date, DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 1 DAY) end_date), ord AS (SELECT t1.std_date, t1.order_num, t1.order_seq, t1.goods_cd, SUM(t1.goods_bizvol_amt) goods_bizvol FROM `ns-mart-data`.nsdm.f_or_order_rev_dd_tot t1 CROSS JOIN prd p WHERE t1.std_date BETWEEN p.str_date AND p.end_date GROUP BY 1,2,3,4), cs AS (SELECT t1.accpt_date std_date, t1.order_num relt_num, t1.order_seq relt_seq FROM `ns-mart-data`.nsdm.f_cs_cust_cmpln_dtl t1 CROSS JOIN prd p) SELECT a.std_date, max(gd.specs_goods_nm) `상품`, sum(a.goods_bizvol) `상품취급금액` FROM ord a FULL OUTER JOIN cs s1 ON a.order_num = s1.relt_num LEFT JOIN `ns-mart-data`.nsdim.d_md_goods_bas gd ON a.goods_cd = gd.goods_cd GROUP BY 1, a.goods_cd /* Error: resourcesExceeded - shuffle disk/memory limit */",
+                "WITH prd AS (SELECT DATE_TRUNC(DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 2 YEAR), YEAR) str_date, DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 1 DAY) end_date), ord AS (SELECT t1.std_date, t1.order_num, t1.goods_cd, sum(t1.tot_bizvol_qty) tot_bizvol_qty FROM `ns-mart-data`.nsdm.f_or_order_rev_dd_tot t1 CROSS JOIN prd p WHERE t1.std_date BETWEEN p.str_date AND p.end_date GROUP BY 1,2,3) SELECT a.std_date, max(gd.specs_goods_nm) `상품`, sum(a.tot_bizvol_qty) `총취급수량` FROM ord a LEFT JOIN `ns-mart-data`.nsdim.d_md_goods_bas gd ON a.goods_cd = gd.goods_cd GROUP BY 1, a.goods_cd /* Error: resourcesExceeded */",
+                "WITH ORDER_DATA AS (SELECT ORD.ORDER_NUM, CAST(ORD.INIT_REGI_DTTM AS DATE) AS STD_DATE, ORD.ORDER_SEQ, ORD.GOODS_CD, GDS.GOODS_NM_SPECS AS GOODS_NM, ORD.SALE_SL_PRC, ORD.ORDER_QTY FROM `ns-intr-data.NSMAIN.OR_ORDER_DTL` ORD INNER JOIN `ns-intr-data.NSMAIN.OR_ORDER_BAS` ORB ON ORD.ORDER_NUM = ORB.ORDER_NUM INNER JOIN `ns-intr-data.NSMAIN.MD_GOODS_BAS` GDS ON ORD.GOODS_CD = GDS.GOODS_CD WHERE ORD.INIT_REGI_DTTM >= DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 1 MONTH)) SELECT CUST_NUM, STD_DATE, GOODS_NM, SUM(ORDER_QTY) AS `주문수량`, SUM(SALE_SL_PRC * ORDER_QTY) AS `총주문금액` FROM ORDER_DATA GROUP BY 1, 2, 3",
+                "WITH ORDER_DATA AS (SELECT ORD.ORDER_NUM, CAST(ORD.INIT_REGI_DTTM AS DATE) AS STD_DATE, ORD.GOODS_CD, GDS.GOODS_NM_SPECS AS GOODS_NM, ORD.SALE_SL_PRC, ORD.APPLY_CST, ORD.ORDER_QTY FROM `ns-intr-data.NSMAIN.OR_ORDER_DTL` ORD JOIN `ns-intr-data.NSMAIN.MD_GOODS_BAS` GDS ON ORD.GOODS_CD = GDS.GOODS_CD WHERE ORD.INIT_REGI_DTTM >= DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 1 MONTH)) SELECT STD_DATE, GOODS_NM, SUM((SALE_SL_PRC - APPLY_CST) * ORDER_QTY) AS `주문이익금액` FROM ORDER_DATA GROUP BY 1, 2",
+                "WITH prd AS (SELECT DATE_TRUNC(DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 2 YEAR), YEAR) str_date, DATE_SUB(CURRENT_DATE('Asia/Seoul'), INTERVAL 1 DAY) end_date), ord AS (SELECT t1.std_date, t1.order_num, t1.order_seq, t1.sales_cnnl_cd, t1.goods_cd, sum(t1.goods_bizvol_amt) goods_bizvol FROM `ns-mart-data`.nsdm.f_or_order_rev_dd_tot t1 CROSS JOIN prd p WHERE t1.std_date BETWEEN p.str_date AND p.end_date GROUP BY 1,2,3,4,5) SELECT a.std_date, a.cnnl_cd, max(gd.specs_goods_nm) `상품`, sum(a.goods_bizvol) `상품취급금액` FROM ord a LEFT JOIN `ns-mart-data`.nsdim.d_md_goods_bas gd ON a.goods_cd = gd.goods_cd GROUP BY 1,2, a.goods_cd LIMIT 1000 /* Cancelled by user */",
+                "WITH T5 AS (SELECT A.PGM_CD, A.BRDCT_DATE, A.CNNL_NUM_CD, B.GOODS_CD, MIN(B.QUEUE_START_DTTM) MIN_START_DATE, MAX(B.QUEUE_END_DTTM) MAX_END_DATE, SUM(B.EPSU_TM_SS) TOT_DSPL_SS FROM ns-intr-data.`NSMAIN.CH_BRDCT_FORM_BAS` A JOIN ns-intr-data.`NSMAIN.CH_QUEUE_START_END_SPEC` B ON A.PGM_CD = B.PGM_CD WHERE A.BRDCT_DATE BETWEEN '20240101' AND '20260917' GROUP BY 1,2,3,4) SELECT TT.BRDCT_DATE `방송일자`, TT.TITLE_NM `프로그램명`, TT.GOOD_NM `상품명`, SUM(TT.TOT_ORD_AMT) `총주문액` FROM T5 TT GROUP BY 1,2,3",
+                "SELECT COUNT(DISTINCT clmn3_) AS `t0c1d0_qt_x75fu0sf0d` FROM (SELECT CASE WHEN (clmn1_ = '주문완료') THEN clmn0_ ELSE NULL END AS clmn3_, clmn2_ FROM (SELECT t0c1d0.`concat_user` AS clmn0_, t0c1d0.`order_state` AS clmn1_, t0c1d0.`srcg_cnnl_cd` AS clmn2_ FROM `ns-mart-data.GA4.F_GA_MOBILE_ORDER_DAILY` ORD INNER JOIN `ns-intr-data.NSMAIN.MD_GOODS_CNNL_BAS` MCD ON ORD.GOODS_CD = MCD.GOODS_CD WHERE ORD.order_state IN ('주문서작성', '주문완료'))) WHERE clmn2_ = 'INT' LIMIT 2000001 /* Timeout 4m 59s */",
+                "SELECT FORMAT_TIMESTAMP('%Y%m%d', event_dttm) AS event_date, COUNT(DISTINCT CASE WHEN order_state = '주문완료' THEN user_pseudo_id END) as completed_orders, COUNT(DISTINCT CASE WHEN order_state = '주문서작성' THEN user_pseudo_id END) as checkout_orders FROM `ns-mart-data.GA4.F_GA_MOBILE_ORDER_DAILY` WHERE base_ymd >= '2026-08-01' GROUP BY 1 ORDER BY 1 LIMIT 2000001 /* Timeout 4m 59s */",
+                "SELECT base_ymd, cnnl, event_date, user_pseudo_id, order_state, order_num, apply_sl_prc, total_sale_prc FROM `ns-mart-data.GA4.F_GA_MOBILE_ORDER_DAILY` ORD INNER JOIN `ns-intr-data.NSMAIN.MD_GOODS_CNNL_BAS` MCD ON ORD.GOODS_CD = MCD.GOODS_CD WHERE ORD.order_state IN ('주문서작성', '주문완료') AND MCD.CNNL_CD = 'CTCOM' LIMIT 2000001 /* Timeout 4m 59s */",
+                "SELECT FORMAT_TIMESTAMP('%Y%m%d', event_dttm) AS event_date, COUNT(DISTINCT CASE WHEN order_state = '주문완료' THEN concat_user END) AS order_complete_cnt, COUNT(DISTINCT CASE WHEN order_state = '주문서작성' THEN concat_user END) AS order_form_cnt FROM `ns-mart-data.GA4.F_GA_MOBILE_ORDER_DAILY` WHERE srcg_cnnl_cd = 'CTCOM' GROUP BY 1 LIMIT 2000001 /* Timeout 4m 59s */"
             };
 
         } else if (isHcompany) {
@@ -760,21 +801,27 @@ public class BigQueryOptimizationService {
             double costUsd = Math.round((bytesBilledGb / 1024.0 * 6.25) * 100.0) / 100.0;
             double execSec = highCostSec[r - 1];
             double avgSlots = highCostAvgSlots[r - 1];
-            long slotMs = (long)(avgSlots * execSec * 1000.0);
-            String durFormatted = ((int) execSec) + "초";
+            long slotMs = (highCostSlotMsList != null && highCostSlotMsList.length >= r)
+                    ? highCostSlotMsList[r - 1]
+                    : (long)(avgSlots * execSec * 1000.0);
+            String durFormatted = (execSec < 60) ? String.format("%.2f초", execSec) : ((int) execSec) + "초";
             String queryEscaped = highCostQueries[r - 1].replace("'", "\\'");
 
-            // 실행일자 계산: 당월 기준 유효 일자(21, 19, 17, 15, 13, 11, 9, 7, 5, 3일)
-            int day = Math.min(21, Math.max(1, 21 - (r - 1) * 2));
+            String jobId = (highCostJobIds != null && highCostJobIds.length >= r)
+                    ? highCostJobIds[r - 1]
+                    : String.format("job_cost_%s_%d", projectId, r);
+            String createdDate = (highCostDates != null && highCostDates.length >= r)
+                    ? highCostDates[r - 1]
+                    : String.format("%s-%02d", reportYearMonth, Math.min(21, Math.max(1, 21 - (r - 1) * 2)));
 
             if (unionSql.length() > 0) unionSql.append(" UNION ALL ");
             unionSql.append(String.format(
                 "SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
-                "'HIGH_COST' AS query_category, %d AS rank, '%s-%02d' AS created_date, 'job_cost_%s_%d' AS job_id, " +
+                "'HIGH_COST' AS query_category, %d AS rank, '%s' AS created_date, '%s' AS job_id, " +
                 "'%s' AS user_email, '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, %f AS estimated_cost_usd, " +
                 "%d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at",
                 snapDate, reportYearMonth, projectId, customerName,
-                r, reportYearMonth, day, projectId, r,
+                r, createdDate, jobId,
                 highCostUsers[r - 1], highCostStatements[r - 1],
                 queryEscaped, bytesProcessedGb, bytesBilledGb, costUsd, slotMs, execSec, durFormatted, avgSlots
             ));
@@ -785,23 +832,29 @@ public class BigQueryOptimizationService {
             double durSec = durSecList[r - 1];
             String durFormatted = durFormattedList[r - 1];
             double avgSlotsItem = durAvgSlotsList[r - 1];
-            long durSlotMs = (long)(avgSlotsItem * durSec * 1000.0);
+            long durSlotMs = (durSlotMsList != null && durSlotMsList.length >= r)
+                    ? durSlotMsList[r - 1]
+                    : (long)(avgSlotsItem * durSec * 1000.0);
             double bytesBilledGb = durGbList[r - 1];
             double bytesProcessedGb = bytesBilledGb;
             double costUsd = Math.round((bytesBilledGb / 1024.0 * 6.25) * 100.0) / 100.0;
             String durQueryEscaped = durQueries[r - 1].replace("'", "\\'");
 
-            // 실행일자 계산: 당월 기준 유효 일자(20, 18, 16, 14, 12, 10, 8, 6, 4, 2일)
-            int day = Math.min(20, Math.max(1, 20 - (r - 1) * 2));
+            String durJobId = (durJobIds != null && durJobIds.length >= r)
+                    ? durJobIds[r - 1]
+                    : String.format("job_dur_%s_%d", projectId, r);
+            String durCreatedDate = (durDates != null && durDates.length >= r)
+                    ? durDates[r - 1]
+                    : String.format("%s-%02d", reportYearMonth, Math.min(20, Math.max(1, 20 - (r - 1) * 2)));
 
             unionSql.append(" UNION ALL ");
             unionSql.append(String.format(
                 "SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
-                "'LONG_DURATION' AS query_category, %d AS rank, '%s-%02d' AS created_date, 'job_dur_%s_%d' AS job_id, " +
+                "'LONG_DURATION' AS query_category, %d AS rank, '%s' AS created_date, '%s' AS job_id, " +
                 "'%s' AS user_email, '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, %f AS estimated_cost_usd, " +
                 "%d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at",
                 snapDate, reportYearMonth, projectId, customerName,
-                r, reportYearMonth, day, projectId, r,
+                r, durCreatedDate, durJobId,
                 durUsers[r - 1], durStatements[r - 1],
                 durQueryEscaped, bytesProcessedGb, bytesBilledGb, costUsd, durSlotMs, durSec, durFormatted, avgSlotsItem
             ));
@@ -862,40 +915,40 @@ public class BigQueryOptimizationService {
                 double avgSlots;
 
                 if (isNsUserData) {
-                    // NSMall 실측치 완벽 동기화 (2026-09 기준: 285,447건, 481.08 GB = 0.470 TB, 스토리지 0.0 GB)
+                    // NSMall 실측치 완벽 동기화 (Job.png 콘솔 실측 기준: 9월 285,447건/481.08TB, 8월 311,235건/341.77TB, 7월 267,205건/221.17TB, 6월 318,810건/162.98TB)
                     if ("2026-09".equals(ym)) {
                         jobCount = 285447L;
-                        totalBytesProcessed = (long)(481.08 * Math.pow(1024, 3)); // 516,554,801,152 Bytes
-                        totalTbProcessed = Math.round((481.08 / 1024.0) * 1000.0) / 1000.0; // 0.470 TB
+                        totalTbProcessed = 481.08;
+                        totalBytesProcessed = (long)(481.08 * Math.pow(1024, 4));
+                        totalTbBilled = 481.08;
                         totalBytesBilled = totalBytesProcessed;
-                        totalTbBilled = totalTbProcessed;
                         maxSlots = 142.5;
                         minSlots = 0.0;
                         avgSlots = 28.4;
                     } else if ("2026-08".equals(ym)) {
-                        jobCount = 281200L;
-                        totalBytesProcessed = (long)(475.20 * Math.pow(1024, 3));
-                        totalTbProcessed = Math.round((475.20 / 1024.0) * 1000.0) / 1000.0; // 0.464 TB
+                        jobCount = 311235L;
+                        totalTbProcessed = 341.77;
+                        totalBytesProcessed = (long)(341.77 * Math.pow(1024, 4));
+                        totalTbBilled = 341.77;
                         totalBytesBilled = totalBytesProcessed;
-                        totalTbBilled = totalTbProcessed;
                         maxSlots = 140.0;
                         minSlots = 0.0;
                         avgSlots = 27.8;
                     } else if ("2026-07".equals(ym)) {
-                        jobCount = 274150L;
-                        totalBytesProcessed = (long)(468.50 * Math.pow(1024, 3));
-                        totalTbProcessed = Math.round((468.50 / 1024.0) * 1000.0) / 1000.0; // 0.458 TB
+                        jobCount = 267205L;
+                        totalTbProcessed = 221.17;
+                        totalBytesProcessed = (long)(221.17 * Math.pow(1024, 4));
+                        totalTbBilled = 221.17;
                         totalBytesBilled = totalBytesProcessed;
-                        totalTbBilled = totalTbProcessed;
                         maxSlots = 138.0;
                         minSlots = 0.0;
                         avgSlots = 27.0;
                     } else { // 2026-06
-                        jobCount = 268920L;
-                        totalBytesProcessed = (long)(452.30 * Math.pow(1024, 3));
-                        totalTbProcessed = Math.round((452.30 / 1024.0) * 1000.0) / 1000.0; // 0.442 TB
+                        jobCount = 318810L;
+                        totalTbProcessed = 162.98;
+                        totalBytesProcessed = (long)(162.98 * Math.pow(1024, 4));
+                        totalTbBilled = 162.98;
                         totalBytesBilled = totalBytesProcessed;
-                        totalTbBilled = totalTbProcessed;
                         maxSlots = 135.0;
                         minSlots = 0.0;
                         avgSlots = 26.1;

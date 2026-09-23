@@ -152,7 +152,7 @@ public class BigQueryOptimizationBatchTest {
     }
 
     @Test
-    @DisplayName("NSMall(ns-user-data) 콘솔 실측치(285,447건, 481.08GB/0.470TB, 스토리지 0GB) 및 타 고객사 멀티 테넌트 데이터 격리 무결성 검증")
+    @DisplayName("NSMall(ns-user-data) 콘솔 실측치(9월: 285,447건/481.08TB, 8월: 311,235건/341.77TB, 7월: 267,205건/221.17TB, 6월: 318,810건/162.98TB, 스토리지 0GB, TOP 쿼리) 및 멀티 테넌트 데이터 격리 무결성 검증")
     public void testNsMallMeasuredDataAndTenantIsolation() {
         System.out.println("\n=== 🔍 [NSMall & 멀티 테넌트 데이터 격리 투명성 실측 검증] ===");
 
@@ -164,15 +164,43 @@ public class BigQueryOptimizationBatchTest {
         assertNotNull(nsDto);
         assertEquals("ns-user-data", nsDto.getProjectId());
         assertEquals(285447L, nsDto.getCurrentMonthJobCount(), "NSMall 9월 Job Count는 콘솔 실측치인 285,447건이어야 합니다.");
-        assertEquals(0.470, nsDto.getCurrentMonthProcessedTb(), 0.005, "NSMall 9월 데이터 사용량은 481.08GB (0.470TB)여야 합니다.");
+        assertEquals(481.08, nsDto.getCurrentMonthProcessedTb(), 0.05, "NSMall 9월 데이터 사용량은 콘솔 실측치인 481.08 TB여야 합니다.");
         assertEquals(0.0, nsDto.getTotalLogicalStorageGb(), 0.001, "NSMall 논리 스토리지 용량은 0.0 GB여야 합니다.");
         assertEquals(0.0, nsDto.getTotalPhysicalStorageGb(), 0.001, "NSMall 물리 스토리지 용량은 0.0 GB여야 합니다.");
         assertEquals(0.0, nsDto.getTotalPhysicalStorageTb(), 0.001, "NSMall 물리 스토리지(TB) 용량은 0.0 TB여야 합니다.");
+
+        // 4개월 추이 검증
+        assertEquals(4, nsDto.getDataProcessedTbTrend().size());
+        assertEquals(162.98, nsDto.getDataProcessedTbTrend().get(0), 0.05, "6월 처리량은 162.98 TB여야 합니다.");
+        assertEquals(221.17, nsDto.getDataProcessedTbTrend().get(1), 0.05, "7월 처리량은 221.17 TB여야 합니다.");
+        assertEquals(341.77, nsDto.getDataProcessedTbTrend().get(2), 0.05, "8월 처리량은 341.77 TB여야 합니다.");
+        assertEquals(481.08, nsDto.getDataProcessedTbTrend().get(3), 0.05, "9월 처리량은 481.08 TB여야 합니다.");
+
+        assertEquals(318810L, (long)nsDto.getJobCountTrend().get(0), "6월 Job 수는 318,810건이어야 합니다.");
+        assertEquals(267205L, (long)nsDto.getJobCountTrend().get(1), "7월 Job 수는 267,205건이어야 합니다.");
+        assertEquals(311235L, (long)nsDto.getJobCountTrend().get(2), "8월 Job 수는 311,235건이어야 합니다.");
+        assertEquals(285447L, (long)nsDto.getJobCountTrend().get(3), "9월 Job 수는 285,447건이어야 합니다.");
+
+        // TOP 10 쿼리 검증
         assertEquals(10, nsDto.getHighCostQueries().size(), "고비용 TOP 10 쿼리가 10건이어야 합니다.");
         assertEquals(10, nsDto.getLongDurationQueries().size(), "장기실행 TOP 10 쿼리가 10건이어야 합니다.");
 
-        System.out.println(String.format("• [① NSMall 실측치 검증 통과] Project: %s | 9월 Job Count: %,d건 (기대: 285,447건) | 데이터 사용량: %.3f TB (481.08 GB) | 스토리지: %.1f GB (기대: 0.0 GB)",
+        BigQueryOptimizationDto.BigQueryJobItemDto top1Cost = nsDto.getHighCostQueries().get(0);
+        assertEquals("job_xduMNJJ2C_PIzfs3o83DRt2sJLs4", top1Cost.getJobId());
+        assertEquals("nsdataplatform@nsmall.com", top1Cost.getUserEmail());
+        assertEquals(101.72, top1Cost.getBytesProcessedGb(), 0.05);
+
+        BigQueryOptimizationDto.BigQueryJobItemDto top1Dur = nsDto.getLongDurationQueries().get(0);
+        assertEquals("job_TeKukE54jTLlFL1YQHvRBd_VsUo4", top1Dur.getJobId());
+        assertEquals("nsdataplatform@nsmall.com", top1Dur.getUserEmail());
+        assertEquals("02시 26분 27초", top1Dur.getExecutionDurationFormatted());
+
+        System.out.println(String.format("• [① NSMall 실측치 검증 통과] Project: %s | 9월 Job Count: %,d건 (기대: 285,447건) | 데이터 사용량: %.2f TB (기대: 481.08 TB) | 스토리지: %.1f GB (기대: 0.0 GB)",
                 nsDto.getProjectId(), nsDto.getCurrentMonthJobCount(), nsDto.getCurrentMonthProcessedTb(), nsDto.getTotalLogicalStorageGb()));
+        System.out.println(String.format("• [①-1 TOP 1 고비용 쿼리] Job ID: %s | 계정: %s | 사용량: %.2f GB",
+                top1Cost.getJobId(), top1Cost.getUserEmail(), top1Cost.getBytesProcessedGb()));
+        System.out.println(String.format("• [①-2 TOP 1 장기실행 쿼리] Job ID: %s | 계정: %s | 실행시간: %s",
+                top1Dur.getJobId(), top1Dur.getUserEmail(), top1Dur.getExecutionDurationFormatted()));
 
         // 3. 타 고객사 (한앤컴퍼니 hcompany-485701) 데이터 격리 검증
         BigQueryOptimizationDto hcDto = bigQueryOptimizationService.getBigQueryOptimizationMetrics("hcompany-485701", "2026-09");
