@@ -382,8 +382,25 @@ const GcpMonthlyReportViewPage: React.FC = () => {
     };
 
     const handlePrint = () => {
+        const originalTitle = document.title;
+        const safeCustomer = (selectedCustomer?.name || 'MegazoneCloud').replace(/[\\/:*?"<>|]/g, '');
+        const safeProject = (selectedProject || 'project-id').replace(/[\\/:*?"<>|]/g, '');
 
-        window.print();
+        const ymParts = selectedYearMonth ? selectedYearMonth.split('-') : [];
+        const yearStr = ymParts[0] ? `${ymParts[0]}년` : `${new Date().getFullYear()}년`;
+        const monthStr = ymParts[1] ? `${ymParts[1]}월` : `${String(new Date().getMonth() + 1).padStart(2, '0')}월`;
+        const reportTypeStr = isQuarterly ? '분기보고서' : '월간보고서';
+
+        const dynamicFileName = `${safeCustomer}-${safeProject}_${yearStr}_${monthStr}_${reportTypeStr}`;
+
+        try {
+            document.title = dynamicFileName;
+            window.print();
+        } finally {
+            setTimeout(() => {
+                document.title = originalTitle;
+            }, 1000);
+        }
     };
 
     const gcpCustomers = customers.filter(c => c.environments && c.environments.some(env => env.providerType === 'GCP' && env.projects && env.projects.length > 0));
