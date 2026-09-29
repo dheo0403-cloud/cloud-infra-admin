@@ -143,10 +143,10 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                 </div>
 
                 {/* 2-Column Split Body */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     {/* Left: Token & API Usage Trend Chart (Standardized IAM Structure & Height 170px) */}
-                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
-                        <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
+                        <div className="report-card-title">
                             <span>
                                 <i className="fas fa-chart-bar mr-1.5" style={{ color: '#2563eb' }}></i>월별 토큰 사용량 트렌드
                             </span>
@@ -207,7 +207,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                     </div>
 
                     {/* Right: AI Workload Breakdown & Quota */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         {/* 1. Model Ratio Breakdown */}
                         <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '8px' }}>
