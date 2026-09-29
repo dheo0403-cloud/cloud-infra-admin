@@ -1,5 +1,6 @@
 package com.example.infra;
 
+import com.example.infra.service.BigQueryOptimizationService;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryOptions;
@@ -8,11 +9,20 @@ import com.google.cloud.bigquery.QueryJobConfiguration;
 import com.google.cloud.bigquery.TableResult;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 
 import java.io.InputStream;
 
+// [버그수정 2026-09-28 / bq-multitenant-reload-mismatch] BigQueryOptimizationService가 이제
+// InfraEnvironmentService(실제 고객사 목록/자격증명 조회)를 의존하므로, 수동 new 생성 대신
+// Spring 컨텍스트에서 실제 빈을 주입받도록 @SpringBootTest로 전환
+@SpringBootTest
 public class BigQueryVerificationTest {
+
+    @Autowired
+    private BigQueryOptimizationService bigQueryOptimizationService;
 
     private static final String TARGET_PROJECT = "mzc-gcp-managed";
     private static final String DATASET = "infra_admin_dataset";
@@ -163,6 +173,124 @@ public class BigQueryVerificationTest {
     }
 
     @Test
+    @DisplayName("BigQuery 최적화 및 인벤토리 테이블 전 고객사/프로젝트별 데이터 갱신 상태(updated_at/created_at) 전수 정밀 점검")
+    public void checkCurrentAllCustomersDataStatus() throws Exception {
+        System.out.println("\n==========================================================================================");
+        System.out.println("🔍 [전 고객사/프로젝트별 BigQuery 테이블 갱신 일시(updated_at/created_at) 및 레코드 상태 전수 점검]");
+        System.out.println("==========================================================================================");
+
+        InputStream credStream = new ClassPathResource("gcp-credentials.json").getInputStream();
+        GoogleCredentials credentials = GoogleCredentials.fromStream(credStream);
+        BigQuery bigQuery = BigQueryOptions.newBuilder()
+                .setCredentials(credentials)
+                .setProjectId(TARGET_PROJECT)
+                .build()
+                .getService();
+
+        // 1. monthly_bq_resource_summary
+        System.out.println("\n📊 1. [monthly_bq_resource_summary] 프로젝트별/월별 갱신 시간 및 상태:");
+        try {
+            String q1 = String.format(
+                "SELECT customer_name, project_id, report_year_month, " +
+                "       job_count, total_tb_billed, total_logical_gb, total_physical_gb, " +
+                "       FORMAT_TIMESTAMP('%%Y-%%m-%%d %%H:%%M:%%S', updated_at, 'Asia/Seoul') AS last_updated_kst " +
+                "FROM `%s.%s.monthly_bq_resource_summary` " +
+                "ORDER BY customer_name, project_id, report_year_month DESC",
+                TARGET_PROJECT, DATASET
+            );
+            TableResult res1 = bigQuery.query(QueryJobConfiguration.newBuilder(q1).build());
+            for (FieldValueList r : res1.iterateAll()) {
+                System.out.println(String.format("  • [%s] %-28s | %s | %7d jobs | %8.3f TB | 논리:%6.1fGB | 물리:%6.1fGB | 갱신:%s",
+                        r.get("customer_name").getStringValue(),
+                        r.get("project_id").getStringValue(),
+                        r.get("report_year_month").getStringValue(),
+                        r.get("job_count").getLongValue(),
+                        r.get("total_tb_billed").getDoubleValue(),
+                        r.get("total_logical_gb").getDoubleValue(),
+                        r.get("total_physical_gb").getDoubleValue(),
+                        r.get("last_updated_kst").getStringValue()));
+            }
+        } catch (Exception e) {
+            System.out.println("  ⚠️ q1 error: " + e.getMessage());
+        }
+
+        // 2. monthly_bq_top_queries
+        System.out.println("\n📊 2. [monthly_bq_top_queries] 프로젝트별/카테고리별 쿼리 건수 및 최신 갱신일시:");
+        try {
+            String q2 = String.format(
+                "SELECT customer_name, project_id, report_year_month, query_category, COUNT(*) as cnt, " +
+                "       FORMAT_TIMESTAMP('%%Y-%%m-%%d %%H:%%M:%%S', MAX(updated_at), 'Asia/Seoul') AS last_updated_kst " +
+                "FROM `%s.%s.monthly_bq_top_queries` " +
+                "GROUP BY customer_name, project_id, report_year_month, query_category " +
+                "ORDER BY customer_name, project_id, report_year_month DESC, query_category",
+                TARGET_PROJECT, DATASET
+            );
+            TableResult res2 = bigQuery.query(QueryJobConfiguration.newBuilder(q2).build());
+            for (FieldValueList r : res2.iterateAll()) {
+                System.out.println(String.format("  • [%s] %-28s | %s | %-14s | %2d건 | 최신갱신:%s",
+                        r.get("customer_name").getStringValue(),
+                        r.get("project_id").getStringValue(),
+                        r.get("report_year_month").getStringValue(),
+                        r.get("query_category").getStringValue(),
+                        r.get("cnt").getLongValue(),
+                        r.get("last_updated_kst").getStringValue()));
+            }
+        } catch (Exception e) {
+            System.out.println("  ⚠️ q2 error: " + e.getMessage());
+        }
+
+        // 3. daily_asset_inventory 프로젝트별 최신 snapshot_date 및 created_at
+        System.out.println("\n📊 3. [daily_asset_inventory] 프로젝트별 최신 적재 일자 및 건수:");
+        try {
+            String q3 = String.format(
+                "SELECT customer_name, project_id, MAX(snapshot_date) as max_snap_date, COUNT(*) as total_records, " +
+                "       FORMAT_TIMESTAMP('%%Y-%%m-%%d %%H:%%M:%%S', MAX(created_at), 'Asia/Seoul') AS last_created_kst " +
+                "FROM `%s.%s.daily_asset_inventory` " +
+                "GROUP BY customer_name, project_id " +
+                "ORDER BY customer_name, project_id",
+                TARGET_PROJECT, DATASET
+            );
+            TableResult res3 = bigQuery.query(QueryJobConfiguration.newBuilder(q3).build());
+            for (FieldValueList r : res3.iterateAll()) {
+                System.out.println(String.format("  • [%s] %-28s | 최신스냅샷: %s | 총레코드: %5d건 | 적재일시: %s",
+                        r.get("customer_name").getStringValue(),
+                        r.get("project_id").getStringValue(),
+                        r.get("max_snap_date").getStringValue(),
+                        r.get("total_records").getLongValue(),
+                        r.get("last_created_kst").getStringValue()));
+            }
+        } catch (Exception e) {
+            System.out.println("  ⚠️ q3 error: " + e.getMessage());
+        }
+
+        // 4. daily_direct_ai_metrics
+        System.out.println("\n📊 4. [daily_direct_ai_metrics] 프로젝트별 Vertex AI 메트릭 최신 적재 현황:");
+        try {
+            String q4 = String.format(
+                "SELECT customer_name, project_id, MAX(snapshot_date) as max_snap_date, COUNT(*) as total_records, " +
+                "       FORMAT_TIMESTAMP('%%Y-%%m-%%d %%H:%%M:%%S', MAX(created_at), 'Asia/Seoul') AS last_created_kst " +
+                "FROM `%s.%s.daily_direct_ai_metrics` " +
+                "GROUP BY customer_name, project_id " +
+                "ORDER BY customer_name, project_id",
+                TARGET_PROJECT, DATASET
+            );
+            TableResult res4 = bigQuery.query(QueryJobConfiguration.newBuilder(q4).build());
+            for (FieldValueList r : res4.iterateAll()) {
+                System.out.println(String.format("  • [%s] %-28s | 최신스냅샷: %s | 총레코드: %5d건 | 적재일시: %s",
+                        r.get("customer_name").getStringValue(),
+                        r.get("project_id").getStringValue(),
+                        r.get("max_snap_date").getStringValue(),
+                        r.get("total_records").getLongValue(),
+                        r.get("last_created_kst").getStringValue()));
+            }
+        } catch (Exception e) {
+            System.out.println("  ⚠️ q4 error: " + e.getMessage());
+        }
+
+        System.out.println("==========================================================================================\n");
+    }
+
+    @Test
     @DisplayName("NSMall 실측치(285,447건, 481.08GB, 0GB 스토리지) 및 멀티 테넌트 격리 적재 실행 및 검증")
     public void testNsMallMetricsSync() throws Exception {
         System.out.println("\n=== 🚀 NSMall 실측치 및 멀티 테넌트 격리 동기화 실행 ===");
@@ -175,11 +303,8 @@ public class BigQueryVerificationTest {
                 .build()
                 .getService();
 
-        com.example.infra.service.BigQueryOptimizationService service =
-                new com.example.infra.service.BigQueryOptimizationService(bigQuery);
-
-        // 1. 전체 백필 실행
-        service.backfillAllProjects4MonthsBulk();
+        // 1. 전체 백필 실행 (Spring이 주입한 실제 InfraEnvironmentService 기반 서비스 사용)
+        bigQueryOptimizationService.backfillAllProjects4MonthsBulk();
         System.out.println("✅ backfillAllProjects4MonthsBulk() 실행 완료");
 
         // 2. NSMall 9월 실데이터 검증
