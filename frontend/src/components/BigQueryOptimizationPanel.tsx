@@ -108,7 +108,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                             <i className="fas fa-chart-bar mr-1" style={{ color: '#3b82f6' }}></i>1. 월별 리소스 및 스토리지 현황 (트렌드 모니터링)
                         </span>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '16px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             {/* Left: 4-Month Processed TB & Job Count Chart (Standardized IAM Structure & Height 170px) */}
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
                                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -157,7 +157,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                             </div>
 
                             {/* Right: Storage Capacity Summary Cards */}
-                            <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginBottom: '8px', display: 'block' }}>
                                     전체 데이터셋 스토리지 용량
                                 </span>

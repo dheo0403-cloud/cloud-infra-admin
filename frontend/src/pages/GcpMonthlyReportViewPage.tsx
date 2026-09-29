@@ -1725,11 +1725,11 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="report-card" style={{ marginBottom: 0 }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 핵심 지표</span>
                                 </div>
-                                <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', height: '115px' }}>
+                                <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', margin: 'auto 0' }}>
                                     {(() => {
                                         const gkeCount = reportData.gkeTotal || 0;
                                         const isGkeExist = gkeCount > 0;
