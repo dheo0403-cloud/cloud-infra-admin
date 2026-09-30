@@ -4,9 +4,16 @@ import { getDirectAiMetrics, DirectAiMetricsDto } from '../services/api';
 interface DirectAiUsagePanelProps {
     projectId?: string;
     targetYearMonth?: string;
+    isEditMode?: boolean;
+    onHideSection?: () => void;
 }
 
-const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targetYearMonth }) => {
+const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
+    projectId,
+    targetYearMonth,
+    isEditMode = false,
+    onHideSection
+}) => {
     const [metrics, setMetrics] = useState<DirectAiMetricsDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
@@ -85,7 +92,18 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({ projectId, targ
                         <i className="fas fa-brain mr-2" style={{ color: '#2563eb' }}></i>
                         Direct AI Usage (AI 서비스 직접 사용)
                     </span>
-                    <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {isEditMode && onHideSection && (
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger font-weight-bold"
+                                style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px' }}
+                                onClick={onHideSection}
+                                title="이 섹션을 화면 및 PDF 출력 대상에서 임시로 숨깁니다. (실제 데이터는 보존됨)"
+                            >
+                                <i className="fas fa-eye-slash mr-1"></i>섹션 숨기기 (PDF 제외)
+                            </button>
+                        )}
                         {hasData && !isDirectAiEmpty ? (
                             <span style={{
                                 fontSize: '10px',

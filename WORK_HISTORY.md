@@ -3,6 +3,25 @@
 이 문서는 하나의 유의미한 작업 단위(기능 구현, 버그 수정, 환경 설정, 리팩토링 등)가 완료될 때마다 자동으로 누적 기록되는 파일입니다. (`CLAUDE.md` 규칙 #7에 의해 자동 관리됨)
 
 
+
+---
+
+### [2026-09-30 18:32] [기능 추가 & UI] Direct AI 및 Endpoint Serving 섹션 '섹션 숨기기 (PDF 제외)' 토글 기능 구현
+* **대상 프로젝트:** cloud-infra-admin 프론트엔드 (React 18)
+* **작업 목적 및 내용:**
+  - 기존 BigQuery 관제 섹션에만 제공되던 편집 모드 전용 '섹션 숨기기 (PDF 제외)' 토글 버튼 및 복원 바 기능을 Direct AI Usage 및 Endpoint Serving 2개 섹션에도 동일하게 확장 구현.
+  - **1) Props 및 UI 버튼 탑색/추가:** DirectAiUsagePanel.tsx, EndpointServingPanel.tsx에 isEditMode?: boolean, onHideSection?: () => void 프로퍼티 추가 및 Header 우측 영역에 섹션 숨기기 (PDF 제외) 빨간색 아웃라인 버튼배치.
+  - **2) 상태 관리 및 복원 바 렌더링:** GcpMonthlyReportViewPage.tsx 내 isDirectAiSectionVisible, isEndpointSectionVisible boolean state 추가 및 편집 모드 시 [숨김 처리됨]... 복원 바 조건부 렌더링 적용.
+* **수정된 파일 및 실행 명령어:**
+  - rontend/src/components/DirectAiUsagePanel.tsx
+  - rontend/src/components/EndpointServingPanel.tsx
+  - rontend/src/pages/GcpMonthlyReportViewPage.tsx
+  - cd backend; .\gradlew.bat bootJar
+* **검증 결과:**
+  - TypeScript 타입 체킹(
+px tsc --noEmit) 0 오류 통과.
+  - Puppeteer 자동화 테스트(erify_toggle_ui.js)를 통해 3개 관제 섹션 숨기기/복원 토글 동작 및 콘솔 에러 0건 완증.
+  - Gradle ootJar 패키징 빌드 성공(BUILD SUCCESSFUL in 1m 2s).
 ---
 
 ### [2026-09-30 16:31] [버그 수정 & 데이터 픽스] BigQuery 성능 분석 대시보드 쿼리 정합성(PDF/HTML) 전면 일치화 보정
