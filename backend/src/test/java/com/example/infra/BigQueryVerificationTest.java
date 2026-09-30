@@ -14,6 +14,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 // [버그수정 2026-09-28 / bq-multitenant-reload-mismatch] BigQueryOptimizationService가 이제
 // InfraEnvironmentService(실제 고객사 목록/자격증명 조회)를 의존하므로, 수동 new 생성 대신

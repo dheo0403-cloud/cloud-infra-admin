@@ -1010,6 +1010,53 @@ public class BigQueryOptimizationService {
     }
 
     /**
+     * 특정 GCP 프로젝트 및 연월에 대한 BigQuery 최적화 데이터를 온디맨드로 실시간 동기화
+     */
+    public boolean syncOptimizationDataForProjectOnDemand(String projectId, String targetYearMonth) {
+        if (projectId == null || projectId.trim().isEmpty()) return false;
+        try {
+            List<InfraEnvironment> environments = infraEnvironmentService.getAllEnvironments();
+            for (InfraEnvironment env : environments) {
+                if (Boolean.TRUE.equals(env.getIsDeleted())) continue;
+                if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+
+                List<CloudProject> projects = env.getProjects();
+                if (projects == null) continue;
+
+                boolean projectFound = false;
+                for (CloudProject p : projects) {
+                    if (projectId.trim().equalsIgnoreCase(p.getProjectId())) {
+                        projectFound = true;
+                        break;
+                    }
+                }
+
+                if (projectFound) {
+                    String decryptedSecret = infraEnvironmentService.getDecryptedSecret(env.getId());
+                    GoogleCredentials credentials = null;
+                    if (decryptedSecret != null && !decryptedSecret.trim().isEmpty()) {
+                        credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decryptedSecret.getBytes()))
+                                .createScoped(Collections.singletonList("https://www.googleapis.com/auth/cloud-platform"));
+                    }
+                    String customerName = (env.getCustomer() != null && env.getCustomer().getName() != null)
+                            ? env.getCustomer().getName() : "Unknown";
+
+                    String snapDate = (targetYearMonth != null && targetYearMonth.matches("^\\d{4}-\\d{2}$"))
+                            ? targetYearMonth + "-21"
+                            : LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
+                    collectAndUpsertBigQueryOptimizationData(snapDate, projectId.trim(), customerName, credentials);
+                    log.info("[BQ-OPTIMIZATION-ON-DEMAND] Successfully synced data for project `{}` month `{}`", projectId, targetYearMonth);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            log.error("[BQ-OPTIMIZATION-ON-DEMAND] Failed on-demand sync for project `{}`: {}", projectId, e.getMessage(), e);
+        }
+        return false;
+    }
+
+    /**
      * 보고서용 BigQuery 성능 및 비용 최적화 관제 데이터 조회 (4개월 트렌드 + TOP 10 쿼리)
      */
     public BigQueryOptimizationDto getBigQueryOptimizationMetrics(String targetProjectId, String targetYearMonth) {
@@ -1068,6 +1115,23 @@ public class BigQueryOptimizationService {
                 map.put(ym, row);
                 if (!row.get("customer_name").isNull()) {
                     customerName = row.get("customer_name").getStringValue();
+                }
+            }
+
+            // [자동 온디맨드 동기화] 조회 대상 연월(effectiveYearMonth) 데이터가 테이블에 없을 경우 실시간 온디맨드 수집 실행
+            if (!map.containsKey(effectiveYearMonth)) {
+                log.info("[BQ-OPTIMIZATION-API] Target month `{}` data missing for project `{}`. Triggering on-demand sync...",
+                        effectiveYearMonth, effectiveProjectId);
+                if (syncOptimizationDataForProjectOnDemand(effectiveProjectId, effectiveYearMonth)) {
+                    summaryRes = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql).build());
+                    map.clear();
+                    for (FieldValueList row : summaryRes.iterateAll()) {
+                        String ym = row.get("ym").getStringValue();
+                        map.put(ym, row);
+                        if (!row.get("customer_name").isNull()) {
+                            customerName = row.get("customer_name").getStringValue();
+                        }
+                    }
                 }
             }
 
