@@ -243,25 +243,35 @@ public class BigQueryOptimizationService {
 
             for (String region : regions) {
                 try {
+                    // PDF/HTML 표준 쿼리 규격 반영 (`{projectId}.region-{region}.INFORMATION_SCHEMA.JOBS`)
+                    // 조건: job_type = 'QUERY' AND state = 'DONE' (cache_hit 필터 없이 전면 집계)
                     String usageSql = String.format(
                         "SELECT COUNT(job_id) AS job_count, " +
                         "       IFNULL(SUM(total_bytes_processed), 0) AS total_bytes_processed, " +
                         "       IFNULL(SUM(total_bytes_billed), 0) AS total_bytes_billed, " +
-                        "       IFNULL(SUM(total_slot_ms), 0) AS total_slot_ms, " +
-                        "       IFNULL(SUM(TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 0) AS total_duration_ms, " +
-                        "       MAX(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND))) AS max_slots, " +
-                        "       MIN(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND))) AS min_slots " +
-                        "FROM `region-%s`.INFORMATION_SCHEMA.JOBS_BY_PROJECT " +
-                        "WHERE DATE(creation_time, 'Asia/Seoul') BETWEEN @startDate AND @endDate " +
-                        "  AND job_type = 'QUERY' AND state = 'DONE' " +
-                        "  AND cache_hit IS NOT TRUE AND error_result IS NULL",
-                        region
+                        "       MAX(ROUND(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 2)) AS max_slots, " +
+                        "       ROUND(AVG(ROUND(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 2)), 2) AS avg_slots " +
+                        "FROM `%s.region-%s.INFORMATION_SCHEMA.JOBS` " +
+                        "WHERE DATE(DATETIME(creation_time, 'Asia/Seoul')) BETWEEN @startDate AND @endDate " +
+                        "  AND job_type = 'QUERY' AND state = 'DONE'",
+                        projectId, region
                     );
                     QueryJobConfiguration usageCfg = QueryJobConfiguration.newBuilder(usageSql)
                             .addNamedParameter("startDate", QueryParameterValue.date(startDate))
                             .addNamedParameter("endDate", QueryParameterValue.date(endDate))
                             .build();
-                    TableResult usageRes = tenantClient.query(usageCfg);
+                    TableResult usageRes;
+                    try {
+                        usageRes = tenantClient.query(usageCfg);
+                    } catch (Exception fallbackEx) {
+                        // JOBS 뷰 접근 제한 시 JOBS_BY_PROJECT 뷰로 폴백
+                        String fallbackSql = usageSql.replace(String.format("`%s.region-%s.INFORMATION_SCHEMA.JOBS`", projectId, region),
+                                                              String.format("`region-%s.INFORMATION_SCHEMA.JOBS_BY_PROJECT`", region));
+                        usageRes = tenantClient.query(QueryJobConfiguration.newBuilder(fallbackSql)
+                                .addNamedParameter("startDate", QueryParameterValue.date(startDate))
+                                .addNamedParameter("endDate", QueryParameterValue.date(endDate))
+                                .build());
+                    }
                     for (FieldValueList row : usageRes.iterateAll()) {
                         summary.jobCount += row.get("job_count").isNull() ? 0 : row.get("job_count").getLongValue();
                         summary.totalBytesProcessed += row.get("total_bytes_processed").isNull() ? 0 : row.get("total_bytes_processed").getLongValue();
@@ -283,18 +293,32 @@ public class BigQueryOptimizationService {
 
                 // 스토리지는 시점 스냅샷(TABLE_STORAGE)만 제공되어 과거 월 재현이 불가능함 - 현재 시점 실측치를 사용
                 try {
+                    // PDF/HTML 표준 규격 필터 적용 (deleted = false AND fail_safe_physical_bytes <> 0 AND table_schema NOT LIKE '_script%')
                     String storageSql = String.format(
-                        "SELECT IFNULL(SUM(total_logical_bytes), 0) AS total_logical_bytes, " +
-                        "       IFNULL(SUM(total_physical_bytes), 0) AS total_physical_bytes " +
-                        "FROM `region-%s`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT",
-                        region
+                        "SELECT IFNULL(SUM(ROUND(SAFE_DIVIDE(total_logical_bytes, POWER(1024, 3)), 2)), 0) AS total_logical_gb, " +
+                        "       IFNULL(SUM(ROUND(SAFE_DIVIDE(total_physical_bytes, POWER(1024, 3)), 2)), 0) AS total_physical_gb " +
+                        "FROM `%s.region-%s.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT` " +
+                        "WHERE deleted = false AND fail_safe_physical_bytes <> 0 AND table_schema NOT LIKE '_script%%'",
+                        projectId, region
                     );
-                    TableResult storageRes = tenantClient.query(QueryJobConfiguration.newBuilder(storageSql).build());
+                    TableResult storageRes;
+                    try {
+                        storageRes = tenantClient.query(QueryJobConfiguration.newBuilder(storageSql).build());
+                    } catch (Exception fallbackEx) {
+                        String fallbackStorageSql = String.format(
+                            "SELECT IFNULL(SUM(ROUND(SAFE_DIVIDE(total_logical_bytes, POWER(1024, 3)), 2)), 0) AS total_logical_gb, " +
+                            "       IFNULL(SUM(ROUND(SAFE_DIVIDE(total_physical_bytes, POWER(1024, 3)), 2)), 0) AS total_physical_gb " +
+                            "FROM `region-%s`.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT " +
+                            "WHERE deleted = false AND fail_safe_physical_bytes <> 0 AND table_schema NOT LIKE '_script%%'",
+                            region
+                        );
+                        storageRes = tenantClient.query(QueryJobConfiguration.newBuilder(fallbackStorageSql).build());
+                    }
                     for (FieldValueList row : storageRes.iterateAll()) {
-                        long logicalBytes = row.get("total_logical_bytes").isNull() ? 0 : row.get("total_logical_bytes").getLongValue();
-                        long physicalBytes = row.get("total_physical_bytes").isNull() ? 0 : row.get("total_physical_bytes").getLongValue();
-                        summary.totalLogicalGb += logicalBytes / Math.pow(1024, 3);
-                        summary.totalPhysicalGb += physicalBytes / Math.pow(1024, 3);
+                        double logicalGb = row.get("total_logical_gb").isNull() ? 0.0 : row.get("total_logical_gb").getDoubleValue();
+                        double physicalGb = row.get("total_physical_gb").isNull() ? 0.0 : row.get("total_physical_gb").getDoubleValue();
+                        summary.totalLogicalGb += logicalGb;
+                        summary.totalPhysicalGb += physicalGb;
                     }
                 } catch (Exception e) {
                     log.error("[BQ-OPTIMIZATION-REAL] TABLE_STORAGE_BY_PROJECT query failed for project {} region {}: {}", projectId, region, e.getMessage(), e);
@@ -306,7 +330,7 @@ public class BigQueryOptimizationService {
 
         summary.maxSlots = maxSlotsCandidate != null ? Math.round(maxSlotsCandidate * 10.0) / 10.0 : 0.0;
         summary.minSlots = minSlotsCandidate != null ? Math.round(minSlotsCandidate * 10.0) / 10.0 : 0.0;
-        summary.avgSlots = totalDurationMs > 0 ? Math.round((totalSlotMs / (double) totalDurationMs) * 10.0) / 10.0 : 0.0;
+        summary.avgSlots = minSlotsCandidate != null ? Math.round(minSlotsCandidate * 10.0) / 10.0 : 0.0;
 
         log.info("[BQ-OPTIMIZATION-REAL] project={} range=[{}..{}] regions={} -> jobs={} billedBytes={} logicalGb={} physicalGb={}",
                 projectId, startDate, endDate, regions, summary.jobCount, summary.totalBytesBilled, summary.totalLogicalGb, summary.totalPhysicalGb);
