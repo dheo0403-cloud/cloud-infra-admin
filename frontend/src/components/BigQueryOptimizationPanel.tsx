@@ -124,7 +124,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                     {displayDates.map((dateStr, idx) => {
                                         const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
                                         const jcVal = data.jobCountTrend?.[idx] || 0;
-                                        const heightPercent = tbVal > 0 ? Math.max(12, Math.min(100, Math.round((tbVal / maxTb) * 85))) : 0;
+                                        const heightPercent = tbVal > 0 ? Math.max(20, Math.min(85, Math.round((tbVal / maxTb) * 85))) : 0;
 
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>

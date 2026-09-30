@@ -6,6 +6,26 @@
 
 ---
 
+### [2026-09-30 19:10] [UI/스케일링] 대시보드 차트 높이(170px) 스케일링(85% 상한), 최소높이(20%) & 막대 두께(16px) 균일화 표준 보정
+* **대상 프로젝트:** cloud-infra-admin 프론트엔드 (React 18) 및 Spring Boot 통합 빌드
+* **작업 목적 및 내용:**
+  - 사용자 제보에 따른 차트 막대 높이 불균형(IAM/Compute VM 100% 솟음 vs VPC/Subnet 상대적 낮음) 원인 분석 및 레이아웃 표준 보정.
+  - **1) 85% 상한 스케일링 통일:** 차트 막대 상단 수치 라벨(18, 6 등)이 차트 상단 영역/보더 밖으로 넘어가지 않도록 최대 높이 비율을 `85%` 상한(`* 85`)으로 공통 적용.
+  - **2) 20% 최소 높이 보장 (Min-Height Guard):** 상대적으로 적은 수치(4, 5 등)도 시각적 가시성을 잃지 않도록 `Math.max(20, ...)` 최소 높이 20% 보장.
+  - **3) 이중 막대 두께 최적화:** VPC/Subnet, IAM, Direct AI, Endpoint Serving의 이중 막대 두께를 `14px` -> `16px` (`width: '16px'`)로 상향 조정하여 굵기 밸런스 균일화.
+* **수정된 파일 및 실행 명령어:**
+  - `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
+  - `frontend/src/components/BigQueryOptimizationPanel.tsx`
+  - `frontend/src/components/DirectAiUsagePanel.tsx`
+  - `frontend/src/components/EndpointServingPanel.tsx`
+  - `npm run build` & `.\gradlew.bat bootJar`
+* **검증 결과:**
+  - TypeScript 타입 체킹(`npx tsc --noEmit`) 0 오류 완전 통과.
+  - Gradle `bootJar` 패키징 빌드 성공 (`BUILD SUCCESSFUL in 49s`).
+  - Puppeteer DOM 실측 자동화 테스트(`verify_chart_ui.cjs`)를 통해 브라우저 콘솔 에러 0건 및 렌더링 정합성 검증 완료.
+
+---
+
 ### [2026-09-30 18:32] [기능 추가 & UI] Direct AI 및 Endpoint Serving 섹션 '섹션 숨기기 (PDF 제외)' 토글 기능 구현
 * **대상 프로젝트:** cloud-infra-admin 프론트엔드 (React 18)
 * **작업 목적 및 내용:**

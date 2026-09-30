@@ -1159,16 +1159,16 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
                                     const uCount = userTrend[idx] || 0;
                                     const sCount = saTrend[idx] || 0;
-                                    const uPct = (uCount / maxVal) * 100;
-                                    const sPct = (sCount / maxVal) * 100;
+                                    const uPct = uCount > 0 ? Math.max(20, Math.round((uCount / maxVal) * 85)) : 0;
+                                    const sPct = sCount > 0 ? Math.max(20, Math.round((sCount / maxVal) * 85)) : 0;
 
                                     return (
                                         <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                             <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                <div style={{ width: '20px', backgroundColor: '#93c5fd', borderRadius: '4px 4px 0 0', height: `${uPct}%`, position: 'relative' }}>
+                                                <div style={{ width: '16px', backgroundColor: '#93c5fd', borderRadius: '3px 3px 0 0', height: `${uPct}%`, position: 'relative' }}>
                                                     {uCount > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#475569' }}>{uCount}</span>}
                                                 </div>
-                                                <div style={{ width: '20px', backgroundColor: '#1e3a8a', borderRadius: '4px 4px 0 0', height: `${sPct}%`, position: 'relative' }}>
+                                                <div style={{ width: '16px', backgroundColor: '#1e3a8a', borderRadius: '3px 3px 0 0', height: `${sPct}%`, position: 'relative' }}>
                                                     {sCount > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1e3a8a' }}>{sCount}</span>}
                                                 </div>
                                             </div>
@@ -1359,7 +1359,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 const trendArr = reportData.vmTotalTrend || [0, 0, 0, (reportData.vmTotal || 0)];
                                                 const val = trendArr[idx] || 0;
                                                 const maxV = Math.max(1, ...trendArr);
-                                                const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                                const hPct = val > 0 ? Math.max(20, Math.round((val / maxV) * 85)) : 0;
                                                 return (
                                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
@@ -1496,16 +1496,16 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         const netVal = (reportData.vpcTrend && reportData.vpcTrend.length > idx) ? reportData.vpcTrend[idx] : 0;
                                         const subVal = (reportData.vpcSubnetTrend && reportData.vpcSubnetTrend.length > idx) ? reportData.vpcSubnetTrend[idx] : 0;
                                         const maxV = Math.max(1, ...((reportData.vpcTrend || [1])), ...((reportData.vpcSubnetTrend || [1])));
-                                        const netPct = netVal > 0 ? Math.max(12, Math.round((netVal / maxV) * 100)) : 0;
-                                        const subPct = subVal > 0 ? Math.max(12, Math.round((subVal / maxV) * 100)) : 0;
+                                        const netPct = netVal > 0 ? Math.max(20, Math.round((netVal / maxV) * 85)) : 0;
+                                        const subPct = subVal > 0 ? Math.max(20, Math.round((subVal / maxV) * 85)) : 0;
 
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '14px', backgroundColor: '#60a5fa', borderRadius: '3px 3px 0 0', height: `${netPct}%`, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#60a5fa', borderRadius: '3px 3px 0 0', height: `${netPct}%`, position: 'relative' }}>
                                                         {netVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#2563eb' }}>{netVal}</span>}
                                                     </div>
-                                                    <div style={{ width: '14px', backgroundColor: '#1d4ed8', borderRadius: '3px 3px 0 0', height: `${subPct}%`, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#1d4ed8', borderRadius: '3px 3px 0 0', height: `${subPct}%`, position: 'relative' }}>
                                                         {subVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1d4ed8' }}>{subVal}</span>}
                                                     </div>
                                                 </div>
@@ -1589,7 +1589,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         const trendArr = (reportData.lbTrend && reportData.lbTrend.length > 0) ? reportData.lbTrend : [(reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0), (reportData.lbTotal || 0)];
                                         const val = trendArr[idx] || 0;
                                         const maxV = Math.max(1, ...trendArr);
-                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        const hPct = val > 0 ? Math.max(20, Math.round((val / maxV) * 85)) : 0;
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
@@ -1724,7 +1724,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         const trendArr = (reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [(reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0)];
                                         const val = trendArr[idx] || 0;
                                         const maxV = Math.max(1, ...trendArr);
-                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        const hPct = val > 0 ? Math.max(20, Math.round((val / maxV) * 85)) : 0;
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
@@ -1798,7 +1798,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         const trendArr = (reportData.serverlessTrend && reportData.serverlessTrend.length > 0) ? reportData.serverlessTrend : [(reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0), (reportData.cloudRunSummary?.totalServices || 0)];
                                         const val = trendArr[idx] || 0;
                                         const maxV = Math.max(1, ...trendArr);
-                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        const hPct = val > 0 ? Math.max(20, Math.round((val / maxV) * 85)) : 0;
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
@@ -2078,7 +2078,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         const trendArr = (reportData.sqlTotalTrend && reportData.sqlTotalTrend.length > 0) ? reportData.sqlTotalTrend : [(reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0), (reportData.sqlTotal || 0)];
                                         const val = trendArr[idx] || 0;
                                         const maxV = Math.max(1, ...trendArr);
-                                        const hPct = val > 0 ? Math.max(15, Math.round((val / maxV) * 100)) : 0;
+                                        const hPct = val > 0 ? Math.max(20, Math.round((val / maxV) * 85)) : 0;
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>

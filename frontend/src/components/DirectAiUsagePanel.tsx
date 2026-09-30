@@ -175,14 +175,14 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                             {displayDates.map((date, idx) => {
                                 const inTok = Number(data.inputTokensTrend?.[idx] || 0);
                                 const outTok = Number(data.outputTokensTrend?.[idx] || 0);
-                                const inHeight = inTok > 0 ? Math.max((inTok / maxTokenValue) * 100, 12) : 0;
-                                const outHeight = outTok > 0 ? Math.max((outTok / maxTokenValue) * 100, 12) : 0;
+                                const inHeight = inTok > 0 ? Math.max(20, Math.round((inTok / maxTokenValue) * 85)) : 0;
+                                const outHeight = outTok > 0 ? Math.max(20, Math.round((outTok / maxTokenValue) * 85)) : 0;
 
                                 return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                             <div style={{
-                                                width: '14px',
+                                                width: '16px',
                                                 height: `${inHeight}%`,
                                                 backgroundColor: inHeight > 0 ? '#3b82f6' : 'transparent',
                                                 borderRadius: '3px 3px 0 0',
@@ -195,7 +195,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                                 )}
                                             </div>
                                             <div style={{
-                                                width: '14px',
+                                                width: '16px',
                                                 height: `${outHeight}%`,
                                                 backgroundColor: outHeight > 0 ? '#10b981' : 'transparent',
                                                 borderRadius: '3px 3px 0 0',
