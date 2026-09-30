@@ -2,6 +2,21 @@
 
 이 문서는 하나의 유의미한 작업 단위(기능 구현, 버그 수정, 환경 설정, 리팩토링 등)가 완료될 때마다 자동으로 누적 기록되는 파일입니다. (`CLAUDE.md` 규칙 #7에 의해 자동 관리됨)
 
+
+---
+
+### [2026-09-30 16:31] [버그 수정 & 데이터 픽스] BigQuery 성능 분석 대시보드 쿼리 정합성(PDF/HTML) 전면 일치화 보정
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (BigQueryOptimizationService.java)
+* **작업 목적 및 내용:**
+  - 사용자 제보에 따른 기존 백엔드 수집 쿼리와 PDF/HTML 보고서 내 실측 쿼리 간의 데이터 불일치 원인 분석 및 완벽 동기화 처리.
+  - **1) 뷰 타겟팅 보정:** JOBS_BY_PROJECT 조회를 {project}.region-{region}.INFORMATION_SCHEMA.JOBS 로 정확히 타겟팅하여 데이터 일치화.
+  - **2) 스토리지 쿼리 필터 추가:** 누락되었던 필수 필터(deleted = false, 	able_schema NOT LIKE '_script%' 등)를 적용하여 과대 계상되던 스토리지 용량 정상화.
+  - **3) 슬롯 사용률 연산 및 필터 보정:** 전체 합계의 평균(가중평균)이 아닌, Job 단위의 개별 평균 슬롯에 대한 MAX/AVG 산출 로직으로 전환. 캐시 제외 등 백엔드 강제 필터를 걷어내고 PDF/HTML 기준 기조와 100% 동일한 수치 집계 보장.
+* **수정된 파일 및 실행 명령어:**
+  - ackend/src/main/java/com/example/infra/service/BigQueryOptimizationService.java
+  - ./gradlew compileJava
+* **검증 결과:**
+  - 쿼리 문법 검증 및 Java Build 통과(Actionable task 1 executed).
 ---
 
 ### [2026-09-29 14:30] [배포] BigQuery 월별 동적 수집 로직 반영 백엔드 서버 Clean Rebuild 및 재배포(Redeploy) 완료
