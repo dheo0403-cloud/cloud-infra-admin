@@ -1108,10 +1108,10 @@ public class BigQueryOptimizationService {
         double avgSlots = 0.0;
 
         try {
-            // 1. 4개월 월별 리소스 요약 조회 (Billed TB 우선 매핑)
+            // 1. 4개월 월별 리소스 요약 조회 (Processed/Billed TB 매핑 - 0.0 회피 COALESCE 적용)
             String summarySql = String.format(
                 "SELECT report_year_month AS ym, customer_name, job_count, " +
-                "       COALESCE(total_tb_billed, total_tb_processed) AS total_tb_billed, " +
+                "       COALESCE(NULLIF(total_tb_processed, 0.0), NULLIF(total_tb_billed, 0.0), 0.0) AS total_tb_billed, " +
                 "       total_logical_gb, total_physical_gb, total_physical_tb, max_slots, min_slots, avg_slots " +
                 "FROM `%s.%s.%s` " +
                 "WHERE project_id = '%s' AND report_year_month BETWEEN '%s' AND '%s' " +
@@ -1176,7 +1176,7 @@ public class BigQueryOptimizationService {
 
             String topQueriesSql = String.format(
                 "SELECT query_category, rank, created_date, job_id, user_email, statement_type, query, " +
-                "       COALESCE(bytes_billed_gb, bytes_processed_gb) AS bytes_billed_gb, " +
+                "       COALESCE(NULLIF(bytes_processed_gb, 0.0), NULLIF(bytes_billed_gb, 0.0), 0.0) AS bytes_billed_gb, " +
                 "       estimated_cost_usd, total_slot_ms, execution_time_seconds, " +
                 "       execution_duration_formatted, job_average_slots " +
                 "FROM `%s.%s.%s` " +
