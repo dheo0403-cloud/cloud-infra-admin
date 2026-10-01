@@ -362,29 +362,4 @@ public class BigQueryVerificationTest {
 
         System.out.println("\n=== 🏁 NSMall 실측치 및 멀티 테넌트 격리 백필 및 검증 완료 ===\n");
     }
-
-    @Test
-    @DisplayName("DB(infra_environment) 등록 프로젝트 vs BigQuery 적재 데이터 정밀 비교 검증 리포트 생성")
-    public void testVerifyAllGcpProjectsDataIntegrity() throws Exception {
-        System.out.println("\n==========================================================================================");
-        System.out.println("🔍 [DB infra_environment vs BigQuery 적재 데이터 정밀 교차 비교 검증 리포트]");
-        System.out.println("==========================================================================================");
-
-        com.example.infra.dto.BigQueryOptimizationDto.BigQueryIntegrityReportDto report =
-                bigQueryOptimizationService.verifyAllGcpProjectsDataIntegrity();
-
-        System.out.println(String.format("📊 총 등록 GCP 프로젝트 수: %d개 | 검증완료(PASS): %d개 | 미적재/0건(NO_DATA): %d개",
-                report.getTotalRegisteredProjects(), report.getFullyVerifiedProjects(), report.getMissingProjects()));
-        System.out.println("------------------------------------------------------------------------------------------");
-
-        if (report.getProjectStatuses() != null) {
-            for (com.example.infra.dto.BigQueryOptimizationDto.ProjectIntegrityStatusDto p : report.getProjectStatuses()) {
-                System.out.println(String.format("  [%s] 고객사: %-15s | 프로젝트ID: %-26s | 요약:%2d건 | TOP쿼리:%2d건 | 커버리지: %-25s | 상태상세: %s",
-                        p.getStatus(), p.getCustomerName(), p.getProjectId(),
-                        p.getSummaryRecordCount(), p.getTopQueryRecordCount(),
-                        p.getMonthsCovered(), p.getDetailMessage()));
-            }
-        }
-        System.out.println("==========================================================================================\n");
-    }
 }
