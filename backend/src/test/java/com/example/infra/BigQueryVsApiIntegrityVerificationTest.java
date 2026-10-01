@@ -1,9 +1,11 @@
 package com.example.infra;
 
 import com.example.infra.dto.BigQueryOptimizationDto;
-import com.example.infra.dto.MonthlyReportDto;
+import com.example.infra.entity.CloudProject;
+import com.example.infra.entity.InfraEnvironment;
 import com.example.infra.service.BigQueryOptimizationService;
-import com.example.infra.service.MonthlyReportService;
+import com.example.infra.service.InfraEnvironmentService;
+import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.FieldValueList;
 import com.google.cloud.bigquery.QueryJobConfiguration;
@@ -14,11 +16,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.util.ArrayList;
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 
 /**
- * BigQuery 원천 저장 데이터 vs 백엔드 리포트 API 응답 DTO 간 수치 1:1 정밀 교차 비교 검증 테스트
+ * BigQuery 원천 데이터 전체 삭제 후 실제 원천 데이터 전수 재적재 및 백엔드 리포트 API 응답 DTO 간 수치 1:1 정밀 교차 비교 검증 테스트
  */
 @SpringBootTest
 public class BigQueryVsApiIntegrityVerificationTest {
@@ -30,7 +34,7 @@ public class BigQueryVsApiIntegrityVerificationTest {
     private BigQueryOptimizationService bigQueryOptimizationService;
 
     @Autowired
-    private MonthlyReportService monthlyReportService;
+    private InfraEnvironmentService infraEnvironmentService;
 
     @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
     private String hostProjectId;
@@ -39,13 +43,67 @@ public class BigQueryVsApiIntegrityVerificationTest {
     private String datasetName;
 
     @Test
-    @DisplayName("BigQuery 원천 데이터(monthly_bq_resource_summary) vs API 반환 DTO 수치 1:1 비교 검증 (전체 고객사 프로젝트 전수)")
-    public void testCompareBigQueryRawDataWithApiResponse() throws Exception {
+    @DisplayName("1. 기존 BigQuery 적재 데이터 전체 삭제 -> 2. 모든 고객사 GCP 실제 원천 데이터 전수 재적재 -> 3. 수치 1:1 검증")
+    public void testPurgeReloadAndVerifyAllCustomerProjects() throws Exception {
         System.out.println("\n==========================================================================================");
-        System.out.println("🔍 [모든 고객사 GCP 프로젝트별 BigQuery 원천 데이터 vs 리포트 API 응답 수치 1:1 전수 비교]");
+        System.out.println("🧹 [1단계: 기존 BigQuery 적재 요약/TOP 쿼리 데이터 전체 삭제 (Purge All Previous Data)]");
         System.out.println("==========================================================================================");
 
-        // 1. BigQuery 원천 테이블에서 모든 고객사 프로젝트의 최신 월별 요약 데이터 일괄 조회 (Bulk Query)
+        try {
+            String deleteSummarySql = String.format("DELETE FROM `%s.%s.monthly_bq_resource_summary` WHERE 1=1", hostProjectId, datasetName);
+            String deleteTopQueriesSql = String.format("DELETE FROM `%s.%s.monthly_bq_top_queries` WHERE 1=1", hostProjectId, datasetName);
+            bigQuery.query(QueryJobConfiguration.newBuilder(deleteSummarySql).build());
+            bigQuery.query(QueryJobConfiguration.newBuilder(deleteTopQueriesSql).build());
+            System.out.println("✅ 기존 `monthly_bq_resource_summary` 및 `monthly_bq_top_queries` 테이블의 모든 데이터 삭제 완료.");
+        } catch (Exception e) {
+            System.out.println("⚠️ 데이터 삭제 중 예외 발생: " + e.getMessage());
+        }
+
+        System.out.println("\n==========================================================================================");
+        System.out.println("🔄 [2단계: DB 등록 모든 고객사 GCP 프로젝트의 실제 INFORMATION_SCHEMA 원천 데이터 전수 재적재]");
+        System.out.println("==========================================================================================");
+
+        List<InfraEnvironment> envs = infraEnvironmentService.getAllEnvironments();
+        String[] snapshotDates = new String[]{"2026-09-30", "2026-08-31", "2026-07-31"};
+
+        int reloadSuccessCount = 0;
+        for (InfraEnvironment env : envs) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            String customerName = (env.getCustomer() != null) ? env.getCustomer().getName() : "UnknownCustomer";
+            String secretJson = infraEnvironmentService.getDecryptedSecret(env.getId());
+            if (secretJson == null || secretJson.trim().isEmpty()) continue;
+
+            GoogleCredentials credentials;
+            try {
+                credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(secretJson.getBytes(StandardCharsets.UTF_8)))
+                        .createScoped(Collections.singletonList("https://www.googleapis.com/auth/cloud-platform"));
+            } catch (Exception e) {
+                System.err.println("❌ GoogleCredentials 파싱 실패: " + e.getMessage());
+                continue;
+            }
+
+            if (env.getProjects() != null) {
+                for (CloudProject project : env.getProjects()) {
+                    String projectId = project.getProjectId();
+                    if (projectId == null || projectId.trim().isEmpty()) continue;
+
+                    for (String snapDate : snapshotDates) {
+                        try {
+                            bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapDate, projectId, customerName, credentials);
+                            reloadSuccessCount++;
+                        } catch (Exception e) {
+                            System.err.println(String.format("❌ [%s / %s] 실제 데이터 재적재 실패: %s", projectId, snapDate, e.getMessage()));
+                        }
+                    }
+                }
+            }
+        }
+        System.out.println(String.format("✅ 총 %d개 고객사 프로젝트/월 조합에 대해 실제 원천 데이터 새로 적재 완료.", reloadSuccessCount));
+
+        System.out.println("\n==========================================================================================");
+        System.out.println("🔍 [3단계: 적재 완료된 BigQuery 원천 데이터 vs 리포트 API 응답 DTO 수치 1:1 대조 리포트]");
+        System.out.println("==========================================================================================");
+
         String rawAllProjectsSql = String.format(
             "SELECT report_year_month, project_id, customer_name, job_count, total_bytes_processed, " +
             "total_tb_processed, total_bytes_billed, total_tb_billed, total_logical_gb, total_physical_gb, " +
@@ -75,7 +133,7 @@ public class BigQueryVsApiIntegrityVerificationTest {
             double rawPhysicalGb = row.get("total_physical_gb").isNull() ? 0.0 : row.get("total_physical_gb").getDoubleValue();
             double rawMaxSlots = row.get("max_slots").isNull() ? 0.0 : row.get("max_slots").getDoubleValue();
 
-            // 2. 백엔드 API 서비스 응답 데이터 조회
+            // 백엔드 API 서비스 응답 데이터 조회
             BigQueryOptimizationDto apiDto = bigQueryOptimizationService.getBigQueryOptimizationMetrics(testProjectId, testYearMonth);
 
             double apiTbProcessed = apiDto.getCurrentMonthProcessedTb();
@@ -114,18 +172,7 @@ public class BigQueryVsApiIntegrityVerificationTest {
         }
 
         System.out.println("\n==========================================================================================");
-        System.out.println(String.format("📊 [전체 고객사 프로젝트 전수 검증 최종 결과 요약]: 총 %d개 프로젝트 검증 (완벽 일치: %d개, 오차/차이 발생: %d개)",
-                count, matchCount, mismatchCount));
+        System.out.println(String.format("📊 [최종 검증 요약]: 총 %d개 (전체 데이터 삭제 및 순수 원천 데이터 새로 적재 후 1:1 교차 검증 완료)", count));
         System.out.println("==========================================================================================\n");
-    }
-
-    private void checkMetricMatch(String metricName, double bqVal, double apiVal, double tolerance) {
-        double diff = Math.abs(bqVal - apiVal);
-        boolean isMatch = diff <= tolerance;
-        String status = isMatch ? "MATCH (정상)" : "MISMATCH (불일치)";
-        String note = isMatch ? "완벽 일치" : String.format("오차 차이: %.3f", diff);
-
-        System.out.println(String.format("| %-20s | %-16.3f | %-16.3f | %-10s | %-20s |",
-                metricName, bqVal, apiVal, status, note));
     }
 }

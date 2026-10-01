@@ -253,7 +253,9 @@ public class BigQueryOptimizationService {
                         "SELECT COUNT(job_id) AS job_count, " +
                         "       IFNULL(SUM(total_bytes_processed), 0) AS total_bytes_processed, " +
                         "       IFNULL(SUM(total_bytes_billed), 0) AS total_bytes_billed, " +
+                        "       IFNULL(SUM(total_slot_ms), 0) AS total_slot_ms, " +
                         "       MAX(ROUND(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 2)) AS max_slots, " +
+                        "       MIN(ROUND(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 2)) AS min_slots, " +
                         "       ROUND(AVG(ROUND(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 2)), 2) AS avg_slots " +
                         "FROM `%s.region-%s.INFORMATION_SCHEMA.JOBS` " +
                         "WHERE DATE(DATETIME(creation_time, 'Asia/Seoul')) BETWEEN @startDate AND @endDate " +
@@ -383,28 +385,8 @@ public class BigQueryOptimizationService {
         double minSlots = usage.minSlots;
         double avgSlots = usage.avgSlots;
 
-        if (jobCount == 0 && credentials != null) {
-            int ymHash = Math.abs(reportYearMonth.hashCode());
-            int monthVal = 6;
-            try {
-                monthVal = Integer.parseInt(reportYearMonth.substring(5, 7));
-            } catch (Exception ignored) {}
-
-            log.warn("[BQ-OPTIMIZATION] Dynamic query returned 0 jobs for project {} month {} (likely IAM 403 Forbidden). Applying project & month domain fallback metrics.", projectId, reportYearMonth);
-
-            // 프로젝트 해시와 월별 해시/순서(monthVal)를 조합하여 6월~9월 트렌드 수치가 월별로 다르게 반영되도록 보강
-            long monthBonus = (monthVal - 6) * 95L;
-            long monthBilledBonus = (monthVal - 6) * 230_000_000_000L;
-            double monthGbBonus = (monthVal - 6) * 14.5;
-
-            jobCount = 1250L + (pHash % 850) + (ymHash % 180) + monthBonus;
-            totalBytesBilled = 1200000000000L + (pHash % 3000000000000L) + (ymHash % 500000000000L) + monthBilledBonus;
-            totalBytesProcessed = totalBytesBilled + (pHash % 500000000000L) + (ymHash % 100000000000L);
-            logicalGb = 150.0 + (pHash % 350) + (ymHash % 35) + monthGbBonus;
-            physicalGb = 80.0 + (pHash % 180) + (ymHash % 20) + (monthGbBonus * 0.55);
-            maxSlots = 45.0 + (pHash % 60) + (ymHash % 15);
-            minSlots = 5.0;
-            avgSlots = 18.5 + (pHash % 25) + (ymHash % 8);
+        if (jobCount == 0) {
+            log.warn("[BQ-OPTIMIZATION] Dynamic query returned 0 jobs for project {} month {}. Storing genuine 0 counts without fake data.", projectId, reportYearMonth);
         }
 
         double totalTbProcessed = Math.round((totalBytesProcessed / Math.pow(1024, 4)) * 1000.0) / 1000.0;
