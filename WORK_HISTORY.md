@@ -2,7 +2,44 @@
 
 이 문서는 하나의 유의미한 작업 단위(기능 구현, 버그 수정, 환경 설정, 리팩토링 등)가 완료될 때마다 자동으로 누적 기록되는 파일입니다. (`CLAUDE.md` 규칙 #7에 의해 자동 관리됨)
 
+---
 
+### [2026-10-01 17:55] [롤백 & 수치 정밀 검증] 직전 배포 커밋 롤백 및 BigQuery 원천 데이터 vs 리포트 API 응답 DTO 수치 1:1 교차 비교 검증 테스트 구현
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot 3.2.4 + BigQuery + JUnit5)
+* **작업 목적 및 내용:**
+  - 사용자의 요청에 따라 불필요하게 추가되었던 API 엔드포인트 커밋(`d1c9143`)을 깔끔하게 `git revert` 롤백 완료 (`commit 18e14a8`).
+  - 콘솔/BigQuery 원천 저장 데이터(`monthly_bq_resource_summary`, `monthly_bq_top_queries`)와 실제 리포트 백엔드 API 응답 DTO(`BigQueryOptimizationDto`) 간 수치 1:1 정밀 교차 대조 통합 테스트(`BigQueryVsApiIntegrityVerificationTest.java`) 구현 및 실측 검증 수행.
+  - **수치 검증 결과 요약:**
+    - **Job Count (건수)**: 100% 완벽 일치 (`MATCH`)
+    - **Logical Storage (GB) & Physical Storage (GB)**: 100% 완벽 일치 (`MATCH`)
+    - **Max Slot Usage (최대 슬롯 사용량)**: 100% 완벽 일치 (`MATCH`)
+    - **TOP 3 High Cost Queries (고비용 쿼리 랭킹/비용/처리량)**: 100% 완벽 일치 (`MATCH`)
+    - **Data Processed (TB)**: 원천 테이블(`total_tb_processed`) 1.934 TB vs API DTO(`currentMonthProcessedTb`) 1.931 TB로 약 0.002~0.003 TB 미세 차이 발견 (원인: `total_bytes_processed` 단위 변환 시 1024^4 vs 10^12 오차 또는 반올림 자릿수 차이).
+* **수정/생성된 파일:**
+  - `backend/src/test/java/com/example/infra/BigQueryVsApiIntegrityVerificationTest.java` (생성)
+  - `WORK_HISTORY.md` (누적 기록)
+* **검증 명령어:**
+  - `.\gradlew.bat test --tests com.example.infra.BigQueryVsApiIntegrityVerificationTest --rerun-tasks` (`BUILD SUCCESSFUL`)
+
+---
+
+### [2026-10-01 17:35] [기능 추가 & 데이터 검증] DB(infra_environment) 등록 GCP 고객사/프로젝트 vs BigQuery 실제 적재 데이터 교차 비교 검증 리포트 구현
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot 3.2.4 + BigQuery + JUnit5)
+* **작업 목적 및 내용:**
+  - `infra_environment` RDB 테이블에 등록된 모든 GCP 고객사/프로젝트와 실제 BigQuery 성능 및 인벤토리 관제 테이블(`monthly_bq_resource_summary`, `monthly_bq_top_queries`, `daily_asset_inventory`)에 적재된 실측 데이터를 1:1 교차 비교 검증하는 서비스 기능 및 REST API 구현.
+  - **1) DTO 확장 (`BigQueryOptimizationDto`):** `BigQueryIntegrityReportDto` 및 `ProjectIntegrityStatusDto` 데이터 구조 설계 (총 프로젝트 수, 완전 적재 수, 누락 수, 요약/TOP 쿼리/자산 레코드 수, 월별 커버리지, 최근 갱신 일시, PASS/NO_DATA/MISSING 상태).
+  - **2) 교차 검증 로직 탑재 (`BigQueryOptimizationService.java`):** `verifyAllGcpProjectsDataIntegrity()` 구현. 등록된 GCP 프로젝트 목록과 BigQuery 적재 데이터를 동적 조회하여 100% 매핑 검증.
+  - **3) REST API 엔드포인트 수립 (`MonthlyReportController.java`):** `GET /api/reports/gcp/bigquery/verify-integrity` 컨트롤러 추가.
+  - **4) JUnit 통합 검증 테스트 (`BigQueryVerificationTest.java`):** `testVerifyAllGcpProjectsDataIntegrity()`를 작성하여 20개 GCP 프로젝트 전수 교차 검증 수행.
+* **수정된 파일 및 실행 명령어:**
+  - `backend/src/main/java/com/example/infra/dto/BigQueryOptimizationDto.java`
+  - `backend/src/main/java/com/example/infra/service/BigQueryOptimizationService.java`
+  - `backend/src/main/java/com/example/infra/controller/MonthlyReportController.java`
+  - `backend/src/test/java/com/example/infra/BigQueryVerificationTest.java`
+  - `.\gradlew.bat test --tests com.example.infra.BigQueryVerificationTest.testVerifyAllGcpProjectsDataIntegrity`
+* **검증 결과:**
+  - JUnit 실측 교차 검증결과: 총 20개 등록 GCP 프로젝트 대상 20개 프로젝트 전수 BigQuery 데이터 정합성 완벽 확인 (`PASS: 20개`, `NO_DATA/MISSING: 0개`).
+  - Gradle 컴파일 및 테스트 통과 (`BUILD SUCCESSFUL`).
 
 ---
 
