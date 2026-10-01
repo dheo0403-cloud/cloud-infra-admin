@@ -1991,6 +1991,11 @@ public class BigQueryBatchService {
 
     /**
      * 특정 고객사 프로젝트의 Direct AI Usage 일일 운영 지표 적재 (실제 Cloud Monitoring 메트릭 기반)
+     * [참고: BigQuery 메타데이터 특성 안내]
+     * 본 테이블(daily_direct_ai_metrics, daily_endpoint_serving_metrics 등)은 CREATE TABLE IF NOT EXISTS로 파티션 생성 후
+     * DELETE(DML) + insertAll(Streaming API) 방식으로 매일 레코드를 업데이트합니다.
+     * 따라서 빅쿼리 콘솔 UI상의 '생성 시간(Creation Time)'은 메타데이터상 최초 테이블 DDL 생성 시점으로 고정되며,
+     * 실제 snapshot_date 레코드는 테이블 내부에 정상 적재됩니다. (CREATE OR REPLACE TABLE DDL을 수행하는 daily_asset_inventory와 구분됨)
      */
     public void collectAndInsertDailyDirectAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
         ensureDailyDirectAiMetricsTableExists();

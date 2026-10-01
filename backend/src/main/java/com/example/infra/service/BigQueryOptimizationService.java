@@ -46,6 +46,10 @@ public class BigQueryOptimizationService {
 
     /**
      * BQ 파티셔닝(TTL) 및 테이블 초기화 보장
+     * [BigQuery 메타데이터 특성 참고]
+     * monthly_bq_resource_summary 및 monthly_bq_top_queries 테이블은 MERGE INTO / DML 문으로 집계 데이터를 갱신합니다.
+     * 빅쿼리 콘솔 UI의 '생성 시간(Creation Time)'은 DDL이 실행된 시점으로 유지되지만,
+     * snapshot_date 및 report_year_month 매개변수에 의해 실제 1일차/일별 배치 집계 데이터는 행 단위로 투명하게 갱신됩니다.
      */
     public void ensureTablesExist() {
         try {
