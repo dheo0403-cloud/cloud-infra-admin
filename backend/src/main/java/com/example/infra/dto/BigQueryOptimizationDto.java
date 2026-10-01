@@ -62,4 +62,34 @@ public class BigQueryOptimizationDto {
         private String executionDurationFormatted;
         private double jobAverageSlots;
     }
+
+    /**
+     * BigQuery 적재 데이터 및 infra_environment 비교 검증 결과 DTO
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BigQueryIntegrityReportDto {
+        private int totalRegisteredProjects;
+        private int fullyVerifiedProjects;
+        private int missingProjects;
+        private List<ProjectIntegrityStatusDto> projectStatuses;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProjectIntegrityStatusDto {
+        private String customerName;
+        private String projectId;
+        private long summaryRecordCount;
+        private long topQueryRecordCount;
+        private long dailyAssetRecordCount;
+        private String monthsCovered;
+        private String lastUpdatedAt;
+        private String status; // PASS, NO_DATA, MISSING
+        private String detailMessage;
+    }
 }

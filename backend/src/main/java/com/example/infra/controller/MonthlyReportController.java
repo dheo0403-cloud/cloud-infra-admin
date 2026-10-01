@@ -22,6 +22,14 @@ public class MonthlyReportController {
     private final MonthlyReportService monthlyReportService;
     private final com.example.infra.service.BigQueryBatchService bigQueryBatchService;
     private final com.example.infra.service.VertexAiGeminiService vertexAiGeminiService;
+    private final com.example.infra.service.BigQueryOptimizationService bigQueryOptimizationService;
+
+    @GetMapping("/bigquery/verify-integrity")
+    public ResponseEntity<com.example.infra.dto.BigQueryOptimizationDto.BigQueryIntegrityReportDto> verifyBigQueryDataIntegrity() {
+        log.info("API Request: BigQuery GCP Data Integrity Cross-Verification Report");
+        com.example.infra.dto.BigQueryOptimizationDto.BigQueryIntegrityReportDto report = bigQueryOptimizationService.verifyAllGcpProjectsDataIntegrity();
+        return ResponseEntity.ok(report);
+    }
 
     @RequestMapping(value = "/run-batch", method = {RequestMethod.GET, RequestMethod.POST})
     public ResponseEntity<Map<String, String>> triggerBatchManually() {
