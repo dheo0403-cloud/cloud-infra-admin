@@ -176,6 +176,10 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                         <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>Job Count
                                     </span>
                                 </div>
+                                {/* 두 지표는 단위가 달라 각자의 최댓값 기준으로 높이를 그림 */}
+                                <div className="bq-chart-scale-note" style={{ textAlign: 'center', fontSize: '9.5px', color: '#64748b', marginTop: '2px' }}>
+                                    막대 높이: 지표별 4개월 최댓값 대비 (두 막대끼리의 높이 비교는 의미 없음, 수치는 라벨 참고)
+                                </div>
                             </div>
 
                             {/* Right: Storage Capacity Summary Cards */}
@@ -335,9 +339,8 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                         <th style={{ padding: '5px 6px', width: '65px', fontWeight: 700 }}>실행 일자</th>
                                         <th style={{ padding: '5px 6px', width: '130px', fontWeight: 700 }}>실행 계정 (IAM)</th>
                                         <th style={{ padding: '5px 6px', fontWeight: 700 }}>SQL 쿼리문</th>
-                                        <th style={{ padding: '5px 6px', width: '75px', textAlign: 'right', fontWeight: 700 }}>실행 소요시간</th>
+                                        {section.key === 'duration' && <th style={{ padding: '5px 6px', width: '75px', textAlign: 'right', fontWeight: 700 }}>실행 소요시간</th>}
                                         <th style={{ padding: '5px 6px', width: '65px', textAlign: 'right', fontWeight: 700 }}>평균 슬롯</th>
-                                        <th style={{ padding: '5px 6px', width: '65px', textAlign: 'right', fontWeight: 700 }}>스캔량</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -357,20 +360,19 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                                     </span>
                                                     {item.query}
                                                 </td>
-                                                <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>
-                                                    {Number(item.executionTimeSeconds || 0).toFixed(1)}초
-                                                </td>
+                                                {section.key === 'duration' && (
+                                                    <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>
+                                                        {Number(item.executionTimeSeconds || 0).toFixed(1)}초
+                                                    </td>
+                                                )}
                                                 <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
                                                     {Number(item.jobAverageSlots || 0).toFixed(0)} Slots
-                                                </td>
-                                                <td style={{ padding: '5px 6px', textAlign: 'right', color: '#475569' }}>
-                                                    {Number(item.bytesProcessedGb || 0).toFixed(1)} GB
                                                 </td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={7} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
+                                            <td colSpan={section.key === 'duration' ? 6 : 5} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
                                                 {section.empty}
                                             </td>
                                         </tr>

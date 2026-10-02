@@ -4,6 +4,36 @@
 
 ---
 
+### [2026-10-02] [cloud-infra-admin] NS Mall·우진산전 BigQuery 성능 데이터 실측 비교 · TOP 쿼리 적재 누락 수정 · 프로젝트별 로컬 적재 API · 보고서 표 열 정리
+* **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`, BigQuery `mzc-gcp-managed.infra_admin_dataset`
+* **실측 비교 (수정 전):** 고객사 프로젝트에서 쿼리 1~5를 직접 실행한 값과 적재값(월별 최신 스냅샷)을 비교. 대상 11개 프로젝트(NS Mall 10, 우진산전 1), 2026-06~10.
+  - 요약(Job 수·처리 바이트) 06~09월: 44/44 일치. 10월은 진행 중인 달이라 차이가 나는 것이 정상.
+  - TOP 쿼리: 불일치 다수(합계 108건). 원인은 ① 쿼리 본문에 `\r`·`\`가 있으면 문자열로 직접 이어 붙인 MERGE가 깨져 해당 행 누락(누락 행 전부 `\r` 포함 확인) ② 중복 행(최대 20행) ③ 값이 같은 Job끼리 순서만 다름.
+  - 스토리지 0.0GB 원인: 쿼리 2(`TABLE_STORAGE_BY_PROJECT`) 권한 없음(Access Denied).
+* **작업 내용:**
+  1. `upsertSingleTopQuery`: MERGE의 모든 값을 쿼리 파라미터로 전달(문자열 결합 제거). 쿼리 본문은 가공 없이 저장.
+  2. `POST /api/metrics/gcp/bigquery-optimization/collect?projectId=..&months=..` 추가(`collectProjectMonths`). 프로젝트 하나·지정 월만 적재(지난 달은 말일, 당월은 오늘 스냅샷). 운영 전체 백필 대신 사용.
+  3. 승인받은 삭제: `monthly_bq_top_queries`의 11개 프로젝트 2026-06~10 → 삭제 전 1,299 / 삭제 1,299 / 삭제 후 0. 요약 테이블은 일치해서 유지.
+  4. 로컬에서 11개 프로젝트를 위 API로 다시 적재(프로젝트당 3~8분). 마지막 프로젝트 도중 메모리 부족으로 curl이 중단됐지만, 서버 로그상 10월분까지 처리 완료(23:02:05).
+  5. 보고서: 사용량·Job Count 차트에 높이 기준 문구 추가. 슬롯 TOP 표에서 실행 소요시간 열 제거(정렬은 사용자 결정으로 총 슬롯 순 유지). 실행 시간·슬롯 표에서 스캔량 열 제거(고비용 표는 비용 근거라 유지).
+* **결정 사항:** 권한 없는 고객사는 일배치가 계속 수집을 시도하고, 실패하면 0을 넣지 않고 비워 둠(PDF에서는 어차피 숨김). 권한 없는 고객사의 잔존 행 점검은 보류.
+* **수정 및 생성된 파일:** `BigQueryOptimizationService.java`, `GcpMetricsController.java`, `frontend/src/components/BigQueryOptimizationPanel.tsx`. 임시 `TmpBqCompareTest`는 검증 후 삭제.
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - `/collect`는 동기 처리라 운영 Ingress(60초)에서는 타임아웃이 남. 로컬 실행용이며 동시 실행 차단은 없음.
+  - 같은 값(동률)일 때 순서는 INFORMATION_SCHEMA 결과 순서에 따라 바뀔 수 있음. 값은 같으므로 보고서 의미는 같음.
+  - 다음 02시 일배치 전에 배포되지 않으면 당월 TOP 누락이 다시 생길 수 있음 → 이번에 푸시.
+  - 스토리지 권한(쿼리 2)이 없어 스토리지 카드는 계속 0.0GB.
+* **검증 결과:**
+  - 재적재 후 비교(`TmpBqCompareTest`, gradle `cleanTest test`, exit 0): 06~09월 요약 44/44 일치, TOP 정렬 값 순위별 일치 147/147(6개 프로젝트 06~09월 72건 + 5개 프로젝트 06~10월 75건). 적재 행 수는 10행(실제 0건인 우진산전 06~08월은 0행). Job ID 차이는 모두 값이 같은 동률 순서 차이.
+  - 적재 로그 `Failed to upsert single top` 0건.
+  - `npx tsc --noEmit -p .` exit 0. `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
+  - UI(Puppeteer, JAR 8080, NS Mall / ns-user-data / 2026-09) exit 0: 기준 문구 표시, 실행 시간 표 6열, 슬롯 표 5열, 각 10행, 폭 986px로 같음, 콘솔 오류 0건. API: 실행 시간 TOP 평균 슬롯 431.53 등 값이 채워짐.
+  - Gradle 주의: 환경 변수만 바꾸면 test가 UP-TO-DATE로 건너뛰어짐 → `cleanTest` 필요.
+* **후속 할 일:** ① 쿼리 2 스토리지 권한 확보 또는 스토리지 카드 처리 결정 ② 권한 없는 고객사 잔존 행 점검(보류) ③ 다른 창의 테스트 2개(`BigQueryOptimizationReloadTest` 수정본, `BigQueryMissingCheckTest`) 정리
+
+
+---
+
 ### [2026-10-02] [cloud-infra-admin] 보고서 3번 표(쿼리 성능 및 병목) 20건 표시 원인 확인 및 실행 시간·슬롯 TOP 10 분리
 * **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`
 * **원인 (로컬 실측):** 배포 문제가 아니라 코드 문제. `getBigQueryOptimizationMetrics`가 `LONG_DURATION`과 `HIGH_SLOT`을 모두 `longDurationQueries`에 넣음(커밋 `97f1b4a`에서 생겼고 이미 origin/main에 있음). NS Mall / ns-user-data / 2026-09 응답: longDurationQueries 20건(1~10 HIGH_SLOT, 11~20 LONG_DURATION, 같은 Job 6개 중복).

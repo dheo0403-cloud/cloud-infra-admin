@@ -520,12 +520,11 @@ public class BigQueryOptimizationService {
             String jobId = !isPresent(row, "job_id") ? "unknown_job" : row.get("job_id").getStringValue();
             String userEmail = !isPresent(row, "user_email") ? "system" : row.get("user_email").getStringValue();
             String statementType = !isPresent(row, "statement_type") ? "SELECT" : row.get("statement_type").getStringValue();
-            String queryText = !isPresent(row, "query") ? "" : row.get("query").getStringValue().replace("'", "\\'").replace("\n", " ");
+            String queryText = !isPresent(row, "query") ? "" : row.get("query").getStringValue();
 
             long totalBytesProcessed = isPresent(row, "total_bytes_processed") ? row.get("total_bytes_processed").getLongValue() : 0L;
             double bytesProcessedGb = Math.round((totalBytesProcessed / Math.pow(1024, 3)) * 100.0) / 100.0;
-            double bytesBilledGb = bytesProcessedGb;
-            double estimatedCostUsd = Math.round((bytesBilledGb / 1024.0 * 6.25) * 100.0) / 100.0;
+            double estimatedCostUsd = Math.round((bytesProcessedGb / 1024.0 * 6.25) * 100.0) / 100.0;
 
             long totalSlotMs = isPresent(row, "total_slot_ms") ? row.get("total_slot_ms").getLongValue() : 0L;
 
@@ -544,14 +543,15 @@ public class BigQueryOptimizationService {
                 jobAvgSlots = row.get("job_average_slots").getDoubleValue();
             }
 
+            // 값은 쿼리 파라미터로 전달 (쿼리 본문의 줄바꿈·백슬래시·작은따옴표로 SQL이 깨져 행이 누락되던 문제 방지)
             String mergeTopSql = String.format(
                 "MERGE INTO `%s.%s.%s` T " +
                 "USING ( " +
-                "  SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
-                "         '%s' AS query_category, %d AS rank, '%s' AS created_date, '%s' AS job_id, '%s' AS user_email, " +
-                "         '%s' AS statement_type, '%s' AS query, %f AS bytes_processed_gb, %f AS bytes_billed_gb, " +
-                "         %f AS estimated_cost_usd, %d AS total_slot_ms, %f AS execution_time_seconds, '%s' AS execution_duration_formatted, " +
-                "         %f AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at " +
+                "  SELECT DATE(@snap) AS snapshot_date, @ym AS report_year_month, @pid AS project_id, @cust AS customer_name, " +
+                "         @cat AS query_category, @rank AS rank, @crt AS created_date, @job AS job_id, @user AS user_email, " +
+                "         @stmt AS statement_type, @query AS query, @gb AS bytes_processed_gb, @gb AS bytes_billed_gb, " +
+                "         @cost AS estimated_cost_usd, @slotMs AS total_slot_ms, @execSec AS execution_time_seconds, @execFmt AS execution_duration_formatted, " +
+                "         @avgSlots AS job_average_slots, CURRENT_TIMESTAMP() AS updated_at " +
                 ") S " +
                 "ON T.snapshot_date = S.snapshot_date AND T.project_id = S.project_id AND T.query_category = S.query_category AND T.rank = S.rank " +
                 "WHEN MATCHED THEN " +
@@ -562,14 +562,27 @@ public class BigQueryOptimizationService {
                 "             job_average_slots = S.job_average_slots, updated_at = S.updated_at " +
                 "WHEN NOT MATCHED THEN " +
                 "  INSERT ROW",
-                hostProjectId, datasetName, TOP_QUERIES_TABLE,
-                snapDate, reportYearMonth, projectId, customerName,
-                category, rank, createdDate, jobId, userEmail,
-                statementType, queryText, bytesProcessedGb, bytesBilledGb,
-                estimatedCostUsd, totalSlotMs, execSec, execFormatted,
-                jobAvgSlots
+                hostProjectId, datasetName, TOP_QUERIES_TABLE
             );
-            bigQuery.query(QueryJobConfiguration.newBuilder(mergeTopSql).build());
+            bigQuery.query(QueryJobConfiguration.newBuilder(mergeTopSql)
+                    .addNamedParameter("snap", QueryParameterValue.string(snapDate))
+                    .addNamedParameter("ym", QueryParameterValue.string(reportYearMonth))
+                    .addNamedParameter("pid", QueryParameterValue.string(projectId))
+                    .addNamedParameter("cust", QueryParameterValue.string(customerName))
+                    .addNamedParameter("cat", QueryParameterValue.string(category))
+                    .addNamedParameter("rank", QueryParameterValue.int64(rank))
+                    .addNamedParameter("crt", QueryParameterValue.string(createdDate))
+                    .addNamedParameter("job", QueryParameterValue.string(jobId))
+                    .addNamedParameter("user", QueryParameterValue.string(userEmail))
+                    .addNamedParameter("stmt", QueryParameterValue.string(statementType))
+                    .addNamedParameter("query", QueryParameterValue.string(queryText))
+                    .addNamedParameter("gb", QueryParameterValue.float64(bytesProcessedGb))
+                    .addNamedParameter("cost", QueryParameterValue.float64(estimatedCostUsd))
+                    .addNamedParameter("slotMs", QueryParameterValue.int64(totalSlotMs))
+                    .addNamedParameter("execSec", QueryParameterValue.float64(execSec))
+                    .addNamedParameter("execFmt", QueryParameterValue.string(execFormatted))
+                    .addNamedParameter("avgSlots", QueryParameterValue.float64(jobAvgSlots))
+                    .build());
         } catch (Exception e) {
             log.error("Failed to upsert single top query for {} {}: {}", projectId, category, e.getMessage());
         }
@@ -737,6 +750,40 @@ public class BigQueryOptimizationService {
         }
 
         return dto;
+    }
+
+    /**
+     * 단일 프로젝트 · 지정 월만 수집/적재 (전체 백필 대신 프로젝트별로 실행)
+     * 스냅샷 일자: 지난 달은 말일, 당월은 오늘
+     */
+    public Map<String, Object> collectProjectMonths(String projectId, List<String> yearMonths) throws Exception {
+        for (InfraEnvironment env : infraEnvironmentService.getAllEnvironments()) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            if (env.getProjects().stream().noneMatch(p -> projectId.equals(p.getProjectId()))) continue;
+
+            String secret = infraEnvironmentService.getDecryptedSecret(env.getId());
+            if (secret == null || secret.isEmpty()) throw new IllegalStateException("자격증명 없음: " + projectId);
+            GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(secret.getBytes()))
+                    .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+            String customerName = (env.getCustomer() != null && env.getCustomer().getName() != null)
+                    ? env.getCustomer().getName() : "Unknown";
+
+            YearMonth current = YearMonth.now();
+            List<String> snapshots = new ArrayList<>();
+            for (String ym : yearMonths) {
+                YearMonth m = YearMonth.parse(ym.trim());
+                String snapDate = (m.equals(current) ? LocalDate.now() : m.atEndOfMonth()).toString();
+                log.info("[BQ-COLLECT] {} ({}) snapDate={}", projectId, customerName, snapDate);
+                collectAndUpsertBigQueryOptimizationData(snapDate, projectId, customerName, credentials);
+                snapshots.add(snapDate);
+            }
+            Map<String, Object> res = new LinkedHashMap<>();
+            res.put("projectId", projectId);
+            res.put("customerName", customerName);
+            res.put("snapshots", snapshots);
+            return res;
+        }
+        throw new IllegalArgumentException("등록된 GCP 프로젝트가 아님: " + projectId);
     }
 
     /**
