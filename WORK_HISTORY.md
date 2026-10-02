@@ -4,6 +4,34 @@
 
 ---
 
+### [2026-10-03] [cloud-infra-admin] 스토리지 카드 → "월별 신규 생성 테이블 용량" 그래프, 쿼리 2 조건 수정, NS Mall 재적재
+* **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`, BigQuery `infra_admin_dataset`
+* **확인 내용 (조회 전용 실측, ns-intr-data):**
+  - 메타데이터 뷰어 권한 부여 후 쿼리 2(`TABLE_STORAGE_BY_PROJECT`) 성공. 프로젝트 전체는 테이블 273개, 논리 1,133.99GB / 물리 1,943.84GB.
+  - 쿼리 2는 전체 용량이 아니라 "해당 월에 생성된 테이블의 현재 용량". 게다가 `fail_safe_physical_bytes <> 0` 조건 때문에 신규 테이블 일부가 빠짐(8월 17개 10.71GB → 10개 4.13GB, 9월 8개 8.52GB → 2개 0.03GB).
+* **작업 내용 (사용자 결정):**
+  1. 쿼리 2에서 `fail_safe_physical_bytes <> 0` 조건 삭제.
+  2. 쿼리 2가 모든 리전에서 실패하면 스토리지 컬럼을 0 대신 NULL로 적재(`storageQuerySucceeded`).
+  3. 조회 DTO에 `newTableLogicalGbTrend`·`newTablePhysicalGbTrend`(4개월) 추가.
+  4. 보고서의 "전체 데이터셋 스토리지 용량" 카드(이름이 잘못된 활성/장기 표기)를 "월별 신규 생성 테이블 용량" 4개월 막대그래프로 교체. 막대는 논리 GB, 아래에 물리 GB, NULL은 '-'.
+  5. NS Mall 10개 프로젝트의 2026-06~10 데이터 삭제(요약 50행, TOP 1,500행 → 0행) 후 로컬 적재 API로 다시 적재(프로젝트당 286~443초, 모두 HTTP 200).
+* **수정 파일:** `BigQueryOptimizationService.java`, `BigQueryOptimizationDto.java`, `frontend/src/services/api.ts`, `frontend/src/components/BigQueryOptimizationPanel.tsx`
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - 값은 수집 시점의 용량이라, 지금 다시 적재한 06~09월은 오늘 기준 용량임. 앞으로는 월말 마지막 일배치 값으로 고정.
+  - 다른 고객사(권한 없음)의 기존 행은 스토리지가 0으로 남아 있음. NULL 처리는 다음 수집부터 적용돼 그 전까지는 '-'가 아니라 0.00GB로 보임.
+  - 처음 3개 프로젝트(ns-aiplatform-prd·ns-dev-ground·ns-mart-data)는 실수로 동시에 적재됨. 쓰기 실패 로그 0건, 나머지 7개는 순차 실행.
+  - DTO의 기존 `totalLogicalStorageGb` 등은 테스트 호환을 위해 남겨 둠(화면에서는 사용 안 함).
+* **검증 결과:**
+  - `gradlew compileJava` exit 0, `npx tsc --noEmit -p .` exit 0, `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
+  - 적재 로그: 쓰기 실패 0, 쿼리 1 실패 0, 쿼리 2 실패 0.
+  - API(10개 프로젝트 × 2026-09·10): Job 수 4개월 모두 채워짐, TOP 10/10/10. 신규 논리 GB 예: ns-intr-data 34.15/0.12/10.71/8.52(직접 실측과 일치), ns-mart-data 406.47/257.13/3266.51/99.67. 0인 프로젝트는 조회는 성공했고 신규 테이블이 없는 것(ns-intr-data 외에는 별도 대조 안 함).
+  - UI(Puppeteer, JAR 8080, NS Mall / ns-mart-data / 2026-09) exit 0: 제목 "월별 신규 생성 테이블 용량", 막대 4개 높이가 값에 비례, 바닥선 일치, 왼쪽 카드와 top·높이(323px)·폭(485px) 같음, 이전 문구 없음, 콘솔 오류 0건. 스크린샷으로 라벨 겹침 없음 확인.
+  - 검증 후 로컬 백엔드 중지. 임시 테스트(`TmpQuery2PermTest`, `TmpQuery2ScopeTest`, `TmpDeleteNsMallTest`) 삭제.
+* **후속 할 일:** ① 다른 고객사도 메타데이터 뷰어 권한을 받으면 해당 프로젝트 재적재 ② 권한 없는 고객사의 기존 0 값은 다음 수집 때 NULL로 바뀌는지 확인
+
+
+---
+
 ### [2026-10-03] [cloud-infra-admin] 보고서 슬롯 사용량 TOP 10을 평균 슬롯 내림차순으로 표시
 * **대상 프로젝트:** `cloud-infra-admin/frontend`
 * **원인:** 슬롯 TOP 10은 총 슬롯 사용량(`total_slot_ms`) 순서로 적재되는데, 화면에는 평균 슬롯만 보여 순서가 뒤섞인 것처럼 보임(NS Mall / ns-intr-data / 2026-09: 369, 492, 211, …).

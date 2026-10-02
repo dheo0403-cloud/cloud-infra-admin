@@ -182,53 +182,49 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                 </div>
                             </div>
 
-                            {/* Right: Storage Capacity Summary Cards */}
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#0f172a', marginBottom: '8px', display: 'block' }}>
-                                    전체 데이터셋 스토리지 용량
-                                </span>
-
-                                {(() => {
-                                    const hasLogical = (data.totalLogicalStorageGb || 0) > 0;
-                                    const hasPhysical = (data.totalPhysicalStorageGb || 0) > 0;
-
-                                    return (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <div style={{
-                                                backgroundColor: hasLogical ? '#eff6ff' : '#f8fafc',
-                                                padding: '8px 10px',
-                                                borderRadius: '6px',
-                                                border: hasLogical ? '1px solid #bfdbfe' : '1px solid #e2e8f0'
-                                            }}>
-                                                <span style={{ fontSize: '10px', color: hasLogical ? '#1e40af' : '#64748b', display: 'block', fontWeight: 600 }}>
-                                                    <i className="fas fa-bolt mr-1"></i>논리적 스토리지 (활성 요금 기준)
-                                                </span>
-                                                <strong style={{ fontSize: '14px', fontWeight: 800, color: hasLogical ? '#1d4ed8' : '#64748b' }}>
-                                                    {Number(data.totalLogicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '10px', fontWeight: 500, color: hasLogical ? '#1d4ed8' : '#94a3b8' }}>GB</span>
-                                                </strong>
-                                            </div>
-
-                                            <div style={{
-                                                backgroundColor: hasPhysical ? '#f0fdf4' : '#f8fafc',
-                                                padding: '8px 10px',
-                                                borderRadius: '6px',
-                                                border: hasPhysical ? '1px solid #bbf7d0' : '1px solid #e2e8f0'
-                                            }}>
-                                                <span style={{ fontSize: '10px', color: hasPhysical ? '#166534' : '#64748b', display: 'block', fontWeight: 600 }}>
-                                                    <i className="fas fa-archive mr-1"></i>물리적 스토리지 (장기 요금 기준)
-                                                </span>
-                                                <strong style={{ fontSize: '14px', fontWeight: 800, color: hasPhysical ? '#15803d' : '#64748b' }}>
-                                                    {Number(data.totalPhysicalStorageGb || 0).toFixed(1)} <span style={{ fontSize: '10px', fontWeight: 500, color: hasPhysical ? '#15803d' : '#94a3b8' }}>GB</span>
-                                                    <span style={{ fontSize: '10px', fontWeight: 500, color: hasPhysical ? '#64748b' : '#94a3b8', marginLeft: '4px' }}>({Number(data.totalPhysicalStorageTb || 0).toFixed(3)} TB)</span>
-                                                </strong>
-                                            </div>
+                            {/* Right: 월별 신규 생성 테이블 용량 (쿼리 2: 해당 월에 생성된 테이블의 현재 용량) */}
+                            {(() => {
+                                const lgTrend = data.newTableLogicalGbTrend || [];
+                                const pgTrend = data.newTablePhysicalGbTrend || [];
+                                const maxLg = Math.max(...lgTrend.map(v => v || 0), 0.01);
+                                const curLg = lgTrend[3];
+                                return (
+                                    <div className="report-card bq-new-table-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
+                                        <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                            <span>
+                                                <i className="fas fa-database mr-2" style={{ color: '#2563eb' }}></i>월별 신규 생성 테이블 용량
+                                            </span>
+                                            <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>
+                                                당월: <strong>{curLg == null ? '데이터 없음' : `${Number(curLg).toFixed(2)} GB`}</strong>
+                                            </span>
                                         </div>
-                                    );
-                                })()}
-                                <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '6px', display: 'block' }}>
-                                    * 90일 이상 미수정 테이블은 장기 스토리지 할인 요율 자동 적용
-                                </span>
-                            </div>
+
+                                        <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                            {displayDates.map((dateStr, idx) => {
+                                                const lg = lgTrend[idx];
+                                                const pg = pgTrend[idx];
+                                                // 0 GB(실제로 신규 용량 없음)와 null(조회 실패·미수집)을 구분해 표시
+                                                const h = lg && lg > 0 ? Math.max(4, Math.min(85, Math.round((lg / maxLg) * 85))) : 0;
+                                                return (
+                                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                        <div className="bq-new-table-bar" style={{ width: '22px', height: `${h}%`, backgroundColor: h > 0 ? '#3b82f6' : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
+                                                            <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: lg == null ? '#94a3b8' : '#1e3a8a', whiteSpace: 'nowrap' }}>
+                                                                {lg == null ? '-' : `${Number(lg).toFixed(2)}GB`}
+                                                            </span>
+                                                        </div>
+                                                        <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{dateStr}</span>
+                                                        <span style={{ fontSize: '8.5px', color: '#94a3b8' }}>{pg == null ? '' : `물리 ${Number(pg).toFixed(2)}GB`}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '6px', display: 'block' }}>
+                                            * 막대: 해당 월에 생성된 테이블의 논리 용량(수집 시점 기준, 삭제된 테이블 제외). '-'는 조회 권한 없음 또는 미수집
+                                        </span>
+                                    </div>
+                                );
+                            })()}
                         </div>
                     </div>
 

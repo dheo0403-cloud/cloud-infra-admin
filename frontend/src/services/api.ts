@@ -230,6 +230,8 @@ export interface BigQueryOptimizationDto {
     totalLogicalStorageGb: number;
     totalPhysicalStorageGb: number;
     totalPhysicalStorageTb: number;
+    newTableLogicalGbTrend?: (number | null)[];
+    newTablePhysicalGbTrend?: (number | null)[];
     highCostQueries: BigQueryJobItemDto[];
     maxSlotUsage: number;
     minSlotUsage: number;

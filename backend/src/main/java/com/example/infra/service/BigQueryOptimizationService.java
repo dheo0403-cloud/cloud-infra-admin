@@ -76,7 +76,6 @@ public class BigQueryOptimizationService {
         "FROM `%s.region-%s.INFORMATION_SCHEMA.TABLE_STORAGE_BY_PROJECT` \n" +
         "WHERE\n" +
         "  deleted = false\n" +
-        "  AND fail_safe_physical_bytes <> 0\n" +
         "  AND table_schema NOT LIKE '_script%%'\n" +
         "  AND FORMAT_DATE('%%Y-%%m', DATE(DATETIME(creation_time, 'Asia/Seoul'))) = '%s'\n" +
         "GROUP BY\n" +
@@ -303,6 +302,7 @@ public class BigQueryOptimizationService {
         public double totalPhysicalGb = 0.0;
         public double totalPhysicalTb = 0.0;
         public boolean jobQuerySucceeded = false;   // 쿼리 1이 한 리전 이상에서 성공했는지 (실패 시 0 적재 방지)
+        public boolean storageQuerySucceeded = false; // 쿼리 2가 한 리전 이상에서 성공했는지 (권한 없으면 NULL 적재)
     }
 
     /**
@@ -366,6 +366,7 @@ public class BigQueryOptimizationService {
                             summary.totalPhysicalTb += row.get("total_physical_tb").getDoubleValue();
                         }
                     }
+                    summary.storageQuerySucceeded = true;
                 } catch (Exception e) {
                     log.error("[BQ-QUERY2] Query 2 failed for project {} region {}: {}", projectId, region, e.getMessage());
                 }
@@ -375,6 +376,11 @@ public class BigQueryOptimizationService {
         }
 
         return summary;
+    }
+
+    // 쿼리 2(스토리지)가 모든 리전에서 실패(권한 없음 등)하면 0 대신 NULL로 적재
+    private static String storageSql(RealUsageSummary usage, double value) {
+        return usage.storageQuerySucceeded ? String.format("%f", value) : "CAST(NULL AS FLOAT64)";
     }
 
     /**
@@ -416,7 +422,7 @@ public class BigQueryOptimizationService {
                 "  SELECT DATE('%s') AS snapshot_date, '%s' AS report_year_month, '%s' AS project_id, '%s' AS customer_name, " +
                 "         %d AS job_count, %d AS total_bytes_processed, %f AS total_tb_processed, " +
                 "         %d AS total_bytes_billed, %f AS total_tb_billed, " +
-                "         %f AS total_logical_gb, %f AS total_physical_gb, %f AS total_physical_tb, " +
+                "         %s AS total_logical_gb, %s AS total_physical_gb, %s AS total_physical_tb, " +
                 "         0.0 AS max_slots, 0.0 AS min_slots, 0.0 AS avg_slots, CURRENT_TIMESTAMP() AS updated_at " +
                 ") S " +
                 "ON T.snapshot_date = S.snapshot_date AND T.project_id = S.project_id " +
@@ -432,7 +438,7 @@ public class BigQueryOptimizationService {
                 snapDate, reportYearMonth, projectId, customerName,
                 jobCount, totalBytesProcessed, totalTbProcessed,
                 totalBytesBilled, totalTbBilled,
-                logicalGb, physicalGb, physicalTb
+                storageSql(usage, logicalGb), storageSql(usage, physicalGb), storageSql(usage, physicalTb)
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(mergeSummarySql).build());
             log.info("[BQ-OPTIMIZATION] Successfully upserted resource summary for {} / {} (Jobs: {}, TB: {})",
@@ -664,6 +670,8 @@ public class BigQueryOptimizationService {
         // 적재되지 않은 월은 null (가짜 0 대신 데이터 없음 표시)
         dto.setDataProcessedTbTrend(new ArrayList<>(Collections.nCopies(4, (Double) null)));
         dto.setJobCountTrend(new ArrayList<>(Collections.nCopies(4, (Long) null)));
+        dto.setNewTableLogicalGbTrend(new ArrayList<>(Collections.nCopies(4, (Double) null)));
+        dto.setNewTablePhysicalGbTrend(new ArrayList<>(Collections.nCopies(4, (Double) null)));
         dto.setHighCostQueries(new ArrayList<>());
         dto.setLongDurationQueries(new ArrayList<>());
         dto.setHighSlotQueries(new ArrayList<>());
@@ -687,6 +695,8 @@ public class BigQueryOptimizationService {
                 if (idx < 0) continue;
                 if (isPresent(row, "total_tb_processed")) dto.getDataProcessedTbTrend().set(idx, row.get("total_tb_processed").getDoubleValue());
                 if (isPresent(row, "job_count")) dto.getJobCountTrend().set(idx, row.get("job_count").getLongValue());
+                if (isPresent(row, "total_logical_gb")) dto.getNewTableLogicalGbTrend().set(idx, row.get("total_logical_gb").getDoubleValue());
+                if (isPresent(row, "total_physical_gb")) dto.getNewTablePhysicalGbTrend().set(idx, row.get("total_physical_gb").getDoubleValue());
                 if (idx != 3) continue;  // 아래 당월 값은 조회 월 행에서만
 
                 if (isPresent(row, "total_tb_processed")) {

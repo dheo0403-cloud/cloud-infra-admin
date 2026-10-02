@@ -32,6 +32,10 @@ public class BigQueryOptimizationDto {
     private double totalPhysicalStorageGb;              // 장기 스토리지 (물리적 스토리지)
     private double totalPhysicalStorageTb;              // 물리적 스토리지 (TB)
 
+    // 월별 신규 생성 테이블 용량 (쿼리 2: 해당 월에 생성된 테이블의 현재 용량, 조회 실패 월은 null)
+    private List<Double> newTableLogicalGbTrend;
+    private List<Double> newTablePhysicalGbTrend;
+
     // 2. 고비용 쿼리 분석 (TOP 10 비용 최적화)
     private List<BigQueryJobItemDto> highCostQueries;
 
