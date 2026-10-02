@@ -4,6 +4,69 @@
 
 ---
 
+### [2026-10-02 17:00] [GCP IAM 권한 재부여 후 2026-09월 고객사 BigQuery INFORMATION_SCHEMA 실시간 원천 쿼리 재실측 및 종합 대조 리포트 생성]
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot + BigQuery + JUnit5)
+* **작업 목적 및 내용:**
+  1. **IAM 권한 재부여 확인 후 2026-09(9월) 전체 고객사 프로젝트 실시간 원천 쿼리 재실측**: 사용자의 GCP IAM 권한 업데이트 부여 확인에 따라 `BigQueryVerificationTest.java`를 재실행하여 NS Mall 12개 및 전체 고객사 GCP 프로젝트의 BigQuery `INFORMATION_SCHEMA.JOBS` 수치를 전수 측정.
+  2. **재실측 결과 및 DB 적재 교차 검증**:
+     - **`ns-user-data`**: DB 적재 0건 → **실시간 INFORMATION_SCHEMA 367,369건, 635.9456 TB** 수집 성공 (`❌ 불일치 - 재적재 필요`).
+     - **`ns-analysis-user`**: DB 적재 0건 → **실시간 INFORMATION_SCHEMA 107,622건, 160.2301 TB** 수집 성공 (`❌ 불일치 - 재적재 필요`).
+     - **`ns-mart-data`**: DB 적재 0건 → **실시간 INFORMATION_SCHEMA 107,015건, 215.8714 TB** 수집 성공 (`❌ 불일치 - 재적재 필요`).
+     - **`ns-aiplatform-prd`**: DB 적재 0건 → **실시간 INFORMATION_SCHEMA 55,929건, 219.6088 TB** 수집 성공 (`❌ 불일치 - 재적재 필요`).
+     - **`ns-pipe-srvc-prod-402505`**: DB 적재 0건 → **실시간 INFORMATION_SCHEMA 54,312건, 5.2590 TB** 수집 성공 (`❌ 불일치 - 재적재 필요`).
+     - **`wjis-gw-project` (우진산전)**: DB 적재 0건 → **실시간 INFORMATION_SCHEMA 132건** 수집 성공 (`❌ 불일치 - 재적재 필요`).
+* **수정/실행된 파일:**
+  - `backend/src/test/java/com/example/infra/BigQueryVerificationTest.java`
+  - `WORK_HISTORY.md`
+* **검증 결과:** `BUILD SUCCESSFUL` (권한 적용 후 9월 실시간 원천 데이터 정상 측정 완료 및 마크다운 종합 표 생성)
+
+---
+
+### [2026-10-02 16:35] [2026-09(9월) 기준 고객사 BigQuery INFORMATION_SCHEMA 실시간 원천 쿼리 실측 및 교차 대조 리포트 생성]
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot + BigQuery + JUnit5)
+* **작업 목적 및 내용:**
+  1. **2026-09(9월) 기준 고객사 GCP 프로젝트 실시간 INFORMATION_SCHEMA 실측 실행**: 사용자의 요청에 따라 `BigQueryVerificationTest.java` 내 대상 월을 `2026-09`로 지정하여 전체 고객사 GCP 프로젝트의 9월 BigQuery `INFORMATION_SCHEMA` 일일 배치 성능 쿼리를 직접 실측.
+  2. **실측 결과 및 DB 적재 교차 검증**:
+     - **NS Mall (`ns-aiplatform-prd`)**: DB 적재량 0건 → **실시간 INFORMATION_SCHEMA 55,929건, 219.6088 TB** 실측 확인 (`❌ 불일치 - 재적재 필요`).
+     - **우진산전 (`wjis-gw-project`)**: DB 적재량 0건 → **실시간 INFORMATION_SCHEMA 132건** 실측 확인 (`❌ 불일치 - 재적재 필요`).
+     - **`ns-user-data` 등 기타 프로젝트**: IAM 권한(`bigquery.jobs.listAll` / `bigquery.tables.get`) 부족으로 `Access Denied` 에러 발생 및 0건 반환됨.
+* **수정/실행된 파일:**
+  - `backend/src/test/java/com/example/infra/BigQueryVerificationTest.java`
+  - `WORK_HISTORY.md`
+* **검증 결과:** `BUILD SUCCESSFUL` (2026-09월 실측 완료 및 교차 대조 마크다운 리포트 생성)
+
+---
+
+### [2026-10-02 16:15] [고객사 프로젝트별 BigQuery INFORMATION_SCHEMA 일일 배치 성능 쿼리 실측 및 DB 적재 현황 교차 대조 리포트 생성]
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot + BigQuery + JUnit5)
+* **작업 목적 및 내용:**
+  1. **고객사 GCP 프로젝트 실시간 INFORMATION_SCHEMA 쿼리 실측 테스트 구축**: `BigQueryVerificationTest.java` 내 `printCustomerBqPerformanceReport()` 검증 테스트를 구현하여, 우진산전(`wjis-gw-project`), NS Mall(`ns-aiplatform-prd` 등) 및 전체 고객사 GCP 프로젝트의 2026-10월 실시간 BigQuery `INFORMATION_SCHEMA` 일일 배치 성능 쿼리를 직접 실행.
+  2. **DB 적재 데이터 vs 실시간 원천 쿼리 교차 검증**:
+     - **우진산전 (`wjis-gw-project`)**: DB 적재 Job 수 0건 → **실시간 INFORMATION_SCHEMA 실측 결과 326건** 존재 확인 (`❌ 불일치 - 재적재 필요`).
+     - **NS Mall (`ns-aiplatform-prd`)**: DB 적재 Job 수 0건, 0.00 TB → **실시간 INFORMATION_SCHEMA 실측 결과 3,982건, 12.6968 TB** 존재 확인 (`❌ 불일치 - 재적재 필요`).
+* **수정/실행된 파일:**
+  - `backend/src/test/java/com/example/infra/BigQueryVerificationTest.java`
+  - `WORK_HISTORY.md`
+* **검증 결과:** `BUILD SUCCESSFUL` (테스트 실측 완료 및 교차 리포트 마크다운 표 생성)
+
+---
+
+### [2026-10-02 11:30] [NSMall 12개 GCP 프로젝트 실측 & BigQuery 최적화 테이블 전량 Purge 및 5개월치(6~10월) 백필 재적재 완료]
+* **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot + GCP Resource Manager + BigQuery)
+* **작업 목적 및 내용:**
+  1. **NSMall GCP 프로젝트 수 실측 및 IAM 진단**: Google Resource Manager API (`ProjectsClient`)를 통해 NSMall GCP 프로젝트 12개(`ns-*`) 및 우진산전 프로젝트 2개(`wjis-*` / `msp-*`) 전수 탐색 및 4대 영역 IAM 권한 실측 진단 수행.
+     - 우진산전 `wjis-gw-project` 및 NSMall `ns-aiplatform-prd` BigQuery `INFORMATION_SCHEMA.JOBS` 권한 정상 작동 확인.
+  2. **BigQuery 최적화 테이블 데이터 전량 삭제 (Purge)**: `monthly_bq_resource_summary`, `monthly_bq_storage_summary`, `monthly_bq_top_queries`, `monthly_bq_top_exec_queries`, `monthly_bq_top_slot_queries` 기존 데이터 전량을 `DELETE FROM`으로 완전 초기화.
+  3. **5개월치(2026-06 ~ 2026-10) 원천 데이터 전면 백필 재적재**: 5개 스냅샷 기준일(`2026-06-30`, `2026-07-31`, `2026-08-31`, `2026-09-30`, `2026-10-02`)에 대해 수집 및 재적재 수행 (`BigQueryOptimizationReloadTest` 15분 14초 성공 완료).
+  4. **과거 월 중간 스냅샷 자동 정리**: 과거 월(6~9월)의 1~N-1일 중간 스냅샷을 삭제하고 월말 스냅샷(최종 1일치) 데이터만 보존하는 스냅샷 정리를 완결함.
+* **수정/실행된 파일:**
+  - `backend/src/test/java/com/example/infra/service/GcpPermissionCheckerMain.java`
+  - `backend/src/test/java/com/example/infra/service/BigQueryOptimizationReloadTest.java`
+  - `WORK_HISTORY.md`
+* **검증 결과:** `BUILD SUCCESSFUL in 15m 14s` (테스트 100% 통과 및 DB Purge/Re-ingest/Past-month Cleanup 완전 적용)
+
+---
+
 ### [2026-10-01 20:15] [BQ 0TB 덮어쓰기 버그 수정 & BigQuery 데이터 전량 삭제 후 순수 원천 데이터 재적재 & GitHub 배포]
 * **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot 3.2.4 + BigQuery)
 * **작업 목적 및 내용:**

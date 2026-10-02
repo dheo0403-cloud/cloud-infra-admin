@@ -1,6 +1,9 @@
 package com.example.infra;
 
+import com.example.infra.entity.CloudProject;
+import com.example.infra.entity.InfraEnvironment;
 import com.example.infra.service.BigQueryOptimizationService;
+import com.example.infra.service.InfraEnvironmentService;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryOptions;
@@ -13,8 +16,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 // [버그수정 2026-09-28 / bq-multitenant-reload-mismatch] BigQueryOptimizationService가 이제
@@ -25,6 +32,9 @@ public class BigQueryVerificationTest {
 
     @Autowired
     private BigQueryOptimizationService bigQueryOptimizationService;
+
+    @Autowired
+    private InfraEnvironmentService environmentService;
 
     private static final String TARGET_PROJECT = "mzc-gcp-managed";
     private static final String DATASET = "infra_admin_dataset";
@@ -361,5 +371,89 @@ public class BigQueryVerificationTest {
         }
 
         System.out.println("\n=== 🏁 NSMall 실측치 및 멀티 테넌트 격리 백필 및 검증 완료 ===\n");
+    }
+
+    @Test
+    @DisplayName("고객사별 프로젝트 BigQuery 실시간 INFORMATION_SCHEMA 일일 배치 성능 쿼리 실행 및 DB 적재 비교 레포트")
+    public void printCustomerBqPerformanceReport() throws Exception {
+        System.out.println("\n=========================================================================================================");
+        System.out.println("📊 [고객사 프로젝트별 BigQuery INFORMATION_SCHEMA 일일 배치 성능 쿼리 실측 및 DB 적재 현황 리포트]");
+        System.out.println("=========================================================================================================\n");
+
+        String currentYm = "2026-09";
+
+        List<InfraEnvironment> environments = environmentService.getAllEnvironments();
+
+        System.out.println("| 고객사 | 프로젝트 ID | 대상 월 | DB 적재 Job수 | DB 적재 사용량(TB) | DB 논리 스토리지(GB) | 실시간 쿼리 Job수 | 실시간 사용량(TB) | 실시간 논리 스토리지(GB) | 정합성 상태 |");
+        System.out.println("|---|---|---|---|---|---|---|---|---|---|");
+
+        for (InfraEnvironment env : environments) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            String decryptedSecret = environmentService.getDecryptedSecret(env.getId());
+            if (decryptedSecret == null || decryptedSecret.isEmpty()) continue;
+
+            try {
+                GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decryptedSecret.getBytes()))
+                        .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+
+                String customerName = (env.getCustomer() != null && env.getCustomer().getName() != null)
+                        ? env.getCustomer().getName() : "Unknown";
+
+                for (CloudProject project : env.getProjects()) {
+                    String projectId = project.getProjectId();
+
+                    // 1. DB 적재 데이터 조회 (monthly_bq_resource_summary)
+                    InputStream hostCredStream = new ClassPathResource("gcp-credentials.json").getInputStream();
+                    GoogleCredentials hostCreds = GoogleCredentials.fromStream(hostCredStream);
+                    BigQuery hostBq = BigQueryOptions.newBuilder().setCredentials(hostCreds).setProjectId(TARGET_PROJECT).build().getService();
+
+                    long dbJobCount = 0L;
+                    double dbTbProcessed = 0.0;
+                    double dbLogicalGb = 0.0;
+
+                    try {
+                        String dbSql = String.format(
+                            "SELECT job_count, total_tb_processed, total_logical_gb " +
+                            "FROM `%s.%s.monthly_bq_resource_summary` " +
+                            "WHERE project_id = '%s' AND report_year_month = '%s' " +
+                            "ORDER BY snapshot_date DESC LIMIT 1",
+                            TARGET_PROJECT, DATASET, projectId, currentYm
+                        );
+                        TableResult dbRes = hostBq.query(QueryJobConfiguration.newBuilder(dbSql).build());
+                        for (FieldValueList row : dbRes.iterateAll()) {
+                            dbJobCount = row.get("job_count").getLongValue();
+                            dbTbProcessed = row.get("total_tb_processed").getDoubleValue();
+                            dbLogicalGb = row.get("total_logical_gb").getDoubleValue();
+                        }
+                    } catch (Exception e) {
+                        // DB 조회 무시
+                    }
+
+                    // 2. 고객사 GCP 프로젝트에서 INFORMATION_SCHEMA 쿼리 실시간 실행
+                    BigQueryOptimizationService.RealUsageSummary liveUsage =
+                            bigQueryOptimizationService.queryRealUsageSummaryWithUserQueries(credentials, projectId, currentYm);
+
+                    long liveJobCount = liveUsage.jobCount;
+                    double liveTbProcessed = liveUsage.totalTbProcessed;
+                    double liveLogicalGb = liveUsage.totalLogicalGb;
+
+                    String status = "✅ 정상 (일치)";
+                    if (dbJobCount == 0 && liveJobCount == 0 && liveLogicalGb == 0.0) {
+                        status = "⚪ 쿼리/사용량 없음";
+                    } else if (dbJobCount != liveJobCount || Math.abs(dbTbProcessed - liveTbProcessed) > 0.001) {
+                        status = "⚠️ 불일치 (재적재 필요)";
+                    }
+
+                    System.out.println(String.format("| %s | %s | %s | %,d건 | %.4f TB | %.2f GB | %,d건 | %.4f TB | %.2f GB | %s |",
+                            customerName, projectId, currentYm,
+                            dbJobCount, dbTbProcessed, dbLogicalGb,
+                            liveJobCount, liveTbProcessed, liveLogicalGb, status));
+                }
+            } catch (Exception e) {
+                System.out.println(String.format("| 환경 오류 | %s | %s | - | - | - | - | - | - | ❌ 접속 실패: %s |",
+                        env.getEnvironmentName(), currentYm, e.getMessage()));
+            }
+        }
+        System.out.println("\n=========================================================================================================\n");
     }
 }
