@@ -4,6 +4,30 @@
 
 ---
 
+### [2026-10-03] [cloud-infra-admin] 권한 없는 고객사 BigQuery 데이터 출처 분석 · 신규 테이블 용량 그래프를 논리/물리 2막대로 변경
+* **대상 프로젝트:** `cloud-infra-admin/frontend`, BigQuery `infra_admin_dataset`(조회만)
+* **분석 결과 (조회 전용 실측, NS Mall·우진산전 제외 9개 프로젝트):**
+  - 9개 프로젝트(한앤컴퍼니 5, 카카오헬스케어 3, 밸로프 1) 모두 서비스 계정 `mzc-monitoring@mzc-gcp-managed`로 쿼리 1·2를 실행하면 모든 리전에서 권한 없음으로 실패.
+  - 그런데 `monthly_bq_top_queries`에 07~10월 HIGH_COST·LONG_DURATION 각 10행 × 9개 프로젝트 = 720행이 있음. 실행 계정이 `monte-carlo@…`, `capex-waterfall@…`, `kiln-analytics@…`처럼 여러 고객사에 같은 이름으로 반복됨.
+  - 출처: 커밋 `59f6f82`(2026-09-22)이 고객사별 가짜 계정·쿼리를 코드로 만들어 적재하는 로직을 추가했고, `97f1b4a`(2026-10-02 11:28)에서 삭제됨. 해당 행은 그 사이인 10-01 20:25~20:32와 10-02 02:01~02:33(일배치)에 적재됨.
+  - 지금 코드는 TOP 쿼리가 모든 리전에서 실패하면 "기존 행 유지"라 가짜 행이 계속 남아 있음.
+  - `monthly_bq_resource_summary` 06~10월 45행은 job_count 0(10-02 18:25~19:12 적재). 실패해도 0을 막는 수정(`7283133`, 19:32) 이전에 0으로 기록된 것.
+  - 현재 `BigQueryOptimizationService`에는 가짜 데이터를 만드는 코드가 없음(Random·고정 계정 패턴 검색). 다른 서비스의 mock 코드(Slack D-30 테스트, `GcpAuditService` mockAsset)는 이번 범위에서 보지 않음.
+* **작업 내용:** "월별 신규 생성 테이블 용량" 그래프를 논리(파랑)·물리(초록) 2막대로 변경. 두 계열 모두 GB라 공통 최댓값 기준 높이(막대끼리 비교 가능), 범례 추가, 막대 아래 물리 문구 제거.
+* **수정 파일:** `frontend/src/components/BigQueryOptimizationPanel.tsx`
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - 가짜 TOP 720행과 0 요약 45행은 아직 삭제하지 않음(DB 삭제라 승인 필요). 삭제하지 않으면 이 고객사 보고서에 가짜 쿼리 목록이 계속 표시됨.
+  - 값 차이가 커서 작은 막대는 최소 높이(4%)로 그려짐(라벨로 값 확인).
+* **검증 결과:**
+  - 분석: 임시 `TmpOtherCustomersTest`(조회 전용) `check`·`scope` exit 0. `git log -S "capex-waterfall"` → `97f1b4a`, `59f6f82`.
+  - `npx tsc --noEmit -p .` exit 0, `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
+  - Puppeteer(JAR 8080, NS Mall / ns-mart-data / 2026-09) exit 0: 막대 4쌍, 공통 기준 높이 비례(3,266.51GB=115px, 406.47GB=15px 등), 바닥선 일치, 라벨 겹침 없음, 범례 표시, 왼쪽 카드와 같은 줄·높이, 콘솔 오류 0건. 스크린샷 확인.
+  - 검증 후 로컬 백엔드 중지.
+* **후속 할 일:** ① 9개 프로젝트의 가짜 TOP 720행·0 요약 45행 삭제(승인 대기) ② 권한 받은 뒤 해당 프로젝트 재적재
+
+
+---
+
 ### [2026-10-03] [cloud-infra-admin] 스토리지 카드 → "월별 신규 생성 테이블 용량" 그래프, 쿼리 2 조건 수정, NS Mall 재적재
 * **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`, BigQuery `infra_admin_dataset`
 * **확인 내용 (조회 전용 실측, ns-intr-data):**

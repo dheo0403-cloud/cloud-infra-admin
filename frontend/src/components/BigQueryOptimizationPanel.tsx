@@ -186,7 +186,9 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                             {(() => {
                                 const lgTrend = data.newTableLogicalGbTrend || [];
                                 const pgTrend = data.newTablePhysicalGbTrend || [];
-                                const maxLg = Math.max(...lgTrend.map(v => v || 0), 0.01);
+                                // 논리·물리 모두 GB 단위라 두 계열 공통 최댓값 기준으로 높이 산정 (막대끼리 비교 가능)
+                                const maxGb = Math.max(...lgTrend.map(v => v || 0), ...pgTrend.map(v => v || 0), 0.01);
+                                const barH = (v: number | null | undefined) => v && v > 0 ? Math.max(4, Math.min(85, Math.round((v / maxGb) * 85))) : 0;
                                 const curLg = lgTrend[3];
                                 return (
                                     <div className="report-card bq-new-table-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
@@ -203,24 +205,39 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                             {displayDates.map((dateStr, idx) => {
                                                 const lg = lgTrend[idx];
                                                 const pg = pgTrend[idx];
-                                                // 0 GB(실제로 신규 용량 없음)와 null(조회 실패·미수집)을 구분해 표시
-                                                const h = lg && lg > 0 ? Math.max(4, Math.min(85, Math.round((lg / maxLg) * 85))) : 0;
+                                                // 0 GB(실제로 신규 용량 없음)와 null(조회 실패·미수집 → '-')을 구분해 표시
+                                                const bars = [
+                                                    { cls: 'bq-new-table-bar', v: lg, color: '#3b82f6', text: '#1e3a8a', side: { right: 0 } },
+                                                    { cls: 'bq-new-table-phys-bar', v: pg, color: '#10b981', text: '#047857', side: { left: 0 } }
+                                                ];
                                                 return (
                                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                                        <div className="bq-new-table-bar" style={{ width: '22px', height: `${h}%`, backgroundColor: h > 0 ? '#3b82f6' : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
-                                                            <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: lg == null ? '#94a3b8' : '#1e3a8a', whiteSpace: 'nowrap' }}>
-                                                                {lg == null ? '-' : `${Number(lg).toFixed(2)}GB`}
-                                                            </span>
+                                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                            {bars.map(b => (
+                                                                <div key={b.cls} className={b.cls} style={{ width: '16px', height: `${barH(b.v)}%`, backgroundColor: barH(b.v) > 0 ? b.color : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
+                                                                    {/* 두 막대 라벨이 겹치지 않도록 논리는 왼쪽, 물리는 오른쪽으로 펼침 */}
+                                                                    <span style={{ position: 'absolute', top: '-16px', ...b.side, fontSize: '8px', fontWeight: 700, color: b.v == null ? '#94a3b8' : b.text, whiteSpace: 'nowrap' }}>
+                                                                        {b.v == null ? '-' : `${Number(b.v).toFixed(2)}GB`}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
                                                         </div>
                                                         <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{dateStr}</span>
-                                                        <span style={{ fontSize: '8.5px', color: '#94a3b8' }}>{pg == null ? '' : `물리 ${Number(pg).toFixed(2)}GB`}</span>
                                                     </div>
                                                 );
                                             })}
                                         </div>
 
-                                        <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '6px', display: 'block' }}>
-                                            * 막대: 해당 월에 생성된 테이블의 논리 용량(수집 시점 기준, 삭제된 테이블 제외). '-'는 조회 권한 없음 또는 미수집
+                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                            <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6', marginRight: '5px' }}></span>논리 용량 (GB)
+                                            </span>
+                                            <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>물리 용량 (GB)
+                                            </span>
+                                        </div>
+                                        <span style={{ fontSize: '9px', color: '#94a3b8', marginTop: '2px', display: 'block', textAlign: 'center' }}>
+                                            * 해당 월에 생성된 테이블의 용량(수집 시점 기준, 삭제된 테이블 제외). '-'는 조회 권한 없음 또는 미수집
                                         </span>
                                     </div>
                                 );
