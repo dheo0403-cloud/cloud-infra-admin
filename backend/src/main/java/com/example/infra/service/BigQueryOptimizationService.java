@@ -53,7 +53,10 @@ public class BigQueryOptimizationService {
         "SELECT\n" +
         "  FORMAT_DATE('%%Y-%%m', DATE(DATETIME(creation_time, 'Asia/Seoul'))) AS crt_dt,\n" +
         "  COUNT(job_id) AS job_count,\n" +
-        "  ROUND(SAFE_DIVIDE(SUM(total_bytes_processed), POWER(1024, 4)), 2) AS total_tb_processed_sum\n" +
+        "  SUM(total_bytes_processed) AS total_bytes_processed_sum,\n" +
+        "  SUM(total_bytes_billed) AS total_bytes_billed_sum,\n" +
+        "  ROUND(SAFE_DIVIDE(SUM(total_bytes_processed), POWER(1024, 4)), 4) AS total_tb_processed_sum,\n" +
+        "  ROUND(SAFE_DIVIDE(SUM(total_bytes_billed), POWER(1024, 4)), 4) AS total_tb_billed_sum\n" +
         "FROM `%s.region-%s.INFORMATION_SCHEMA.JOBS`\n" +
         "WHERE job_type = 'QUERY'\n" +
         "  AND state = 'DONE'\n" +
@@ -286,11 +289,14 @@ public class BigQueryOptimizationService {
     }
 
     /**
-     * 실측 사용량 기록 DTO
+     * 실측 사용량 기록 DTO (가공 없는 원본 수치 보존)
      */
     public static class RealUsageSummary {
         public long jobCount = 0;
+        public long totalBytesProcessed = 0L;
+        public long totalBytesBilled = 0L;
         public double totalTbProcessed = 0.0;
+        public double totalTbBilled = 0.0;
         public double totalLogicalGb = 0.0;
         public double totalPhysicalGb = 0.0;
         public double totalPhysicalTb = 0.0;
@@ -316,7 +322,7 @@ public class BigQueryOptimizationService {
                     .getService();
 
             for (String region : regions) {
-                // 1. Job 수 및 TB 사용량 쿼리 실행
+                // 1. Job 수 및 Raw Bytes / TB 사용량 쿼리 실행 (무가공 원본 수치 수집)
                 try {
                     String sql1 = buildQuery1JobUsage(projectId, region, yearMonth);
                     TableResult res1 = tenantClient.query(QueryJobConfiguration.newBuilder(sql1).build());
@@ -324,8 +330,17 @@ public class BigQueryOptimizationService {
                         if (isPresent(row, "job_count")) {
                             summary.jobCount += row.get("job_count").getLongValue();
                         }
+                        if (isPresent(row, "total_bytes_processed_sum")) {
+                            summary.totalBytesProcessed += row.get("total_bytes_processed_sum").getLongValue();
+                        }
+                        if (isPresent(row, "total_bytes_billed_sum")) {
+                            summary.totalBytesBilled += row.get("total_bytes_billed_sum").getLongValue();
+                        }
                         if (isPresent(row, "total_tb_processed_sum")) {
                             summary.totalTbProcessed += row.get("total_tb_processed_sum").getDoubleValue();
+                        }
+                        if (isPresent(row, "total_tb_billed_sum")) {
+                            summary.totalTbBilled += row.get("total_tb_billed_sum").getDoubleValue();
                         }
                     }
                 } catch (Exception e) {
@@ -371,17 +386,17 @@ public class BigQueryOptimizationService {
         log.info("[BQ-OPTIMIZATION] Dynamic parameterization & collection for project `{}` ({}) snapDate={}",
                 projectId, customerName, snapDate);
 
-        // 1. 사용자 원본 쿼리 1 & 2 로 리소스 요약 수집
+        // 1. 사용자 원본 쿼리 1 & 2 로 리소스 요약 수집 (가공 없는 RAW 데이터 원본 100% 보존)
         RealUsageSummary usage = queryRealUsageSummaryWithUserQueries(credentials, projectId, reportYearMonth);
 
         long jobCount = usage.jobCount;
-        double totalTbProcessed = Math.round(usage.totalTbProcessed * 100.0) / 100.0;
-        long totalBytesProcessed = (long) (totalTbProcessed * Math.pow(1024, 4));
-        long totalBytesBilled = totalBytesProcessed;
-        double totalTbBilled = totalTbProcessed;
-        double logicalGb = Math.round(usage.totalLogicalGb * 100.0) / 100.0;
-        double physicalGb = Math.round(usage.totalPhysicalGb * 100.0) / 100.0;
-        double physicalTb = Math.round(usage.totalPhysicalTb * 10000.0) / 10000.0;
+        long totalBytesProcessed = usage.totalBytesProcessed;
+        long totalBytesBilled = usage.totalBytesBilled;
+        double totalTbProcessed = usage.totalTbProcessed;
+        double totalTbBilled = usage.totalTbBilled > 0 ? usage.totalTbBilled : usage.totalTbProcessed;
+        double logicalGb = usage.totalLogicalGb;
+        double physicalGb = usage.totalPhysicalGb;
+        double physicalTb = usage.totalPhysicalTb;
 
         // Resource Summary MERGE INTO
         try {
@@ -682,12 +697,18 @@ public class BigQueryOptimizationService {
     }
 
     /**
-     * GcpMetricsController 호환용: 전체 GCP 프로젝트 대상 과거 4개월 수집 백필
+     * GcpMetricsController 호환용: 전체 GCP 프로젝트 대상 6월부터 10월까지(2026-06 ~ 2026-10) 5개월치 수집 일괄 백필
      */
     public void backfillAllProjects4MonthsBulk() {
-        log.info("[BQ-BACKFILL] Triggering backfill for all GCP projects across past months");
+        log.info("[BQ-BACKFILL] Triggering 5-month (June~October 2026) full backfill for all GCP projects without conditional filtering or data alteration");
         List<InfraEnvironment> environments = infraEnvironmentService.getAllEnvironments();
-        String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        List<String> targetSnapshots = Arrays.asList(
+            "2026-06-30",
+            "2026-07-31",
+            "2026-08-31",
+            "2026-09-30",
+            "2026-10-02"
+        );
 
         for (InfraEnvironment env : environments) {
             if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
@@ -702,7 +723,11 @@ public class BigQueryOptimizationService {
                     String projectId = project.getProjectId();
                     String customerName = (env.getCustomer() != null && env.getCustomer().getName() != null)
                             ? env.getCustomer().getName() : "Unknown";
-                    collectAndUpsertBigQueryOptimizationData(snapshotDate, projectId, customerName, credentials);
+
+                    for (String snapDate : targetSnapshots) {
+                        log.info("[BQ-BACKFILL-MONTH] Ingesting month snapshot `{}` for project `{}` ({})", snapDate, projectId, customerName);
+                        collectAndUpsertBigQueryOptimizationData(snapDate, projectId, customerName, credentials);
+                    }
                 }
             } catch (Exception e) {
                 log.error("[BQ-BACKFILL] Failed backfill for env: {}", env.getEnvironmentName(), e);

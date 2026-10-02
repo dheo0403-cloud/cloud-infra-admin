@@ -72,8 +72,15 @@ public class BigQueryOptimizationReloadTest {
                 }
             }
 
-            // 2. 전체 GCP 환경 순회하며 변경된 5대 SQL 쿼리로 실데이터 재적재
-            String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            // 2. 전체 GCP 환경 순회하며 6월부터 10월까지(2026-06 ~ 2026-10) 5개월치 스냅샷 데이터 원본 그대로 100% 재적재
+            List<String> targetSnapshots = Arrays.asList(
+                "2026-06-30",
+                "2026-07-31",
+                "2026-08-31",
+                "2026-09-30",
+                "2026-10-02"
+            );
+
             List<InfraEnvironment> environments = environmentService.getAllEnvironments();
 
             for (InfraEnvironment env : environments) {
@@ -91,8 +98,10 @@ public class BigQueryOptimizationReloadTest {
                         String customerName = (env.getCustomer() != null && env.getCustomer().getName() != null)
                                 ? env.getCustomer().getName() : "Unknown";
 
-                        System.out.println("🔄 Re-ingesting BigQuery Optimization data for project: " + projectId);
-                        bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapshotDate, projectId, customerName, credentials);
+                        for (String snapDate : targetSnapshots) {
+                            System.out.println("🔄 Re-ingesting BigQuery Optimization data for project: " + projectId + " [Snapshot Date: " + snapDate + "]");
+                            bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapDate, projectId, customerName, credentials);
+                        }
                     }
                 } catch (Exception e) {
                     System.err.println("❌ Reload failed for environment: " + env.getEnvironmentName() + " - " + e.getMessage());
