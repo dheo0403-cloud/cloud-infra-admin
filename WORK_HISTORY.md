@@ -4,6 +4,23 @@
 
 ---
 
+### [2026-10-03] [cloud-infra-admin] 정기 점검 권고 사항: 편집으로 내용을 지워도 "N건 권고"가 남던 문제 수정
+* **대상 프로젝트:** `cloud-infra-admin/frontend`
+* **원인:** 권고 카드의 항목·건수를 편집 내용으로 계산하되, 편집 내용이 빈 문자열이면 원래 Recommender 목록으로 되돌아감(`GcpMonthlyReportViewPage.tsx` 권고 섹션). 그래서 내용을 모두 지우면 편집 중에는 "1건 권고"가 남고, 편집 종료 후에는 지운 항목이 다시 보임. AI 요약 생성도 같은 방식이라 지운 내용으로 요약됨.
+* **작업 내용:** 편집 내용은 보고서를 불러올 때 원래 목록으로 채워지므로, 건수·목록·AI 요약 입력을 모두 편집 내용만 기준으로 계산(`toRecItems`, 빈 줄 제외). 모두 지우면 0건.
+* **수정 파일:** `frontend/src/pages/GcpMonthlyReportViewPage.tsx`
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - 이 페이지는 권고 편집 내용을 서버에 저장하지 않음(백엔드 저장 API는 있으나 호출 없음). 그래서 다시 불러오면 원래 Recommender 목록으로 돌아감. 이번 범위에서는 바꾸지 않음.
+  - 백엔드도 저장된 값이 빈 문자열이면 원래 목록을 쓰므로, 나중에 저장 기능을 붙일 때는 "모두 지움"을 구분하는 처리가 필요.
+* **검증 결과:**
+  - `npx tsc --noEmit -p .` exit 0, `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
+  - Puppeteer(JAR 8080, NS Mall / ns-intr-data / 2026-09) exit 0: 초기 5/0/0건 → 편집 모드에서 보안 권고를 모두 지움 → 0/0/0건(textarea 빈 값) → 편집 종료 후 0/0/0건, "해당 카테고리 권고 사항 없음" 3곳, 다른 카테고리 변화 없음, 콘솔 오류 0건(기존 select 중복 key 경고 제외).
+  - 검증 후 로컬 백엔드 중지.
+* **후속 할 일:** 권고 편집 내용을 서버에 저장해 다시 불러와도 유지할지 결정
+
+
+---
+
 ### [2026-10-03] [cloud-infra-admin] 권한 없는 9개 프로젝트의 가짜 TOP·0 요약 데이터 삭제
 * **대상:** BigQuery `infra_admin_dataset`. 프로젝트 ssycne, skspecialty, hcompanycsg, skshipping, hcompany-485701(한앤컴퍼니), prd-dfd, prd-pasta, secu-390423(카카오헬스케어), infra-platform(밸로프)
 * **작업 내용 (사용자 승인):** 2026-06~10월 `monthly_bq_resource_summary` 45행(job 0)과 `monthly_bq_top_queries` 720행(커밋 `59f6f82`의 가짜 데이터 생성 로직이 적재한 행) 삭제.

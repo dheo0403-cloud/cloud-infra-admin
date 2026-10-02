@@ -104,6 +104,9 @@ interface MonthlyReportData {
     generationDurationSeconds?: number;
 }
 
+// 줄바꿈 단위 권고 편집 텍스트 → 빈 줄을 뺀 항목 목록
+const toRecItems = (text: string) => text.split('\n').map(s => s.trim()).filter(Boolean);
+
 const GcpMonthlyReportViewPage: React.FC = () => {
     const getCurrentYearMonth = (): string => {
         const now = new Date();
@@ -350,9 +353,9 @@ const GcpMonthlyReportViewPage: React.FC = () => {
         if (!reportData) return;
         setIsGeneratingAi(true);
         try {
-            const secList = editRecSecurity ? editRecSecurity.split('\n') : (reportData.recommendationsSecurityList || []);
-            const costList = editRecCost ? editRecCost.split('\n') : (reportData.recommendationsCostList || []);
-            const perfList = editRecPerformance ? editRecPerformance.split('\n') : (reportData.recommendationsPerformanceList || []);
+            const secList = toRecItems(editRecSecurity);
+            const costList = toRecItems(editRecCost);
+            const perfList = toRecItems(editRecPerformance);
 
             const res = await fetch('/api/reports/gcp/generate-ai-summary', {
                 method: 'POST',
@@ -2566,15 +2569,10 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                     {/* Section 8: GCP Recommender (Active Assist) 3-Card Category-Specific Editing Lists */}
                     {(() => {
-                        const recSecurityItems = editRecSecurity !== ''
-                            ? editRecSecurity.split('\n').map(s => s.trim()).filter(Boolean)
-                            : (reportData.recommendationsSecurityList || []);
-                        const recCostItems = editRecCost !== ''
-                            ? editRecCost.split('\n').map(s => s.trim()).filter(Boolean)
-                            : (reportData.recommendationsCostList || []);
-                        const recPerfItems = editRecPerformance !== ''
-                            ? editRecPerformance.split('\n').map(s => s.trim()).filter(Boolean)
-                            : (reportData.recommendationsPerformanceList || []);
+                        // 편집 내용은 보고서 로드 시 원본 목록으로 채워지므로 편집 내용만 기준으로 계산 (모두 지우면 0건)
+                        const recSecurityItems = toRecItems(editRecSecurity);
+                        const recCostItems = toRecItems(editRecCost);
+                        const recPerfItems = toRecItems(editRecPerformance);
 
                         return (
                             <div className="report-card" style={{ borderTop: '4px solid #0b4885', marginBottom: 0, marginTop: '20px' }}>
