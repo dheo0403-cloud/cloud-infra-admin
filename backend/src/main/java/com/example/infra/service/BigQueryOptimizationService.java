@@ -300,6 +300,7 @@ public class BigQueryOptimizationService {
         public double totalLogicalGb = 0.0;
         public double totalPhysicalGb = 0.0;
         public double totalPhysicalTb = 0.0;
+        public boolean jobQuerySucceeded = false;   // 쿼리 1이 한 리전 이상에서 성공했는지 (실패 시 0 적재 방지)
     }
 
     /**
@@ -343,6 +344,7 @@ public class BigQueryOptimizationService {
                             summary.totalTbBilled += row.get("total_tb_billed_sum").getDoubleValue();
                         }
                     }
+                    summary.jobQuerySucceeded = true;
                 } catch (Exception e) {
                     log.error("[BQ-QUERY1] Query 1 failed for project {} region {}: {}", projectId, region, e.getMessage());
                 }
@@ -388,6 +390,12 @@ public class BigQueryOptimizationService {
 
         // 1. 사용자 원본 쿼리 1 & 2 로 리소스 요약 수집 (가공 없는 RAW 데이터 원본 100% 보존)
         RealUsageSummary usage = queryRealUsageSummaryWithUserQueries(credentials, projectId, reportYearMonth);
+        if (!usage.jobQuerySucceeded) {
+            // 모든 리전에서 쿼리 1 실패: 0으로 덮어쓰지 않고 기존 데이터 유지
+            log.error("[BQ-OPTIMIZATION] Query 1 failed in all regions for {} {} - resource summary NOT written", projectId, reportYearMonth);
+            collectTopQueriesWithUserQueries(snapDate, reportYearMonth, projectId, customerName, credentials);
+            return;
+        }
 
         long jobCount = usage.jobCount;
         long totalBytesProcessed = usage.totalBytesProcessed;
@@ -454,41 +462,48 @@ public class BigQueryOptimizationService {
                     .build()
                     .getService();
 
-            for (String region : regions) {
-                // 쿼리 3 (비용 TOP 10)
-                try {
-                    String sql3 = buildQuery3TopCost(projectId, region, startTimeStr, endTimeStr);
-                    TableResult res3 = tenantClient.query(QueryJobConfiguration.newBuilder(sql3).build());
-                    int rank = 1;
-                    for (FieldValueList row : res3.iterateAll()) {
-                        upsertSingleTopQuery(snapDate, reportYearMonth, projectId, customerName, "HIGH_COST", rank++, row);
+            // 분류별 {쿼리 SQL 빌더, 정렬 컬럼}: 리전별 결과를 합쳐 전체 TOP 10을 다시 뽑는다
+            String[][] categories = {
+                {"HIGH_COST", "total_bytes_processed"},
+                {"LONG_DURATION", "execution_time_ms"},
+                {"HIGH_SLOT", "total_slot_ms"}
+            };
+            for (String[] cat : categories) {
+                String category = cat[0], sortCol = cat[1];
+                List<FieldValueList> rows = new ArrayList<>();
+                boolean anySucceeded = false;
+                for (String region : regions) {
+                    try {
+                        String sql = "HIGH_COST".equals(category) ? buildQuery3TopCost(projectId, region, startTimeStr, endTimeStr)
+                                : "LONG_DURATION".equals(category) ? buildQuery4TopDuration(projectId, region, startTimeStr, endTimeStr)
+                                : buildQuery5TopSlots(projectId, region, startTimeStr, endTimeStr);
+                        tenantClient.query(QueryJobConfiguration.newBuilder(sql).build()).iterateAll().forEach(rows::add);
+                        anySucceeded = true;
+                    } catch (Exception e) {
+                        log.error("[BQ-TOP-{}] Query failed for project {} region {}: {}", category, projectId, region, e.getMessage());
                     }
-                } catch (Exception e) {
-                    log.error("[BQ-QUERY3] Query 3 failed for project {} region {}: {}", projectId, region, e.getMessage());
+                }
+                if (!anySucceeded) {
+                    // 모든 리전 실패: 기존 데이터를 지우지 않고 유지
+                    log.error("[BQ-TOP-{}] All regions failed for {} {} - existing rows kept", category, projectId, snapDate);
+                    continue;
                 }
 
-                // 쿼리 4 (실행시간 TOP 10)
-                try {
-                    String sql4 = buildQuery4TopDuration(projectId, region, startTimeStr, endTimeStr);
-                    TableResult res4 = tenantClient.query(QueryJobConfiguration.newBuilder(sql4).build());
-                    int rank = 1;
-                    for (FieldValueList row : res4.iterateAll()) {
-                        upsertSingleTopQuery(snapDate, reportYearMonth, projectId, customerName, "LONG_DURATION", rank++, row);
-                    }
-                } catch (Exception e) {
-                    log.error("[BQ-QUERY4] Query 4 failed for project {} region {}: {}", projectId, region, e.getMessage());
-                }
+                rows.sort(Comparator.comparingLong((FieldValueList r) -> isPresent(r, sortCol) ? r.get(sortCol).getLongValue() : 0L).reversed());
 
-                // 쿼리 5 (슬롯 사용량 TOP 10)
+                // 이전 실행의 잔존 행 제거 후 새 TOP 10 적재
                 try {
-                    String sql5 = buildQuery5TopSlots(projectId, region, startTimeStr, endTimeStr);
-                    TableResult res5 = tenantClient.query(QueryJobConfiguration.newBuilder(sql5).build());
-                    int rank = 1;
-                    for (FieldValueList row : res5.iterateAll()) {
-                        upsertSingleTopQuery(snapDate, reportYearMonth, projectId, customerName, "HIGH_SLOT", rank++, row);
-                    }
+                    String deleteSql = String.format(
+                        "DELETE FROM `%s.%s.%s` WHERE snapshot_date = DATE('%s') AND project_id = '%s' AND query_category = '%s'",
+                        hostProjectId, datasetName, TOP_QUERIES_TABLE, snapDate, projectId, category);
+                    bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
                 } catch (Exception e) {
-                    log.error("[BQ-QUERY5] Query 5 failed for project {} region {}: {}", projectId, region, e.getMessage());
+                    log.error("[BQ-TOP-{}] Failed to clear previous rows for {} {}: {}", category, projectId, snapDate, e.getMessage());
+                    continue;
+                }
+                int rank = 1;
+                for (FieldValueList row : rows.subList(0, Math.min(10, rows.size()))) {
+                    upsertSingleTopQuery(snapDate, reportYearMonth, projectId, customerName, category, rank++, row);
                 }
             }
         } catch (Exception e) {
@@ -615,29 +630,49 @@ public class BigQueryOptimizationService {
                 ? targetYearMonth
                 : LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
+        String pid = (projectId != null && !projectId.trim().isEmpty()) ? projectId.trim() : hostProjectId;
+
+        // 조회 월 기준 최근 4개월 (오래된 월 → 조회 월)
+        YearMonth target = YearMonth.parse(targetYm);
+        List<String> months = new ArrayList<>();
+        List<String> dates = new ArrayList<>();
+        for (int i = 3; i >= 0; i--) {
+            YearMonth m = target.minusMonths(i);
+            months.add(m.toString());
+            dates.add(m.format(DateTimeFormatter.ofPattern("yy.MM")));
+        }
+
         BigQueryOptimizationDto dto = new BigQueryOptimizationDto();
-        dto.setProjectId(projectId != null ? projectId : hostProjectId);
+        dto.setProjectId(pid);
         dto.setTargetYearMonth(targetYm);
-        dto.setDates(Arrays.asList("26.06", "26.07", "26.08", "26.09"));
-        dto.setDataProcessedTbTrend(new ArrayList<>());
-        dto.setJobCountTrend(new ArrayList<>());
+        dto.setDates(dates);
+        // 적재되지 않은 월은 null (가짜 0 대신 데이터 없음 표시)
+        dto.setDataProcessedTbTrend(new ArrayList<>(Collections.nCopies(4, (Double) null)));
+        dto.setJobCountTrend(new ArrayList<>(Collections.nCopies(4, (Long) null)));
         dto.setHighCostQueries(new ArrayList<>());
         dto.setLongDurationQueries(new ArrayList<>());
         dto.setSlotHealthStatus("정상");
         dto.setLastUpdated(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
         try {
+            // 프로젝트별 · 월별 최신 스냅샷 1건씩
             String summarySql = String.format(
                 "SELECT * FROM `%s.%s.%s` " +
-                "WHERE report_year_month = '%s' " +
-                "  AND snapshot_date = ( " +
-                "    SELECT MAX(snapshot_date) FROM `%s.%s.%s` WHERE report_year_month = '%s' " +
-                "  ) ",
-                hostProjectId, datasetName, RESOURCE_SUMMARY_TABLE, targetYm,
-                hostProjectId, datasetName, RESOURCE_SUMMARY_TABLE, targetYm
+                "WHERE project_id = @projectId AND report_year_month IN UNNEST(@months) " +
+                "QUALIFY ROW_NUMBER() OVER (PARTITION BY report_year_month ORDER BY snapshot_date DESC) = 1",
+                hostProjectId, datasetName, RESOURCE_SUMMARY_TABLE
             );
-            TableResult sumRes = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql).build());
+            TableResult sumRes = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql)
+                    .addNamedParameter("projectId", QueryParameterValue.string(pid))
+                    .addNamedParameter("months", QueryParameterValue.array(months.toArray(new String[0]), String.class))
+                    .build());
             for (FieldValueList row : sumRes.iterateAll()) {
+                int idx = months.indexOf(row.get("report_year_month").getStringValue());
+                if (idx < 0) continue;
+                if (isPresent(row, "total_tb_processed")) dto.getDataProcessedTbTrend().set(idx, row.get("total_tb_processed").getDoubleValue());
+                if (isPresent(row, "job_count")) dto.getJobCountTrend().set(idx, row.get("job_count").getLongValue());
+                if (idx != 3) continue;  // 아래 당월 값은 조회 월 행에서만
+
                 if (isPresent(row, "total_tb_processed")) {
                     dto.setCurrentMonthProcessedTb(row.get("total_tb_processed").getDoubleValue());
                 }
@@ -657,15 +692,18 @@ public class BigQueryOptimizationService {
 
             String topSql = String.format(
                 "SELECT * FROM `%s.%s.%s` " +
-                "WHERE report_year_month = '%s' " +
+                "WHERE project_id = @projectId AND report_year_month = @ym " +
                 "  AND snapshot_date = ( " +
-                "    SELECT MAX(snapshot_date) FROM `%s.%s.%s` WHERE report_year_month = '%s' " +
+                "    SELECT MAX(snapshot_date) FROM `%s.%s.%s` WHERE project_id = @projectId AND report_year_month = @ym " +
                 "  ) " +
                 "ORDER BY query_category, rank ASC",
-                hostProjectId, datasetName, TOP_QUERIES_TABLE, targetYm,
-                hostProjectId, datasetName, TOP_QUERIES_TABLE, targetYm
+                hostProjectId, datasetName, TOP_QUERIES_TABLE,
+                hostProjectId, datasetName, TOP_QUERIES_TABLE
             );
-            TableResult topRes = bigQuery.query(QueryJobConfiguration.newBuilder(topSql).build());
+            TableResult topRes = bigQuery.query(QueryJobConfiguration.newBuilder(topSql)
+                    .addNamedParameter("projectId", QueryParameterValue.string(pid))
+                    .addNamedParameter("ym", QueryParameterValue.string(targetYm))
+                    .build());
             for (FieldValueList row : topRes.iterateAll()) {
                 BigQueryOptimizationDto.BigQueryJobItemDto item = BigQueryOptimizationDto.BigQueryJobItemDto.builder()
                         .rank(isPresent(row, "rank") ? (int) row.get("rank").getLongValue() : 0)

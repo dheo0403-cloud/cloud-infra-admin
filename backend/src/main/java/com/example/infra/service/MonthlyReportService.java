@@ -251,7 +251,7 @@ public class MonthlyReportService {
 
         CompletableFuture<List<WorkLogDto>> jiraFuture = CompletableFuture.supplyAsync(() -> {
             long t = System.currentTimeMillis();
-            var res = fetchJiraIssues(finalJiraKey, finalStartDateStr, finalEndDateStr);
+            var res = fetchJiraIssues(finalJiraKey, finalProjectId, finalStartDateStr, finalEndDateStr);
             log.info("[REPORT-PERF] ③ BigQuery (Jira Issues): {}ms", System.currentTimeMillis() - t);
             return res;
         });
@@ -762,7 +762,7 @@ public class MonthlyReportService {
         return map;
     }
 
-    private List<WorkLogDto> fetchJiraIssues(String jiraProjectKey, String startDateStr, String endDateStr) {
+    private List<WorkLogDto> fetchJiraIssues(String jiraProjectKey, String gcpProjectId, String startDateStr, String endDateStr) {
         List<WorkLogDto> list = new ArrayList<>();
         if (jiraProjectKey == null || jiraProjectKey.trim().isEmpty() 
                 || "null".equalsIgnoreCase(jiraProjectKey.trim()) 
@@ -800,12 +800,22 @@ public class MonthlyReportService {
                     "       SUBSTR(CAST(created_at AS STRING), 1, 10) BETWEEN @startDate AND @endDate " +
                     "       OR (created_at IS NULL AND SUBSTR(CAST(snapshot_date AS STRING), 1, 10) BETWEEN @startDate AND @endDate) " +
                     "  ) " +
+                    // 보고서 GCP 프로젝트에 해당하는 이슈만: customer_service(쉼표 구분)의 각 값을 asset 매핑으로 치환 후 비교
+                    // (customer_service가 비어 있거나 매핑되지 않은 asset ID만 있는 이슈는 제외)
+                    "  AND issue_key IN ( " +
+                    "       SELECT i.issue_key FROM `%s.%s.%s` i, UNNEST(SPLIT(IFNULL(CAST(i.customer_service AS STRING), ''), ',')) s " +
+                    "       LEFT JOIN `%s.%s.jira_asset_mapping` m ON CAST(m.asset_id AS STRING) = TRIM(s) " +
+                    "       WHERE LOWER(COALESCE(m.project_name, TRIM(s))) = LOWER(@gcpProjectId) " +
+                    "  ) " +
                     "ORDER BY created_at DESC",
-                    targetProjectId, datasetName, tbl, col);
+                    targetProjectId, datasetName, tbl, col,
+                    targetProjectId, datasetName, tbl,
+                    targetProjectId, datasetName);
 
             try {
                 QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(sql)
                         .addNamedParameter("jiraKey", QueryParameterValue.string(jiraProjectKey))
+                        .addNamedParameter("gcpProjectId", QueryParameterValue.string(gcpProjectId == null ? "" : gcpProjectId.trim()))
                         .addNamedParameter("startDate", QueryParameterValue.string(startDateStr))
                         .addNamedParameter("endDate", QueryParameterValue.string(endDateStr))
                         .build();
