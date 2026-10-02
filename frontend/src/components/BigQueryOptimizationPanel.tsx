@@ -311,7 +311,9 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                         {/* 실행 시간 TOP 10 / 슬롯 사용량 TOP 10 을 같은 표 형식으로 각각 표시 */}
                         {[
                             { key: 'duration', title: '실행 시간 TOP 10', rows: data.longDurationQueries, empty: '조회 대상 연월에 기록된 장시간 소요 쿼리 내역이 없습니다.' },
-                            { key: 'slot', title: '슬롯 사용량 TOP 10', rows: data.highSlotQueries, empty: '조회 대상 연월에 기록된 슬롯 사용량 상위 쿼리 내역이 없습니다.' }
+                            // 적재된 TOP 10(총 슬롯 순)을 보고서 출력 시에만 평균 슬롯 내림차순으로 재정렬
+                            { key: 'slot', title: '슬롯 사용량 TOP 10',
+                              rows: [...(data.highSlotQueries || [])].sort((a, b) => (b.jobAverageSlots || 0) - (a.jobAverageSlots || 0)), empty: '조회 대상 연월에 기록된 슬롯 사용량 상위 쿼리 내역이 없습니다.' }
                         ].map(section => (
                         <div key={section.key} className="bq-perf-table" style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', overflowX: 'auto', marginBottom: section.key === 'duration' ? '8px' : 0 }}>
                             <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>{section.title}</div>
@@ -331,7 +333,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                         section.rows.map((item, idx) => (
                                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '5px 6px', textAlign: 'center', fontWeight: 800, color: idx < 3 ? '#ea580c' : '#64748b' }}>
-                                                    {item.rank}
+                                                    {section.key === 'slot' ? idx + 1 : item.rank}
                                                 </td>
                                                 <td style={{ padding: '5px 6px', color: '#475569' }}>{item.createdDate}</td>
                                                 <td style={{ padding: '5px 6px', color: '#334155', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.userEmail}>
