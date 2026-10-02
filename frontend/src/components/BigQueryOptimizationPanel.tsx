@@ -63,6 +63,8 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
     );
 
     const maxTb = Math.max(...(data.dataProcessedTbTrend || [0]), 1.0);
+    // Job Count는 단위가 달라 자체 최댓값 기준으로 높이 산정
+    const maxJobs = Math.max(...(data.jobCountTrend || []).map(v => v || 0), 1);
     const displayDates = (data.dates && data.dates.length > 0) ? data.dates : ['26.06', '26.07', '26.08', '26.09'];
 
     return (
@@ -125,20 +127,35 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                         const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
                                         const jcVal = data.jobCountTrend?.[idx] || 0;
                                         const heightPercent = tbVal > 0 ? Math.max(20, Math.min(85, Math.round((tbVal / maxTb) * 85))) : 0;
+                                        const jcHeight = jcVal > 0 ? Math.max(20, Math.min(85, Math.round((jcVal / maxJobs) * 85))) : 0;
 
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{
-                                                        width: '20px',
+                                                    <div className="bq-tb-bar" style={{
+                                                        width: '16px',
                                                         height: `${heightPercent}%`,
-                                                        background: tbVal > 0 ? 'linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%)' : 'transparent',
-                                                        borderRadius: '4px 4px 0 0',
+                                                        backgroundColor: tbVal > 0 ? '#3b82f6' : 'transparent',
+                                                        borderRadius: '3px 3px 0 0',
                                                         position: 'relative'
                                                     }}>
                                                         {tbVal > 0 && (
-                                                            <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1e3a8a', whiteSpace: 'nowrap' }}>
+                                                            // 두 막대 라벨이 겹치지 않도록 TB 라벨은 막대 오른쪽 끝 기준 왼쪽으로 펼침
+                                                            <span style={{ position: 'absolute', top: '-16px', right: 0, fontSize: '8px', fontWeight: 700, color: '#1e3a8a', whiteSpace: 'nowrap' }}>
                                                                 {Number(tbVal).toFixed(2)}TB
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="bq-job-bar" style={{
+                                                        width: '16px',
+                                                        height: `${jcHeight}%`,
+                                                        backgroundColor: jcVal > 0 ? '#10b981' : 'transparent',
+                                                        borderRadius: '3px 3px 0 0',
+                                                        position: 'relative'
+                                                    }}>
+                                                        {jcVal > 0 && (
+                                                            <span style={{ position: 'absolute', top: '-16px', left: 0, fontSize: '8px', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
+                                                                {Number(jcVal).toLocaleString()}
                                                             </span>
                                                         )}
                                                     </div>
@@ -151,7 +168,10 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
 
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
                                     <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#2563eb', marginRight: '5px' }}></span>데이터 사용량 (TB)
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6', marginRight: '5px' }}></span>데이터 사용량 (TB)
+                                    </span>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>Job Count
                                     </span>
                                 </div>
                             </div>
