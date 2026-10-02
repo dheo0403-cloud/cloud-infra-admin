@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,17 +52,6 @@ public class GcpMetricsController {
         res.put("status", "SUCCESS");
         res.put("message", "20개 프로젝트 대상 과거 4개월(6~9월) BigQuery 최적화 데이터 일괄 롤업 완료");
         return ResponseEntity.ok(res);
-    }
-
-    /**
-     * 단일 프로젝트 · 지정 월 BigQuery 성능 데이터 수집/적재 (예: months=2026-06,2026-07)
-     */
-    @PostMapping("/bigquery-optimization/collect")
-    public ResponseEntity<java.util.Map<String, Object>> collectBigQueryOptimizationProject(
-            @RequestParam String projectId,
-            @RequestParam java.util.List<String> months) throws Exception {
-        log.info("[API] Collecting BigQuery optimization data for project {} months {}", projectId, months);
-        return ResponseEntity.ok(bigQueryOptimizationService.collectProjectMonths(projectId, months));
     }
 
     /**

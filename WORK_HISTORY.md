@@ -4,6 +4,29 @@
 
 ---
 
+### [2026-10-02] [cloud-infra-admin] 적재 API 운영 비활성화 · 보고서 슬롯 사용량 표시 제거
+* **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`
+* **확인 내용:**
+  - "당월 슬롯 사용량: 최대 0 / 평균 0 · 정상(회색)": 수집할 때 `max_slots`·`avg_slots`에 0.0을 고정 적재하고, 조회 DTO에는 값을 넣지 않으며, 상태는 백엔드에서 "정상"으로 고정. 프론트는 최대 0이면 회색으로 표시.
+  - 쿼리 2(TABLE_STORAGE_BY_PROJECT) Access Denied: 프로젝트 수준 `bigquery.tables.get`·`bigquery.tables.list` 필요(예: `roles/bigquery.metadataViewer`). 공식 문서는 이번 세션에서 열지 못해(이동 후 404·목차만) 지식 기반 안내.
+  - 적재 API 운영 위험: 동기 처리 3~8분, 인증 없음(Spring Security 미사용), 동시 실행 차단 없음, 배포 시 중단. Ingress 제한 시간은 저장소에 설정이 없어 미확인.
+* **작업 내용 (사용자 결정 반영):**
+  1. 보고서 3번 영역 오른쪽의 슬롯 사용량 문구와 상태 배지 제거(최대·평균 값을 계산하는 대신 제거 선택). 판정 기준 2,000은 배지가 없어져 적용하지 않음.
+  2. `/bigquery-optimization/collect`를 `BigQueryCollectController`로 분리하고 `app.bq.collect-api.enabled=true`일 때만 등록. 로컬에서는 환경 변수 `APP_BQ_COLLECT_API_ENABLED=true`로 기동.
+* **수정 및 생성된 파일:** `GcpMetricsController.java`, `BigQueryCollectController.java`(신규), `frontend/src/components/BigQueryOptimizationPanel.tsx`
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - DTO의 `maxSlotUsage`·`avgSlotUsage`·`slotHealthStatus`와 테이블의 `max_slots` 등 컬럼은 남아 있음(기존 테스트가 참조). 지금 화면에서는 쓰지 않음.
+  - 로컬에서 적재 API를 켜도 쓰는 곳은 운영과 같은 `infra_admin_dataset`.
+* **검증 결과:**
+  - `npx tsc --noEmit -p .` exit 0, `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
+  - 설정 없이 기동 → `POST .../collect` HTTP 404. `APP_BQ_COLLECT_API_ENABLED=true`로 기동 → 없는 프로젝트 ID로 호출 시 HTTP 500 "등록된 GCP 프로젝트가 아님"(등록 확인, 적재 없음).
+  - UI(Puppeteer, JAR 8080, NS Mall / ns-user-data / 2026-09) exit 0: 3번 영역 제목 줄에 제목만 남음, "당월 슬롯 사용량" 문구 없음, 표 6열·5열 각 10행, 콘솔 오류 0건.
+  - 검증 후 로컬 백엔드 중지(사용자 요청: 필요할 때만 실행).
+* **후속 할 일:** ① 고객사에 `roles/bigquery.metadataViewer`(프로젝트 수준) 요청 ② 스토리지 권한을 받은 뒤 스토리지 카드 값 확인
+
+
+---
+
 ### [2026-10-02] [cloud-infra-admin] NS Mall·우진산전 BigQuery 성능 데이터 실측 비교 · TOP 쿼리 적재 누락 수정 · 프로젝트별 로컬 적재 API · 보고서 표 열 정리
 * **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`, BigQuery `mzc-gcp-managed.infra_admin_dataset`
 * **실측 비교 (수정 전):** 고객사 프로젝트에서 쿼리 1~5를 직접 실행한 값과 적재값(월별 최신 스냅샷)을 비교. 대상 11개 프로젝트(NS Mall 10, 우진산전 1), 2026-06~10.

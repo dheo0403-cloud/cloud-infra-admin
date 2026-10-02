@@ -306,23 +306,6 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                             <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#1e293b' }}>
                                 <i className="fas fa-tachometer-alt mr-1" style={{ color: '#059669' }}></i>3. 쿼리 성능 및 병목 현상 분석 (실행 시간 TOP 10 & 슬롯 사용량 TOP 10)
                             </span>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '9.5px', color: '#64748b' }}>
-                                    당월 슬롯 사용량: 최대 <strong>{data.maxSlotUsage || 0}</strong> / 평균 <strong>{data.avgSlotUsage || 0}</strong> Slots
-                                </span>
-                                <span style={{
-                                    fontSize: '9.5px',
-                                    fontWeight: 700,
-                                    color: (data.maxSlotUsage || 0) <= 0 ? '#475569' : ((data.maxSlotUsage || 0) > 800 ? '#b91c1c' : '#15803d'),
-                                    backgroundColor: (data.maxSlotUsage || 0) <= 0 ? '#f1f5f9' : ((data.maxSlotUsage || 0) > 800 ? '#fee2e2' : '#dcfce7'),
-                                    padding: '1px 7px',
-                                    borderRadius: '8px',
-                                    border: (data.maxSlotUsage || 0) <= 0 ? '1px solid #cbd5e1' : ((data.maxSlotUsage || 0) > 800 ? '1px solid #fca5a5' : '1px solid #86efac')
-                                }}>
-                                    <i className={`fas ${(data.maxSlotUsage || 0) <= 0 ? 'fa-minus-circle' : ((data.maxSlotUsage || 0) > 800 ? 'fa-exclamation-triangle' : 'fa-check')} mr-1`}></i>
-                                    {data.slotHealthStatus || ((data.maxSlotUsage || 0) <= 0 ? '정상 (데이터 없음)' : '정상 (여유 슬롯 확보)')}
-                                </span>
-                            </div>
                         </div>
 
                         {/* 실행 시간 TOP 10 / 슬롯 사용량 TOP 10 을 같은 표 형식으로 각각 표시 */}
