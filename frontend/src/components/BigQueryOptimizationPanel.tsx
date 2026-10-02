@@ -52,6 +52,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
         avgSlotUsage: 0.0,
         slotHealthStatus: '정상',
         longDurationQueries: [],
+        highSlotQueries: [],
         lastUpdated: new Date().toLocaleTimeString('ko-KR')
     };
 
@@ -59,7 +60,8 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
         data.currentMonthProcessedTb > 0 ||
         data.currentMonthJobCount > 0 ||
         (data.highCostQueries && data.highCostQueries.length > 0) ||
-        (data.longDurationQueries && data.longDurationQueries.length > 0)
+        (data.longDurationQueries && data.longDurationQueries.length > 0) ||
+        (data.highSlotQueries && data.highSlotQueries.length > 0)
     );
 
     const maxTb = Math.max(...(data.dataProcessedTbTrend || [0]), 1.0);
@@ -298,7 +300,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                             <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#1e293b' }}>
-                                <i className="fas fa-tachometer-alt mr-1" style={{ color: '#059669' }}></i>3. 쿼리 성능 및 병목 현상 분석 (실행 시간 TOP 10 & 슬롯 분석)
+                                <i className="fas fa-tachometer-alt mr-1" style={{ color: '#059669' }}></i>3. 쿼리 성능 및 병목 현상 분석 (실행 시간 TOP 10 & 슬롯 사용량 TOP 10)
                             </span>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <span style={{ fontSize: '9.5px', color: '#64748b' }}>
@@ -319,7 +321,13 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                             </div>
                         </div>
 
-                        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', overflowX: 'auto' }}>
+                        {/* 실행 시간 TOP 10 / 슬롯 사용량 TOP 10 을 같은 표 형식으로 각각 표시 */}
+                        {[
+                            { key: 'duration', title: '실행 시간 TOP 10', rows: data.longDurationQueries, empty: '조회 대상 연월에 기록된 장시간 소요 쿼리 내역이 없습니다.' },
+                            { key: 'slot', title: '슬롯 사용량 TOP 10', rows: data.highSlotQueries, empty: '조회 대상 연월에 기록된 슬롯 사용량 상위 쿼리 내역이 없습니다.' }
+                        ].map(section => (
+                        <div key={section.key} className="bq-perf-table" style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', overflowX: 'auto', marginBottom: section.key === 'duration' ? '8px' : 0 }}>
+                            <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#334155', marginBottom: '4px' }}>{section.title}</div>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px', textAlign: 'left' }}>
                                 <thead>
                                     <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
@@ -333,8 +341,8 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {data.longDurationQueries && data.longDurationQueries.length > 0 ? (
-                                        data.longDurationQueries.map((item, idx) => (
+                                    {section.rows && section.rows.length > 0 ? (
+                                        section.rows.map((item, idx) => (
                                             <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                                 <td style={{ padding: '5px 6px', textAlign: 'center', fontWeight: 800, color: idx < 3 ? '#ea580c' : '#64748b' }}>
                                                     {item.rank}
@@ -363,13 +371,14 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                     ) : (
                                         <tr>
                                             <td colSpan={7} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
-                                                조회 대상 연월에 기록된 장시간 소요 쿼리 내역이 없습니다.
+                                                {section.empty}
                                             </td>
                                         </tr>
                                     )}
                                 </tbody>
                             </table>
                         </div>
+                        ))}
                     </div>
                 </div>
             </div>

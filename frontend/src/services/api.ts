@@ -236,6 +236,7 @@ export interface BigQueryOptimizationDto {
     avgSlotUsage: number;
     slotHealthStatus: string;
     longDurationQueries: BigQueryJobItemDto[];
+    highSlotQueries: BigQueryJobItemDto[];
     lastUpdated: string;
 }
 

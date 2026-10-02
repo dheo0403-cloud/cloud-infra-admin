@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-10-02] [cloud-infra-admin] 보고서 3번 표(쿼리 성능 및 병목) 20건 표시 원인 확인 및 실행 시간·슬롯 TOP 10 분리
+* **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`
+* **원인 (로컬 실측):** 배포 문제가 아니라 코드 문제. `getBigQueryOptimizationMetrics`가 `LONG_DURATION`과 `HIGH_SLOT`을 모두 `longDurationQueries`에 넣음(커밋 `97f1b4a`에서 생겼고 이미 origin/main에 있음). NS Mall / ns-user-data / 2026-09 응답: longDurationQueries 20건(1~10 HIGH_SLOT, 11~20 LONG_DURATION, 같은 Job 6개 중복).
+* **작업 내용:**
+  1. DTO에 `highSlotQueries` 추가. 실행 시간 TOP 10과 슬롯 사용량 TOP 10을 각각 다른 목록으로 반환.
+  2. 쿼리 4(실행 시간 TOP)에 `job_average_slots`, `total_bytes_processed` 컬럼 추가(쿼리 5와 같은 식). 다음 수집부터 평균 슬롯·스캔량이 채워짐.
+  3. 보고서 3번 영역에 "실행 시간 TOP 10"과 "슬롯 사용량 TOP 10" 표 2개를 같은 형식으로 표시.
+* **수정 및 생성된 파일:** `BigQueryOptimizationDto.java`, `BigQueryOptimizationService.java`, `frontend/src/components/BigQueryOptimizationPanel.tsx`, `frontend/src/services/api.ts` (**커밋하지 않음**: 사용자가 수정 내용을 확인한 뒤 결정하기로 함)
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - 이미 적재된 LONG_DURATION 행은 평균 슬롯·스캔량이 0으로 남음. 화면에 0 Slots / 0.0 GB로 보이며, 일배치나 백필로 다시 수집해야 채워짐.
+  - 쿼리 4는 사용자가 공유한 원본 쿼리라, 컬럼을 추가한 것을 공유받은 원본과 대조해 두어야 함.
+  - 커밋하지 않은 다른 창의 테스트 2개(`BigQueryOptimizationReloadTest.java` 수정, `BigQueryMissingCheckTest.java` 신규)는 이번 작업과 무관하므로 그대로 둠.
+* **검증 결과:**
+  - 수정 전: `deploy.ps1 -Rebuild` → BUILD SUCCESSFUL, 헬스체크 통과. API `GET /api/metrics/gcp/bigquery-optimization?projectId=ns-user-data&targetYearMonth=2026-09` → HTTP 200, high 10 / long 20.
+  - 수정 후: `npx tsc --noEmit -p .` → exit 0. 다시 빌드 → BUILD SUCCESSFUL. 같은 API → high 10 / long 10 / slot 10, 각 rank 1~10.
+  - UI (Puppeteer, localhost:8080/gcp-report, NS Mall / ns-user-data / 2026-09 보고서 생성): 표 2개, 각 10행, 폭 986px로 같음, 세로 겹침 없음(첫 표 bottom 5922 ≤ 둘째 표 top 5930), 콘솔 오류 0건 → exit 0. 실행 시간 TOP 1의 평균 슬롯은 0(기존 적재분), 슬롯 TOP 1은 432 Slots.
+  - 단위 테스트(`BigQueryOptimizationBatchTest` 등): 미실행. 실제 BigQuery를 사용하고 DB를 바꾸는 테스트가 섞여 있기 때문.
+* **후속 할 일:** ① 커밋·푸시 여부 결정 ② ns-user-data 등 LONG_DURATION 재수집(DB 변경, 승인 필요) ③ 로컬 백엔드(8080)는 계속 실행 중. 02시 일배치 cron이 로컬에서도 돌기 때문에 확인 후 중지 권장(`deploy.ps1 -Stop`)
+
+
+---
+
 ### [2026-10-02 17:00] [GCP IAM 권한 재부여 후 2026-09월 고객사 BigQuery INFORMATION_SCHEMA 실시간 원천 쿼리 재실측 및 종합 대조 리포트 생성]
 * **대상 프로젝트:** cloud-infra-admin 백엔드 (Spring Boot + BigQuery + JUnit5)
 * **작업 목적 및 내용:**

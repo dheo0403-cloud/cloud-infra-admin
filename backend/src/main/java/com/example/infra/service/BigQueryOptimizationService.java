@@ -124,6 +124,8 @@ public class BigQueryOptimizationService {
         "  TIMESTAMP_DIFF(end_time, start_time, MILLISECOND) AS execution_time_ms,\n" +
         "  FORMAT_TIMESTAMP('%%H시 %%M분 %%S초', TIMESTAMP_MILLIS(TIMESTAMP_DIFF(end_time, start_time, MILLISECOND))) AS execution_time_formatted,\n" +
         "  total_slot_ms,\n" +
+        "  ROUND(SAFE_DIVIDE(total_slot_ms, TIMESTAMP_DIFF(end_time, start_time, MILLISECOND)), 2) AS job_average_slots,\n" +
+        "  total_bytes_processed,\n" +
         "  error_result.reason AS error_reason,\n" +
         "  error_result.message AS error_message\n" +
         "FROM `%s.region-%s.INFORMATION_SCHEMA.JOBS`\n" +
@@ -651,6 +653,7 @@ public class BigQueryOptimizationService {
         dto.setJobCountTrend(new ArrayList<>(Collections.nCopies(4, (Long) null)));
         dto.setHighCostQueries(new ArrayList<>());
         dto.setLongDurationQueries(new ArrayList<>());
+        dto.setHighSlotQueries(new ArrayList<>());
         dto.setSlotHealthStatus("정상");
         dto.setLastUpdated(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
 
@@ -723,8 +726,10 @@ public class BigQueryOptimizationService {
                 String cat = isPresent(row, "query_category") ? row.get("query_category").getStringValue() : "";
                 if ("HIGH_COST".equalsIgnoreCase(cat)) {
                     dto.getHighCostQueries().add(item);
-                } else if ("LONG_DURATION".equalsIgnoreCase(cat) || "HIGH_SLOT".equalsIgnoreCase(cat)) {
+                } else if ("LONG_DURATION".equalsIgnoreCase(cat)) {
                     dto.getLongDurationQueries().add(item);
+                } else if ("HIGH_SLOT".equalsIgnoreCase(cat)) {
+                    dto.getHighSlotQueries().add(item);
                 }
             }
         } catch (Exception e) {

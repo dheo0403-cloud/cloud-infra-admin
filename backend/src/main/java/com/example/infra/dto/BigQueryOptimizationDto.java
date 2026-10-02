@@ -40,7 +40,8 @@ public class BigQueryOptimizationDto {
     private double minSlotUsage;                        // 당월 최소 슬롯 사용량
     private double avgSlotUsage;                        // 당월 평균 슬롯 사용량
     private String slotHealthStatus;                    // 슬롯 상태 (정상 / 주의 / 병목감지)
-    private List<BigQueryJobItemDto> longDurationQueries;
+    private List<BigQueryJobItemDto> longDurationQueries;   // 실행 시간 TOP 10
+    private List<BigQueryJobItemDto> highSlotQueries;       // 슬롯 사용량 TOP 10
 
     private String lastUpdated;
 
