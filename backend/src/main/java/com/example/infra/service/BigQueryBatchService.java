@@ -1844,6 +1844,13 @@ public class BigQueryBatchService {
         cleanPastMonthlyReservationSnapshots(snapshotDate);
         cleanPastMonthlyRecommenderSnapshots(snapshotDate);
 
+        // BigQuery 최적화 분석 과거 월(Past Months) 중간 스냅샷 삭제 (마지막 날 데이터만 보존)
+        try {
+            bigQueryOptimizationService.cleanUpPreviousMonthIntermediateSnapshots();
+        } catch (Exception e) {
+            log.error("Failed to clean up past monthly snapshots for BigQuery optimization service", e);
+        }
+
         // AI 데이터는 파티션 만료(180일) 및 월별 요약 테이블 롤업으로 무결성 보존
         rollupAllMonthlyAiSummaries();
         log.info("=== 🏁 Completed Unified Past Monthly Snapshots Cleanup for All BigQuery Tables ===");

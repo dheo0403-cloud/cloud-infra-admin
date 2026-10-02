@@ -33,7 +33,7 @@ public class BigQueryOptimizationBatchTest {
         String snapshotDate = "2026-09-21";
         String targetYm = "2026-09";
 
-        bigQueryOptimizationService.recreateTablesForCleanDml();
+        // bigQueryOptimizationService.recreateTablesForCleanDml();
 
         System.out.println("\n[1단계] BigQuery 성능 수집 배치 1회차 실행...");
         bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapshotDate, testProjectId, testCustomerName, null);
