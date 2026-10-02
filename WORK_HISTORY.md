@@ -4,6 +4,16 @@
 
 ---
 
+### [2026-10-03] [cloud-infra-admin] 권한 없는 9개 프로젝트의 가짜 TOP·0 요약 데이터 삭제
+* **대상:** BigQuery `infra_admin_dataset`. 프로젝트 ssycne, skspecialty, hcompanycsg, skshipping, hcompany-485701(한앤컴퍼니), prd-dfd, prd-pasta, secu-390423(카카오헬스케어), infra-platform(밸로프)
+* **작업 내용 (사용자 승인):** 2026-06~10월 `monthly_bq_resource_summary` 45행(job 0)과 `monthly_bq_top_queries` 720행(커밋 `59f6f82`의 가짜 데이터 생성 로직이 적재한 행) 삭제.
+* **검증 결과:** 임시 `TmpOtherCustomersTest.delete` exit 0 → summary before=45 deleted=45 after=0, top before=720 deleted=720 after=0. 이어서 전체 월 기준 `scope` exit 0 → 남은 행 없음. 임시 테스트 삭제.
+* **🔍 리뷰:** 이 고객사들은 보고서 BigQuery 영역이 "데이터 없음"이 되고 PDF에서는 숨겨짐. 일배치는 계속 수집을 시도하지만 권한이 없으면 아무것도 적재하지 않음(요약은 쿼리 1 실패 시 미적재, TOP은 전 리전 실패 시 유지할 기존 행이 없음).
+* **후속 할 일:** 고객사가 메타데이터 뷰어·Job 조회 권한을 주면 `APP_BQ_COLLECT_API_ENABLED=true`로 로컬 기동 후 `/bigquery-optimization/collect`로 프로젝트별 재적재.
+
+
+---
+
 ### [2026-10-03] [cloud-infra-admin] 권한 없는 고객사 BigQuery 데이터 출처 분석 · 신규 테이블 용량 그래프를 논리/물리 2막대로 변경
 * **대상 프로젝트:** `cloud-infra-admin/frontend`, BigQuery `infra_admin_dataset`(조회만)
 * **분석 결과 (조회 전용 실측, NS Mall·우진산전 제외 9개 프로젝트):**
