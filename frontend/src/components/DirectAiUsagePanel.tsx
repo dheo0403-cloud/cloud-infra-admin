@@ -73,15 +73,15 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
         lastUpdated: new Date().toLocaleTimeString('ko-KR')
     };
 
-    // 토큰 합산 계산 (M 단위)
-    const totalTokensM = (Number(data.totalTokens || 0) / 1000000).toFixed(2);
-    const maxTokenValue = Math.max(...(data.inputTokensTrend || [0]), ...(data.outputTokensTrend || [0]), 1000000);
+    // 토큰/건수 축약 표기 (1.2M, 3.4K)
+    const fmt = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : `${n}`;
+    const maxTokenValue = Math.max(...(data.inputTokensTrend || [0]), ...(data.outputTokensTrend || [0]), 1);
+    const models = data.models || [];
+    const MAX_MODEL_ROWS = 6;
 
-    const isDirectAiEmpty = !hasData || (Number(data.totalTokens || 0) === 0 && Number(data.totalPretrainedApiCalls || 0) === 0 && Number(data.trainingNodeHours || 0) === 0);
+    const isDirectAiEmpty = !hasData || (Number(data.totalTokens || 0) === 0 && Number(data.totalPretrainedApiCalls || 0) === 0 && Number(data.totalInvocations || 0) === 0);
 
-    const displayDates: string[] = (data.dates && data.dates.length > 0)
-        ? data.dates
-        : ['26.06', '26.07', '26.08', '26.09'];
+    const displayDates: string[] = data.dates || [];
 
     return (
         <div className={`direct-ai-section ${isDirectAiEmpty ? "print-hide-empty" : ""}`} style={{ marginBottom: 0 }}>
@@ -90,7 +90,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ display: 'flex', alignItems: 'center' }}>
                         <i className="fas fa-brain mr-2" style={{ color: '#2563eb' }}></i>
-                        Direct AI Usage (AI 서비스 직접 사용)
+                        AI API 사용 (Vertex AI 모델 호출)
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {isEditMode && onHideSection && (
@@ -114,7 +114,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                 borderRadius: '12px',
                                 border: '1px solid #a7f3d0'
                             }}>
-                                <i className="fas fa-check-circle mr-1"></i>Direct AI 서비스 활성
+                                <i className="fas fa-check-circle mr-1"></i>API 호출형 사용 중
                             </span>
                         ) : (
                             <span style={{
@@ -126,7 +126,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                 borderRadius: '4px',
                                 border: '1px solid #e2e8f0'
                             }}>
-                                Direct AI 미사용
+                                AI API 미사용
                             </span>
                         )}
                     </div>
@@ -137,25 +137,25 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                     <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 누적 토큰</span>
                         <strong style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'Pretendard, sans-serif' }}>
-                            {totalTokensM}M <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Tokens</span>
+                            {fmt(Number(data.totalTokens || 0))} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Tokens</span>
+                        </strong>
+                    </div>
+                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>모델 호출</span>
+                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#2563eb', fontFamily: 'Pretendard, sans-serif' }}>
+                            {Number(data.totalInvocations || 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Calls</span>
+                        </strong>
+                    </div>
+                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>사용 모델</span>
+                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#7c3aed', fontFamily: 'Pretendard, sans-serif' }}>
+                            {models.length} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Models</span>
                         </strong>
                     </div>
                     <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Pre-trained API 호출</span>
-                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#2563eb', fontFamily: 'Pretendard, sans-serif' }}>
-                            {(data.totalPretrainedApiCalls || 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Calls</span>
-                        </strong>
-                    </div>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>학습 & 파이프라인</span>
                         <strong style={{ fontSize: '14px', fontWeight: 800, color: '#059669', fontFamily: 'Pretendard, sans-serif' }}>
-                            {Number(data.trainingNodeHours || 0).toFixed(1)}h <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>({data.pipelineRunsCount || 0} Runs)</span>
-                        </strong>
-                    </div>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 예상 비용</span>
-                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#d97706', fontFamily: 'Pretendard, sans-serif' }}>
-                            ${(data.totalEstimatedMonthlyCost || 0).toFixed(2)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>/ 월</span>
+                            {(data.totalPretrainedApiCalls || 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Calls</span>
                         </strong>
                     </div>
                 </div>
@@ -190,7 +190,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                             }}>
                                                 {inTok > 0 && (
                                                     <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: '#1e3a8a', whiteSpace: 'nowrap' }}>
-                                                        {(inTok / 1000000).toFixed(1)}M
+                                                        {fmt(inTok)}
                                                     </span>
                                                 )}
                                             </div>
@@ -203,7 +203,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                             }}>
                                                 {outTok > 0 && (
                                                     <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
-                                                        {(outTok / 1000000).toFixed(1)}M
+                                                        {fmt(outTok)}
                                                     </span>
                                                 )}
                                             </div>
@@ -224,48 +224,48 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                         </div>
                     </div>
 
-                    {/* Right: AI Workload Breakdown & Quota */}
-                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                        {/* 1. Model Ratio Breakdown */}
-                        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '8px' }}>
-                                <i className="fas fa-layer-group mr-1" style={{ color: '#8b5cf6' }}></i>AI 모델별 호출 비중
+                    {/* Right: 모델별 호출 현황 & Pre-trained API */}
+                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {/* 1. 모델별 호출 (실측, 호출 수 내림차순) */}
+                        <div className="ai-model-usage" style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                                <i className="fas fa-layer-group mr-1" style={{ color: '#8b5cf6' }}></i>모델별 호출 현황
                             </span>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#475569', marginBottom: '2px' }}>
-                                        <span>Gemini Flash</span>
-                                        <strong style={{ color: '#3b82f6' }}>{Number(data.geminiFlashRatio || 0).toFixed(1)}%</strong>
-                                    </div>
-                                    <div style={{ width: '100%', height: '5px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                        <div style={{ width: `${Number(data.geminiFlashRatio || 0)}%`, height: '100%', backgroundColor: '#3b82f6' }}></div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#475569', marginBottom: '2px' }}>
-                                        <span>Gemini Pro</span>
-                                        <strong style={{ color: '#8b5cf6' }}>{Number(data.geminiProRatio || 0).toFixed(1)}%</strong>
-                                    </div>
-                                    <div style={{ width: '100%', height: '5px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                        <div style={{ width: `${Number(data.geminiProRatio || 0)}%`, height: '100%', backgroundColor: '#8b5cf6' }}></div>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#475569', marginBottom: '2px' }}>
-                                        <span>Claude / Custom</span>
-                                        <strong style={{ color: '#d97706' }}>{(Number(data.claudeRatio || 0) + Number(data.customModelRatio || 0)).toFixed(1)}%</strong>
-                                    </div>
-                                    <div style={{ width: '100%', height: '5px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                        <div style={{ width: `${Number(data.claudeRatio || 0) + Number(data.customModelRatio || 0)}%`, height: '100%', backgroundColor: '#d97706' }}></div>
-                                    </div>
-                                </div>
-                            </div>
+                            {models.length > 0 ? (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
+                                    <thead>
+                                        <tr style={{ color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                                            <th style={{ textAlign: 'left', padding: '3px 4px', fontWeight: 700 }}>모델</th>
+                                            <th style={{ textAlign: 'right', padding: '3px 4px', fontWeight: 700 }}>호출</th>
+                                            <th style={{ textAlign: 'right', padding: '3px 4px', fontWeight: 700 }}>Input</th>
+                                            <th style={{ textAlign: 'right', padding: '3px 4px', fontWeight: 700 }}>Output</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {models.slice(0, MAX_MODEL_ROWS).map(m => (
+                                            <tr key={`${m.publisher}/${m.model}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '3px 4px', color: '#0f172a', fontWeight: 600 }}>
+                                                    {m.model || '(알 수 없음)'} <span style={{ color: '#94a3b8', fontWeight: 400 }}>{m.publisher}</span>
+                                                </td>
+                                                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{Number(m.invocations || 0).toLocaleString()}</td>
+                                                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#334155' }}>{fmt(Number(m.inputTokens || 0))}</td>
+                                                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#334155' }}>{fmt(Number(m.outputTokens || 0))}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div style={{ fontSize: '10px', color: '#94a3b8', padding: '6px 0' }}>기준월 모델 호출 기록이 없습니다.</div>
+                            )}
+                            {models.length > MAX_MODEL_ROWS && (
+                                <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '4px' }}>외 {models.length - MAX_MODEL_ROWS}개 모델</div>
+                            )}
                         </div>
 
-                        {/* 2. Pretrained APIs & Workload Resources Grid */}
+                        {/* 2. Pretrained APIs */}
                         <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-                                <i className="fas fa-microchip mr-1" style={{ color: '#059669' }}></i>Pre-trained & 워크로드 리소스
+                                <i className="fas fa-microchip mr-1" style={{ color: '#059669' }}></i>Pre-trained API 호출
                             </span>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '10px' }}>
                                 <div style={{ backgroundColor: '#f8fafc', padding: '5px 8px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
@@ -278,7 +278,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                     <span style={{ color: '#64748b' }}>Translation:</span> <strong style={{ color: '#0f172a' }}>{(data.translationApiCalls || 0).toLocaleString()}건</strong>
                                 </div>
                                 <div style={{ backgroundColor: '#f8fafc', padding: '5px 8px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
-                                    <span style={{ color: '#64748b' }}>Workbench:</span> <strong style={{ color: '#0f172a' }}>{data.activeWorkbenchCount || 0}대 ({Number(data.workbenchUptimeHours || 0).toFixed(0)}h)</strong>
+                                    <span style={{ color: '#64748b' }}>Natural Language:</span> <strong style={{ color: '#0f172a' }}>{(data.nlpApiCalls || 0).toLocaleString()}건</strong>
                                 </div>
                             </div>
                         </div>

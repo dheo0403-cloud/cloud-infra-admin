@@ -41,6 +41,7 @@ public class GcpVertexAiMetricsService {
     private static final String ENDPOINT_SERVING_TABLE = "daily_endpoint_serving_metrics";
     private static final String MONTHLY_DIRECT_AI_SUMMARY_TABLE = "monthly_direct_ai_summary";
     private static final String MONTHLY_ENDPOINT_SERVING_SUMMARY_TABLE = "monthly_endpoint_serving_summary";
+    private static final String MODEL_USAGE_TABLE = "daily_ai_model_usage";
 
     /**
      * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회 (기본 4개월 추이)
@@ -185,56 +186,33 @@ public class GcpVertexAiMetricsService {
                 }
             }
 
-            // 2. 기준월 최신 스냅샷 상세 쿼리 (모델 비중, Quota, 리소스, 비용)
-            String latestSql = String.format(
-                "SELECT * FROM (" +
-                "  SELECT *, ROW_NUMBER() OVER(PARTITION BY project_id ORDER BY snapshot_date DESC, created_at DESC) AS rn " +
-                "  FROM `%s.%s.%s` " +
-                "  WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) = '%s' " +
-                ") WHERE rn = 1",
-                hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, effectiveYearMonth
-            );
-
-            TableResult latestRes = bigQuery.query(QueryJobConfiguration.newBuilder(latestSql).build());
-            int currentRpm = 45;
-            int maxRpmQuota = 1000;
-            double rpmUsagePercent = 4.5;
-            long currentTpd = targetMonthInTok + targetMonthOutTok;
-            long maxTpdQuota = 4500000L;
-            double tpdUsagePercent = Math.round(((double) currentTpd / maxTpdQuota * 100.0) * 10.0) / 10.0;
-            boolean quotaAlert = false;
-            double trainingHours = 4.0;
-            int pipelineRuns = 2;
-            double workbenchUptime = 12.0;
-            int activeWorkbench = 1;
-            double flashRatio = 65.0;
-            double proRatio = 25.0;
-            double claudeRatio = 10.0;
-            double customRatio = 0.0;
-            double estimatedApiCost = Math.round(((targetMonthInTok * 0.0000005) + (targetMonthOutTok * 0.0000015) + (targetMonthPre * 0.0015)) * 100.0) / 10.0;
-            double estimatedTrainingCost = Math.round((trainingHours * 0.45 + pipelineRuns * 0.15 + workbenchUptime * 0.08) * 100.0) / 100.0;
-            double totalDailyCost = Math.round((estimatedApiCost + estimatedTrainingCost) * 100.0) / 100.0;
-            double totalMonthlyCost = Math.round(totalDailyCost * 30.0 * 100.0) / 100.0;
-
-            for (FieldValueList latest : latestRes.iterateAll()) {
-                currentRpm = latest.get("current_rpm").isNull() ? currentRpm : (int) latest.get("current_rpm").getLongValue();
-                maxRpmQuota = latest.get("max_rpm_quota").isNull() ? maxRpmQuota : (int) latest.get("max_rpm_quota").getLongValue();
-                rpmUsagePercent = maxRpmQuota > 0 ? Math.round(((double) currentRpm / maxRpmQuota * 100.0) * 10.0) / 10.0 : 0.0;
-                trainingHours = latest.get("training_node_hours").isNull() ? trainingHours : latest.get("training_node_hours").getDoubleValue();
-                pipelineRuns = latest.get("pipeline_runs_count").isNull() ? pipelineRuns : (int) latest.get("pipeline_runs_count").getLongValue();
-                workbenchUptime = latest.get("workbench_uptime_hours").isNull() ? workbenchUptime : latest.get("workbench_uptime_hours").getDoubleValue();
-                activeWorkbench = latest.get("active_workbench_count").isNull() ? activeWorkbench : (int) latest.get("active_workbench_count").getLongValue();
-                flashRatio = latest.get("gemini_flash_ratio").isNull() ? flashRatio : latest.get("gemini_flash_ratio").getDoubleValue();
-                proRatio = latest.get("gemini_pro_ratio").isNull() ? proRatio : latest.get("gemini_pro_ratio").getDoubleValue();
-                claudeRatio = latest.get("claude_ratio").isNull() ? claudeRatio : latest.get("claude_ratio").getDoubleValue();
-                customRatio = latest.get("custom_model_ratio").isNull() ? customRatio : latest.get("custom_model_ratio").getDoubleValue();
-                estimatedApiCost = latest.get("estimated_api_cost").isNull() ? estimatedApiCost : latest.get("estimated_api_cost").getDoubleValue();
-                estimatedTrainingCost = latest.get("estimated_training_cost").isNull() ? estimatedTrainingCost : latest.get("estimated_training_cost").getDoubleValue();
-                totalDailyCost = latest.get("total_estimated_daily_cost").isNull() ? totalDailyCost : latest.get("total_estimated_daily_cost").getDoubleValue();
-                totalMonthlyCost = Math.round(totalDailyCost * 30.0 * 100.0) / 100.0;
-                quotaAlert = rpmUsagePercent >= 80.0 || tpdUsagePercent >= 80.0;
+            // 2. 기준월 모델별 호출·토큰 합계 (daily_ai_model_usage). 테이블이 아직 없으면 빈 목록
+            List<DirectAiMetricsDto.ModelUsageDto> models = new ArrayList<>();
+            long totalInvocations = 0L;
+            try {
+                String modelSql = String.format(
+                    "SELECT publisher, model, SUM(invocations) AS inv, SUM(input_tokens) AS in_tok, SUM(output_tokens) AS out_tok " +
+                    "FROM `%s.%s.%s` " +
+                    "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) = '%s' " +
+                    "GROUP BY publisher, model ORDER BY inv DESC, model ASC",
+                    hostProjectId, datasetName, MODEL_USAGE_TABLE, effectiveProjectId, effectiveYearMonth
+                );
+                for (FieldValueList row : bigQuery.query(QueryJobConfiguration.newBuilder(modelSql).build()).iterateAll()) {
+                    long inv = row.get("inv").isNull() ? 0L : row.get("inv").getLongValue();
+                    totalInvocations += inv;
+                    models.add(DirectAiMetricsDto.ModelUsageDto.builder()
+                            .publisher(row.get("publisher").isNull() ? "" : row.get("publisher").getStringValue())
+                            .model(row.get("model").isNull() ? "" : row.get("model").getStringValue())
+                            .invocations(inv)
+                            .inputTokens(row.get("in_tok").isNull() ? 0L : row.get("in_tok").getLongValue())
+                            .outputTokens(row.get("out_tok").isNull() ? 0L : row.get("out_tok").getLongValue())
+                            .build());
+                }
+            } catch (Exception ex) {
+                log.debug("Model usage query skipped: {}", ex.getMessage());
             }
 
+            // 학습/Workbench/Quota/비용은 수집 근거가 없어 0으로 반환 (화면에서 표시하지 않음)
             return DirectAiMetricsDto.builder()
                     .projectId(effectiveProjectId)
                     .customerName(customerName)
@@ -250,25 +228,27 @@ public class GcpVertexAiMetricsService {
                     .speechApiCalls(targetMonthSpeech)
                     .translationApiCalls(targetMonthTrans)
                     .nlpApiCalls(targetMonthNlp)
-                    .trainingNodeHours(trainingHours)
-                    .pipelineRunsCount(pipelineRuns)
-                    .workbenchUptimeHours(workbenchUptime)
-                    .activeWorkbenchCount(activeWorkbench)
-                    .currentRpm(currentRpm)
-                    .maxRpmQuota(maxRpmQuota)
-                    .rpmQuotaUsagePercent(rpmUsagePercent)
-                    .currentTpd(currentTpd)
-                    .maxTpdQuota(maxTpdQuota)
-                    .tpdQuotaUsagePercent(tpdUsagePercent)
-                    .quotaAlert(quotaAlert)
-                    .geminiFlashRatio(flashRatio)
-                    .geminiProRatio(proRatio)
-                    .claudeRatio(claudeRatio)
-                    .customModelRatio(customRatio)
-                    .estimatedApiCost(estimatedApiCost)
-                    .estimatedTrainingCost(estimatedTrainingCost)
-                    .totalEstimatedDailyCost(totalDailyCost)
-                    .totalEstimatedMonthlyCost(totalMonthlyCost)
+                    .trainingNodeHours(0.0)
+                    .pipelineRunsCount(0)
+                    .workbenchUptimeHours(0.0)
+                    .activeWorkbenchCount(0)
+                    .currentRpm(0)
+                    .maxRpmQuota(0)
+                    .rpmQuotaUsagePercent(0.0)
+                    .currentTpd(0L)
+                    .maxTpdQuota(0L)
+                    .tpdQuotaUsagePercent(0.0)
+                    .quotaAlert(false)
+                    .geminiFlashRatio(0.0)
+                    .geminiProRatio(0.0)
+                    .claudeRatio(0.0)
+                    .customModelRatio(0.0)
+                    .estimatedApiCost(0.0)
+                    .estimatedTrainingCost(0.0)
+                    .totalEstimatedDailyCost(0.0)
+                    .totalEstimatedMonthlyCost(0.0)
+                    .totalInvocations(totalInvocations)
+                    .models(models)
                     .lastUpdated(LocalDateTime.now().format(timeFormatter))
                     .build();
 
@@ -299,10 +279,10 @@ public class GcpVertexAiMetricsService {
                 .workbenchUptimeHours(0.0)
                 .activeWorkbenchCount(0)
                 .currentRpm(0)
-                .maxRpmQuota(1000)
+                .maxRpmQuota(0)
                 .rpmQuotaUsagePercent(0.0)
                 .currentTpd(0L)
-                .maxTpdQuota(4500000L)
+                .maxTpdQuota(0L)
                 .tpdQuotaUsagePercent(0.0)
                 .quotaAlert(false)
                 .geminiFlashRatio(0.0)
@@ -313,6 +293,8 @@ public class GcpVertexAiMetricsService {
                 .estimatedTrainingCost(0.0)
                 .totalEstimatedDailyCost(0.0)
                 .totalEstimatedMonthlyCost(0.0)
+                .totalInvocations(0L)
+                .models(new ArrayList<>())
                 .lastUpdated(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
                 .build();
     }
@@ -499,7 +481,9 @@ public class GcpVertexAiMetricsService {
                 return createEmptyEndpointServingMetrics(effectiveProjectId);
             }
 
-            int overallAvgLatency = totalRequestsTargetMonth > 0 ? (int) (weightedLatencySum / Math.max(1, endpointItems.size())) : 0;
+            // 요청 수 가중 평균 지연시간 (최신 스냅샷 기준)
+            long latestRequests = endpointItems.stream().mapToLong(e -> e.getTotalRequests() == null ? 0L : e.getTotalRequests()).sum();
+            int overallAvgLatency = latestRequests > 0 ? (int) (weightedLatencySum / latestRequests) : 0;
             double err4xxRate = totalRequestsTargetMonth > 0 ? Math.round(((double) error4xxSum / totalRequestsTargetMonth * 100.0) * 10.0) / 10.0 : 0.0;
             double err5xxRate = totalRequestsTargetMonth > 0 ? Math.round(((double) error5xxSum / totalRequestsTargetMonth * 100.0) * 10.0) / 10.0 : 0.0;
             double successRate = Math.max(0.0, Math.round((100.0 - err4xxRate - err5xxRate) * 10.0) / 10.0);

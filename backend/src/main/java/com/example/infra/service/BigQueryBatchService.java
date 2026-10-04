@@ -2053,6 +2053,52 @@ public class BigQueryBatchService {
         } catch (Exception e) {
             log.error("BigQuery insert failed for daily_direct_ai_metrics in project {}", projectId, e);
         }
+
+        insertDailyAiModelUsage(snapshotDate, projectId, customerName, data.getModelUsages());
+    }
+
+    /**
+     * 모델별(Gemini, Claude 등) 일일 호출·토큰 적재. 당일·프로젝트 기존 행을 지우고 다시 넣는다 (멱등)
+     */
+    private void insertDailyAiModelUsage(String snapshotDate, String projectId, String customerName, List<GcpResourceFetcher.AiModelUsage> usages) {
+        try {
+            bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                "CREATE TABLE IF NOT EXISTS `%s.%s.daily_ai_model_usage` (" +
+                "  snapshot_date DATE, project_id STRING, customer_name STRING, publisher STRING, model STRING," +
+                "  invocations INT64, input_tokens INT64, output_tokens INT64, created_at TIMESTAMP" +
+                ") PARTITION BY snapshot_date", targetProjectId, datasetName)).build());
+            bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                "DELETE FROM `%s.%s.daily_ai_model_usage` WHERE snapshot_date = '%s' AND project_id = '%s'",
+                targetProjectId, datasetName, snapshotDate, projectId)).build());
+        } catch (Exception e) {
+            log.warn("daily_ai_model_usage prepare failed for {} / {}: {}", snapshotDate, projectId, e.getMessage());
+            return;
+        }
+        if (usages == null || usages.isEmpty()) return;
+
+        InsertAllRequest.Builder req = InsertAllRequest.newBuilder(TableId.of(targetProjectId, datasetName, "daily_ai_model_usage"));
+        String createdAt = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
+        for (GcpResourceFetcher.AiModelUsage u : usages) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("snapshot_date", snapshotDate);
+            row.put("project_id", projectId);
+            row.put("customer_name", customerName);
+            row.put("publisher", u.getPublisher());
+            row.put("model", u.getModel());
+            row.put("invocations", u.getInvocations());
+            row.put("input_tokens", u.getInputTokens());
+            row.put("output_tokens", u.getOutputTokens());
+            row.put("created_at", createdAt);
+            req.addRow(row);
+        }
+        try {
+            InsertAllResponse response = bigQuery.insertAll(req.build());
+            if (response.hasErrors()) {
+                log.error("BigQuery insert error for daily_ai_model_usage: {}", response.getInsertErrors());
+            }
+        } catch (Exception e) {
+            log.error("BigQuery insert failed for daily_ai_model_usage in project {}", projectId, e);
+        }
     }
 
     public void collectAndInsertDailyVertexAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {

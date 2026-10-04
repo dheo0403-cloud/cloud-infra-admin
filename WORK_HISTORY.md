@@ -4,6 +4,34 @@
 
 ---
 
+### [2026-10-05] [cloud-infra-admin] AI 보고서: 가짜 값 제거, 실제 사용 형태(API 호출형/배포형)로 재구성
+* **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`
+* **작업 목적:** 보고서의 Direct AI / Endpoint Serving 수치가 실제인지, 고객사 SA에 AI 권한이 있는지, 실제로 AI를 어떻게 쓰는지 확인하고 화면을 바로잡음.
+* **진단 결과 (고객사 SA로 20개 프로젝트 조회 전용 실행, exit 0):**
+  - 20개 프로젝트 모두 SA `mzc-monitoring@mzc-gcp-managed`. `testIamPermissions` 결과 `monitoring.timeSeries.list`, `aiplatform.endpoints.list`, `aiplatform.models.list`, `serviceusage.services.list`, `billing.resourceCosts.get` 모두 보유 → **권한 문제 없음**.
+  - 16개 프로젝트에 AI 메트릭 존재, 4개(wjis-gw-project, secu-390423, ns-pipe-srvc-prod-402505, ns-infr-host-402505)는 AI API 자체가 비활성.
+  - 메트릭이 나온 모든 리전에서 `endpoints.list`가 HTTP 200 빈 목록 → **고객이 직접 배포한 엔드포인트는 없음**. 사용 형태는 전부 Gemini·Claude 관리형 모델 **API 호출형**. 한앤컴퍼니의 숫자 ID 엔드포인트는 Google 관리 Claude 서빙(`claude-opus-4-8-api`)이었음.
+  - 기존 보고서 값의 출처: 07~09월 `monthly_direct_ai_summary`는 전 프로젝트 07=08 동일·09≈5.7배인 가짜 적재 데이터. 모델 비중 65/25/10, 학습 4.0h, Workbench 1대는 조회 서비스 기본값. 비용 $31,009.80은 월 토큰을 일 단위로 보고 ×30, `/10.0` 오타로 10배. 수집기는 활동이 있으면 학습 12.5h·Vision 1,420건 등을 넣었고, 엔드포인트는 g2-standard-8/L4/GPU 48.2%/$0.74 고정값이었음. 토큰 메트릭 이름이 실제와 달라 토큰은 항상 0.
+* **수정 내용:**
+  1. `GcpResourceFetcher`: 토큰·호출을 `publisher/online_serving/token_count`, `model_invocation_count`(모델별)로 수집. 고정값 주입 전부 제거. 조회 실패는 WARN 기록. 엔드포인트는 `endpoints.list`에 있는 것만, 사양은 API 응답에서만 채움.
+  2. `BigQueryBatchService`: 모델별 일일 사용량 테이블 `daily_ai_model_usage` 생성·적재(당일·프로젝트 삭제 후 재적재).
+  3. `GcpVertexAiMetricsService`/`DirectAiMetricsDto`: 기본값·비용 계산 제거, 기준월 모델별 호출(`models`, `totalInvocations`) 반환, 엔드포인트 평균 지연 계산 오류 수정.
+  4. 화면: "AI API 사용 (Vertex AI 모델 호출)" 패널에 모델 호출·사용 모델 수·모델별 표 추가, 학습/비용/비중/Workbench 카드 제거. 엔드포인트 패널에서 비용·GPU/CPU·P95/P99·현재 복제본 제거.
+* **수정 파일:** `GcpResourceFetcher.java`, `BigQueryBatchService.java`, `GcpVertexAiMetricsService.java`, `DirectAiMetricsDto.java`, `DirectAiUsagePanel.tsx`, `EndpointServingPanel.tsx`, `api.ts`
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - 캐시 토큰(`cache_read_input` 등)은 input에 합산하지 않음 → Claude 캐시를 많이 쓰는 고객은 입력 토큰이 실제 과금 기준보다 적게 보일 수 있음.
+  - 엔드포인트 조회 리전은 최근 24시간 트래픽이 있었던 리전만 → 트래픽 없는 배포 엔드포인트는 누락 가능.
+  - `daily_ai_model_usage`는 스트리밍 적재라 같은 날 30분 이내 재실행 시 DELETE가 버퍼 행을 못 지워 중복될 수 있음(기존 테이블과 같은 구조적 한계).
+  - 수집 실패 상태를 테이블에 남기지 않고 로그로만 남김 → 화면에서 "권한 없음"을 구분 표시하지 못함.
+* **검증 결과:**
+  - `npx tsc --noEmit -p .` → exit 0. `gradlew compileJava compileTestJava` → exit 0.
+  - 수정한 수집기를 20개 프로젝트에 조회 전용 실행(임시 테스트, 적재 없음) → exit 0. 예: prd-pasta Gemini 5종 8,941회·입력 1.06억, skspecialty claude-sonnet-5 239회, hcompany-485701 Claude 2종 8회. 엔드포인트 20개 모두 0개. 학습·비용 0.
+  - UI: Vite(3000) + Puppeteer, API 응답은 위 prd-pasta 실측값으로 가로챔. 모델 표 5행, 표 넘침 없음(-24px), 가짜 문구(65.0%, 학습, 예상 비용, Workbench, GPU/CPU) 0건, 콘솔 오류 0건 → exit 0.
+  - 운영 배포·BigQuery 반영: 미실행(사용자 확인 대기).
+* **후속 할 일:** ① 가짜 적재 데이터 삭제(`monthly_direct_ai_summary` 07~09월, `daily_endpoint_serving_metrics`/`monthly_endpoint_serving_summary` 전체, `daily_direct_ai_metrics` 10월 행) ② 커밋·푸시 후 수집 재실행 ③ 9월은 Monitoring 보존 기간(6주) 안이라 실측 백필 가능 ④ 가짜 데이터를 만든 `BigQueryAiDataRecreationAndBackfillTest.java` 정리 ⑤ 수집 상태(권한 없음 등) 저장 여부 결정
+
+---
+
 ### [2026-10-03] [cloud-infra-admin] 정기 점검 권고 사항: 편집으로 내용을 지워도 "N건 권고"가 남던 문제 수정
 * **대상 프로젝트:** `cloud-infra-admin/frontend`
 * **원인:** 권고 카드의 항목·건수를 편집 내용으로 계산하되, 편집 내용이 빈 문자열이면 원래 Recommender 목록으로 되돌아감(`GcpMonthlyReportViewPage.tsx` 권고 섹션). 그래서 내용을 모두 지우면 편집 중에는 "1건 권고"가 남고, 편집 종료 후에는 지운 항목이 다시 보임. AI 요약 생성도 같은 방식이라 지운 내용으로 요약됨.

@@ -62,5 +62,21 @@ public class DirectAiMetricsDto {
     private Double totalEstimatedDailyCost;    // 일일 총 비용 ($)
     private Double totalEstimatedMonthlyCost;  // 월간 환산 예상 비용 ($)
 
+    // 5. 기준월 모델별 호출 (Gemini, Claude 등 Vertex AI 관리형 모델 API 호출)
+    private Long totalInvocations;
+    private List<ModelUsageDto> models;
+
     private String lastUpdated;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ModelUsageDto {
+        private String publisher;
+        private String model;
+        private Long invocations;
+        private Long inputTokens;
+        private Long outputTokens;
+    }
 }

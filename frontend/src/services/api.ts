@@ -138,7 +138,18 @@ export interface DirectAiMetricsDto {
     estimatedTrainingCost: number;
     totalEstimatedDailyCost: number;
     totalEstimatedMonthlyCost: number;
+    // 기준월 모델별 호출 (Vertex AI 관리형 모델 API 호출)
+    totalInvocations?: number;
+    models?: AiModelUsageDto[];
     lastUpdated: string;
+}
+
+export interface AiModelUsageDto {
+    publisher: string;
+    model: string;
+    invocations: number;
+    inputTokens: number;
+    outputTokens: number;
 }
 
 export const getDirectAiMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>

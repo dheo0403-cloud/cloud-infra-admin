@@ -128,9 +128,9 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({
                                 </strong>
                             </div>
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>지연시간 (Avg / P95 / P99)</span>
+                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>평균 지연시간</span>
                                 <strong style={{ fontSize: '14px', fontWeight: 800, color: '#059669', fontFamily: 'Pretendard, sans-serif' }}>
-                                    {data.avgLatencyMs || 0}ms <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>({data.p95LatencyMs || 0} / {data.p99LatencyMs || 0}ms)</span>
+                                    {data.avgLatencyMs || 0}ms
                                 </strong>
                             </div>
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
@@ -140,9 +140,9 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({
                                 </strong>
                             </div>
                             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 예상 서빙 비용</span>
+                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>배포 엔드포인트</span>
                                 <strong style={{ fontSize: '14px', fontWeight: 800, color: '#d97706', fontFamily: 'Pretendard, sans-serif' }}>
-                                    ${(data.totalEstimatedMonthlyCost || 0).toFixed(1)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>(${data.totalEstimatedHourlyCost || 0}/h)</span>
+                                    {data.totalEndpoints || 0}개 <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>(모델 배포 {data.activeEndpoints}개)</span>
                                 </strong>
                             </div>
                         </div>
@@ -160,11 +160,9 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({
                                             <th style={{ padding: '6px 8px', fontWeight: 700 }}>엔드포인트 명칭 / ID</th>
                                             <th style={{ padding: '6px 8px', fontWeight: 700 }}>배포 모델</th>
                                             <th style={{ padding: '6px 8px', fontWeight: 700 }}>머신타입 & GPU</th>
-                                            <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'center' }}>복제본 (Min-Max-Act)</th>
+                                            <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'center' }}>복제본 (Min-Max)</th>
                                             <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>요청수 (QPS)</th>
-                                            <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>Avg / P95 / P99</th>
-                                            <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'center' }}>GPU/CPU 부하</th>
-                                            <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>시간당 비용</th>
+                                            <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'right' }}>평균 지연</th>
                                             <th style={{ padding: '6px 8px', fontWeight: 700, textAlign: 'center' }}>상태</th>
                                         </tr>
                                     </thead>
@@ -177,11 +175,13 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({
                                                 </td>
                                                 <td style={{ padding: '6px 8px', color: '#334155' }}>{ep.deployedModelName}</td>
                                                 <td style={{ padding: '6px 8px', color: '#475569' }}>
-                                                    <span style={{ backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>{ep.machineType}</span>
-                                                    <span style={{ display: 'block', fontSize: '8px', color: '#8b5cf6', fontWeight: 700 }}>{ep.acceleratorType} × {ep.acceleratorCount}</span>
+                                                    <span style={{ backgroundColor: '#f1f5f9', padding: '1px 4px', borderRadius: '3px', fontWeight: 600 }}>{ep.machineType || '-'}</span>
+                                                    {ep.acceleratorType && (
+                                                        <span style={{ display: 'block', fontSize: '8px', color: '#8b5cf6', fontWeight: 700 }}>{ep.acceleratorType} × {ep.acceleratorCount}</span>
+                                                    )}
                                                 </td>
                                                 <td style={{ padding: '6px 8px', textAlign: 'center', color: '#334155' }}>
-                                                    {ep.minReplicas} ~ {ep.maxReplicas} (<strong>{ep.currentReplicas}</strong>)
+                                                    {ep.minReplicas} ~ {ep.maxReplicas}
                                                 </td>
                                                 <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>
                                                     {(ep.totalRequests || 0).toLocaleString()}
@@ -189,14 +189,6 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({
                                                 </td>
                                                 <td style={{ padding: '6px 8px', textAlign: 'right', color: '#059669', fontWeight: 600 }}>
                                                     {ep.avgLatencyMs}ms
-                                                    <span style={{ display: 'block', fontSize: '8px', color: '#64748b' }}>{ep.p95LatencyMs} / {ep.p99LatencyMs}ms</span>
-                                                </td>
-                                                <td style={{ padding: '6px 8px', textAlign: 'center' }}>
-                                                    <span style={{ color: '#8b5cf6', fontWeight: 700 }}>GPU {Number(ep.gpuUtilizationPercent || 0).toFixed(0)}%</span>
-                                                    <span style={{ color: '#64748b', fontSize: '8px', display: 'block' }}>CPU {Number(ep.cpuUtilizationPercent || 0).toFixed(0)}%</span>
-                                                </td>
-                                                <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: '#d97706' }}>
-                                                    ${Number(ep.hourlyCost || 0).toFixed(2)}/h
                                                 </td>
                                                 <td style={{ padding: '6px 8px', textAlign: 'center' }}>
                                                     <span style={{
@@ -221,7 +213,7 @@ const EndpointServingPanel: React.FC<EndpointServingPanelProps> = ({
                 ) : (
                     <div style={{ padding: '24px 16px', textAlign: 'center', color: '#64748b', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px dashed #e2e8f0' }}>
                         <i className="fas fa-server mr-2" style={{ color: '#94a3b8' }}></i>
-                        조회 대상 연월에 배포된 24/7 Vertex AI Online Prediction 엔드포인트 또는 커스텀 GPU/TPU 모델 서버가 없습니다.
+                        조회 대상 연월에 고객사가 직접 배포한 Vertex AI 엔드포인트가 없습니다. (Gemini·Claude 등 관리형 모델 호출은 위 AI API 사용에 집계)
                     </div>
                 )}
             </div>
