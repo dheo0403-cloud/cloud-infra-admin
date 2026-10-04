@@ -1340,6 +1340,63 @@ public class BigQueryBatchService {
     }
 
     /**
+     * [과거 일자 백필] from~to 각 날짜를 KST 하루(00:00~24:00) 구간으로 Direct AI·Endpoint Serving 실측 재적재 후 월 요약 롤업.
+     * 시작 전에 기간 전체 행을 한 번에 지우고, 삭제가 실패하면(스트리밍 버퍼 등) 중복 적재를 막기 위해 적재 없이 중단한다.
+     * Cloud Monitoring 보존(6주) 밖 날짜는 0으로 수집되므로 호출하는 쪽에서 보존 기간 안의 날짜만 넘긴다.
+     * cutoff(nullable)를 넘기면 그 시각 이후는 수집하지 않는다 (일 배치가 이미 수집한 구간과 겹치지 않게 마지막 날을 자를 때 사용).
+     */
+    public void backfillAiMetrics(LocalDate from, LocalDate to, java.time.Instant cutoff) {
+        java.time.ZoneId kst = java.time.ZoneId.of("Asia/Seoul");
+        log.info("=== 🚀 [AI 백필] {} ~ {} Direct AI·Endpoint Serving 재적재 시작 ===", from, to);
+        ensureDailyDirectAiMetricsTableExists();
+        ensureDailyEndpointServingMetricsTableExists();
+        for (String table : Arrays.asList("daily_direct_ai_metrics", "daily_endpoint_serving_metrics", "daily_ai_model_usage")) {
+            String deleteSql = String.format("DELETE FROM `%s.%s.%s` WHERE snapshot_date BETWEEN '%s' AND '%s'",
+                    targetProjectId, datasetName, table, from, to);
+            try {
+                bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
+                log.info("[AI 백필] {} {} ~ {} 기존 행 삭제 완료", table, from, to);
+            } catch (BigQueryException e) {
+                if (e.getCode() == 404) continue; // 테이블이 아직 없으면 지울 행도 없음
+                throw new IllegalStateException("[AI 백필] " + table + " 기존 행 삭제 실패, 중복 방지를 위해 중단: " + e.getMessage(), e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("[AI 백필] 삭제 중 인터럽트", e);
+            }
+        }
+        for (InfraEnvironment env : environmentService.getAllEnvironments()) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            String decryptedSecret = environmentService.getDecryptedSecret(env.getId());
+            if (decryptedSecret == null || decryptedSecret.isEmpty()) continue;
+            String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
+            try {
+                GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decryptedSecret.getBytes()))
+                        .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+                for (CloudProject project : env.getProjects()) {
+                    String projectId = project.getProjectId();
+                    Map<String, List<JsonNode>> endpointCache = new HashMap<>(); // 프로젝트당 endpoints.list 1회
+                    for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
+                        long start = d.atStartOfDay(kst).toEpochSecond();
+                        long end = d.plusDays(1).atStartOfDay(kst).toEpochSecond();
+                        if (cutoff != null) end = Math.min(end, cutoff.getEpochSecond());
+                        if (end <= start) continue;
+                        try {
+                            collectAndInsertDailyDirectAiMetrics(d.toString(), projectId, customerName, credentials, start, end);
+                            collectAndInsertDailyEndpointServingMetrics(d.toString(), projectId, customerName, credentials, start, end, endpointCache);
+                        } catch (Exception ex) {
+                            log.error("[AI 백필] {} / {} 실패: {}", projectId, d, ex.getMessage());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("[AI 백필] 환경 {} 자격증명 처리 실패", env.getEnvironmentName(), e);
+            }
+        }
+        rollupAllMonthlyAiSummaries();
+        log.info("=== 🏁 [AI 백필] {} ~ {} 완료 ===", from, to);
+    }
+
+    /**
      * [1회성 데이터 보정] LB 최근 30일 HTTP 5XX 에러 교정된 필터로 단독 재수집
      */
     public void resyncLbHttp500Metrics() {
@@ -2005,13 +2062,19 @@ public class BigQueryBatchService {
      * 실제 snapshot_date 레코드는 테이블 내부에 정상 적재됩니다. (CREATE OR REPLACE TABLE DDL을 수행하는 daily_asset_inventory와 구분됨)
      */
     public void collectAndInsertDailyDirectAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
+        long nowSeconds = java.time.Instant.now().getEpochSecond();
+        collectAndInsertDailyDirectAiMetrics(snapshotDate, projectId, customerName, credentials, nowSeconds - 24L * 3600, nowSeconds);
+    }
+
+    public void collectAndInsertDailyDirectAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials,
+                                                     long startSeconds, long endSeconds) {
         ensureDailyDirectAiMetricsTableExists();
         deleteDailyDirectAiMetrics(snapshotDate, projectId); // 멱등성 보장 (배치 재실행 시 중복 방지)
 
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_direct_ai_metrics");
 
         // GcpResourceFetcher를 통해 Cloud Monitoring 및 리소스 실데이터 수집
-        GcpResourceFetcher.DirectAiCollectedData data = gcpResourceFetcher.getDirectAiMetricsData(credentials, projectId);
+        GcpResourceFetcher.DirectAiCollectedData data = gcpResourceFetcher.getDirectAiMetricsData(credentials, projectId, startSeconds, endSeconds);
 
         Map<String, Object> row = new HashMap<>();
         row.put("snapshot_date", snapshotDate);
@@ -2173,13 +2236,20 @@ public class BigQueryBatchService {
      * 특정 고객사 프로젝트의 Endpoint Serving 일일 운영 지표 적재 (실제 Cloud Monitoring 메트릭 기반)
      */
     public void collectAndInsertDailyEndpointServingMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
+        long nowSeconds = java.time.Instant.now().getEpochSecond();
+        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials, nowSeconds - 24L * 3600, nowSeconds, null);
+    }
+
+    public void collectAndInsertDailyEndpointServingMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials,
+                                                            long startSeconds, long endSeconds,
+                                                            Map<String, List<JsonNode>> endpointCache) {
         ensureDailyEndpointServingMetricsTableExists();
         deleteDailyEndpointServingMetrics(snapshotDate, projectId); // 멱등성 보장 (배치 재실행 시 중복 방지)
 
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_endpoint_serving_metrics");
 
         // GcpResourceFetcher를 통해 Cloud Monitoring 및 엔드포인트 실데이터 수집
-        List<GcpResourceFetcher.EndpointServingItemCollectedData> endpointList = gcpResourceFetcher.getEndpointServingMetricsData(credentials, projectId);
+        List<GcpResourceFetcher.EndpointServingItemCollectedData> endpointList = gcpResourceFetcher.getEndpointServingMetricsData(credentials, projectId, startSeconds, endSeconds, endpointCache);
 
         for (GcpResourceFetcher.EndpointServingItemCollectedData ep : endpointList) {
             Map<String, Object> row = new HashMap<>();

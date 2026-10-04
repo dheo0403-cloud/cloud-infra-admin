@@ -20,11 +20,6 @@ tasks.withType(Javadoc) {
     options.encoding = 'UTF-8'
 }
 
-task runDiagnosticMain(type: JavaExec) {
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.example.infra.service.GcpPermissionCheckerMain'
-}
-
 dependencies {
     // Web
     implementation 'org.springframework.boot:spring-boot-starter-web'

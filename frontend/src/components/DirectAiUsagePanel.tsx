@@ -175,15 +175,15 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                             {displayDates.map((date, idx) => {
                                 const inTok = Number(data.inputTokensTrend?.[idx] || 0);
                                 const outTok = Number(data.outputTokensTrend?.[idx] || 0);
-                                const inHeight = inTok > 0 ? Math.max(20, Math.round((inTok / maxTokenValue) * 85)) : 0;
-                                const outHeight = outTok > 0 ? Math.max(20, Math.round((outTok / maxTokenValue) * 85)) : 0;
+                                const inHeight = inTok > 0 ? (inTok / maxTokenValue) * 85 : 0;
+                                const outHeight = outTok > 0 ? (outTok / maxTokenValue) * 85 : 0;
 
                                 return (
                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                             <div style={{
                                                 width: '16px',
-                                                height: `${inHeight}%`,
+                                                height: `${inHeight}%`, minHeight: inHeight > 0 ? '2px' : 0,
                                                 backgroundColor: inHeight > 0 ? '#3b82f6' : 'transparent',
                                                 borderRadius: '3px 3px 0 0',
                                                 position: 'relative'
@@ -196,7 +196,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                             </div>
                                             <div style={{
                                                 width: '16px',
-                                                height: `${outHeight}%`,
+                                                height: `${outHeight}%`, minHeight: outHeight > 0 ? '2px' : 0,
                                                 backgroundColor: outHeight > 0 ? '#10b981' : 'transparent',
                                                 borderRadius: '3px 3px 0 0',
                                                 position: 'relative'

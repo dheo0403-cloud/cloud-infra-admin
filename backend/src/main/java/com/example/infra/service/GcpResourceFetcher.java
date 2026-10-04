@@ -1235,6 +1235,14 @@ public class GcpResourceFetcher {
      * - 학습/파이프라인/Workbench, 비용, Quota는 수집 근거가 없어 0으로 둔다 (추정값을 만들지 않음)
      */
     public DirectAiCollectedData getDirectAiMetricsData(GoogleCredentials credentials, String projectId) {
+        long nowSeconds = java.time.Instant.now().getEpochSecond();
+        return getDirectAiMetricsData(credentials, projectId, nowSeconds - 24L * 3600, nowSeconds);
+    }
+
+    /**
+     * 지정 구간 [startSeconds, endSeconds)의 Direct AI 실측 지표 수집 (과거 일자 백필용, Monitoring 보존 6주 이내만 가능)
+     */
+    public DirectAiCollectedData getDirectAiMetricsData(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds) {
         log.info("Collecting real Direct AI Usage Cloud Monitoring metrics for project `{}`...", projectId);
 
         long visionCalls = 0L;
@@ -1250,13 +1258,12 @@ public class GcpResourceFetcher {
 
             try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
                 String projectName = com.google.monitoring.v3.ProjectName.of(projectId).toString();
-                long nowSeconds = java.time.Instant.now().getEpochSecond();
-                long oneDayAgoSeconds = nowSeconds - (24L * 3600);
-
                 com.google.monitoring.v3.TimeInterval dailyInterval = com.google.monitoring.v3.TimeInterval.newBuilder()
-                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(oneDayAgoSeconds).build())
-                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
+                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds).build())
+                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds).build())
                         .build();
+                // 집계 단위는 구간 길이를 넘지 않게 한다. 86400 고정이면 짧은 구간도 끝 시각 기준 24시간이 합산된다.
+                long alignmentSeconds = Math.min(86400L, endSeconds - startSeconds);
 
                 // 1. 모델별 토큰(type=input/output)과 호출 수 (PublisherModel 리소스 라벨: publisher, model_user_id)
                 for (String metricType : new String[]{PUBLISHER_TOKEN_COUNT_METRIC, PUBLISHER_INVOCATION_COUNT_METRIC}) {
@@ -1266,7 +1273,7 @@ public class GcpResourceFetcher {
                                 .setFilter("metric.type = \"" + metricType + "\"")
                                 .setInterval(dailyInterval)
                                 .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
-                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(alignmentSeconds).build())
                                         .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
                                         .build())
                                 .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
@@ -1310,7 +1317,7 @@ public class GcpResourceFetcher {
                                 .setFilter(pretrainedFilter)
                                 .setInterval(dailyInterval)
                                 .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
-                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
+                                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(alignmentSeconds).build())
                                         .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
                                         .build())
                                 .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
@@ -1384,6 +1391,17 @@ public class GcpResourceFetcher {
      * - P95/P99, GPU/CPU 사용률, 비용은 근거 데이터가 없어 0으로 둔다
      */
     public List<EndpointServingItemCollectedData> getEndpointServingMetricsData(GoogleCredentials credentials, String projectId) {
+        long nowSeconds = java.time.Instant.now().getEpochSecond();
+        return getEndpointServingMetricsData(credentials, projectId, nowSeconds - 24L * 3600, nowSeconds, null);
+    }
+
+    /**
+     * 지정 구간 [startSeconds, endSeconds)의 엔드포인트 트래픽 수집 (과거 일자 백필용).
+     * 사양(머신타입·복제본)은 endpoints.list 현재값이라 과거 일자에도 현재 사양이 기록된다.
+     * endpointCache(리전 → endpoints.list 결과)를 넘기면 같은 프로젝트의 여러 날짜 수집에서 목록 조회를 한 번만 한다. null이면 매번 조회.
+     */
+    public List<EndpointServingItemCollectedData> getEndpointServingMetricsData(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds,
+                                                                                Map<String, List<com.fasterxml.jackson.databind.JsonNode>> endpointCache) {
         log.info("Collecting real Endpoint Serving metrics for project `{}`...", projectId);
         List<EndpointServingItemCollectedData> endpointList = new ArrayList<>();
 
@@ -1400,10 +1418,9 @@ public class GcpResourceFetcher {
 
             try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
                 String projectName = com.google.monitoring.v3.ProjectName.of(projectId).toString();
-                long nowSeconds = java.time.Instant.now().getEpochSecond();
                 com.google.monitoring.v3.TimeInterval dailyInterval = com.google.monitoring.v3.TimeInterval.newBuilder()
-                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds - 24L * 3600).build())
-                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
+                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds).build())
+                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds).build())
                         .build();
 
                 String[] metricTypes = {
@@ -1452,67 +1469,83 @@ public class GcpResourceFetcher {
         // 트래픽이 관측된 리전에서 실제 배포 엔드포인트 목록 조회 (global은 관리형 모델 전용이라 제외)
         locations.remove("");
         locations.remove("global");
-        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        java.net.http.HttpClient http = java.net.http.HttpClient.newHttpClient();
         for (String location : locations) {
-            String pageToken = "";
-            do {
-                try {
-                    credentials.refreshIfExpired();
-                    String url = "https://" + location + "-aiplatform.googleapis.com/v1/projects/" + projectId
-                            + "/locations/" + location + "/endpoints?pageSize=100"
-                            + (pageToken.isEmpty() ? "" : "&pageToken=" + pageToken);
-                    java.net.http.HttpResponse<String> res = http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                                    .header("Authorization", "Bearer " + credentials.getAccessToken().getTokenValue()).GET().build(),
-                            java.net.http.HttpResponse.BodyHandlers.ofString());
-                    if (res.statusCode() != 200) {
-                        log.warn("Vertex AI endpoints.list failed for project {} / {}: HTTP {}", projectId, location, res.statusCode());
-                        break;
-                    }
-                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(res.body());
-                    for (com.fasterxml.jackson.databind.JsonNode ep : root.path("endpoints")) {
-                        String name = ep.path("name").asText();
-                        String epId = name.substring(name.lastIndexOf('/') + 1);
-                        com.fasterxml.jackson.databind.JsonNode dm = ep.path("deployedModels").path(0);
-                        com.fasterxml.jackson.databind.JsonNode res0 = dm.path("dedicatedResources");
-                        com.fasterxml.jackson.databind.JsonNode spec = res0.path("machineSpec");
-                        long totalReqs = endpointRequests.getOrDefault(epId, 0L);
-                        long err4xx = endpointErrors4xx.getOrDefault(epId, 0L);
-                        long err5xx = endpointErrors5xx.getOrDefault(epId, 0L);
-                        double[] lat = endpointLatency.getOrDefault(epId, new double[2]);
-                        double err4xxRate = totalReqs > 0 ? Math.round((double) err4xx / totalReqs * 1000.0) / 10.0 : 0.0;
-                        double err5xxRate = totalReqs > 0 ? Math.round((double) err5xx / totalReqs * 1000.0) / 10.0 : 0.0;
+            List<com.fasterxml.jackson.databind.JsonNode> endpoints = endpointCache != null ? endpointCache.get(location) : null;
+            if (endpoints == null) {
+                endpoints = listVertexEndpoints(credentials, projectId, location);
+                // 조회 실패(null)는 캐시하지 않아 다음 날짜에서 다시 시도한다
+                if (endpoints != null && endpointCache != null) endpointCache.put(location, endpoints);
+            }
+            if (endpoints == null) continue;
+            for (com.fasterxml.jackson.databind.JsonNode ep : endpoints) {
+                String name = ep.path("name").asText();
+                String epId = name.substring(name.lastIndexOf('/') + 1);
+                com.fasterxml.jackson.databind.JsonNode dm = ep.path("deployedModels").path(0);
+                com.fasterxml.jackson.databind.JsonNode res0 = dm.path("dedicatedResources");
+                com.fasterxml.jackson.databind.JsonNode spec = res0.path("machineSpec");
+                long totalReqs = endpointRequests.getOrDefault(epId, 0L);
+                long err4xx = endpointErrors4xx.getOrDefault(epId, 0L);
+                long err5xx = endpointErrors5xx.getOrDefault(epId, 0L);
+                double[] lat = endpointLatency.getOrDefault(epId, new double[2]);
+                double err4xxRate = totalReqs > 0 ? Math.round((double) err4xx / totalReqs * 1000.0) / 10.0 : 0.0;
+                double err5xxRate = totalReqs > 0 ? Math.round((double) err5xx / totalReqs * 1000.0) / 10.0 : 0.0;
 
-                        endpointList.add(EndpointServingItemCollectedData.builder()
-                                .endpointId(epId)
-                                .endpointName(ep.path("displayName").asText(epId))
-                                .deployedModelId(dm.path("id").asText(""))
-                                .deployedModelName(dm.path("displayName").asText(""))
-                                .machineType(spec.path("machineType").asText(""))
-                                .acceleratorType(spec.path("acceleratorType").asText(""))
-                                .acceleratorCount(spec.path("acceleratorCount").asInt(0))
-                                .minReplicas(res0.path("minReplicaCount").asInt(0))
-                                .maxReplicas(res0.path("maxReplicaCount").asInt(0))
-                                .totalRequests(totalReqs)
-                                .qps(Math.round(totalReqs / 86400.0 * 100.0) / 100.0)
-                                .avgLatencyMs(lat[1] > 0 ? (int) Math.round(lat[0] / lat[1]) : 0)
-                                .errorCount4xx(err4xx)
-                                .errorCount5xx(err5xx)
-                                .errorRate4xxPercent(err4xxRate)
-                                .errorRate5xxPercent(err5xxRate)
-                                .successRatePercent(totalReqs > 0 ? Math.max(0.0, Math.round((100.0 - err4xxRate - err5xxRate) * 10.0) / 10.0) : 0.0)
-                                .status(dm.isMissingNode() ? "NO_MODEL" : "ACTIVE")
-                                .build());
-                    }
-                    pageToken = root.path("nextPageToken").asText("");
-                } catch (Exception ex) {
-                    log.warn("Vertex AI endpoints.list failed for project {} / {}: {}", projectId, location, ex.getMessage());
-                    break;
-                }
-            } while (!pageToken.isEmpty());
+                endpointList.add(EndpointServingItemCollectedData.builder()
+                        .endpointId(epId)
+                        .endpointName(ep.path("displayName").asText(epId))
+                        .deployedModelId(dm.path("id").asText(""))
+                        .deployedModelName(dm.path("displayName").asText(""))
+                        .machineType(spec.path("machineType").asText(""))
+                        .acceleratorType(spec.path("acceleratorType").asText(""))
+                        .acceleratorCount(spec.path("acceleratorCount").asInt(0))
+                        .minReplicas(res0.path("minReplicaCount").asInt(0))
+                        .maxReplicas(res0.path("maxReplicaCount").asInt(0))
+                        .totalRequests(totalReqs)
+                        .qps(Math.round((double) totalReqs / (endSeconds - startSeconds) * 100.0) / 100.0)
+                        .avgLatencyMs(lat[1] > 0 ? (int) Math.round(lat[0] / lat[1]) : 0)
+                        .errorCount4xx(err4xx)
+                        .errorCount5xx(err5xx)
+                        .errorRate4xxPercent(err4xxRate)
+                        .errorRate5xxPercent(err5xxRate)
+                        .successRatePercent(totalReqs > 0 ? Math.max(0.0, Math.round((100.0 - err4xxRate - err5xxRate) * 10.0) / 10.0) : 0.0)
+                        .status(dm.isMissingNode() ? "NO_MODEL" : "ACTIVE")
+                        .build());
+            }
         }
 
         log.info("Collected {} deployed Vertex AI endpoints for project `{}` (checked locations: {})", endpointList.size(), projectId, locations);
         return endpointList;
+    }
+
+    /**
+     * Vertex AI endpoints.list 전체 페이지 조회. 실패하면 null (빈 목록과 구분)
+     */
+    private List<com.fasterxml.jackson.databind.JsonNode> listVertexEndpoints(GoogleCredentials credentials, String projectId, String location) {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        java.net.http.HttpClient http = java.net.http.HttpClient.newHttpClient();
+        List<com.fasterxml.jackson.databind.JsonNode> endpoints = new ArrayList<>();
+        String pageToken = "";
+        do {
+            try {
+                credentials.refreshIfExpired();
+                String url = "https://" + location + "-aiplatform.googleapis.com/v1/projects/" + projectId
+                        + "/locations/" + location + "/endpoints?pageSize=100"
+                        + (pageToken.isEmpty() ? "" : "&pageToken=" + pageToken);
+                java.net.http.HttpResponse<String> res = http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                                .header("Authorization", "Bearer " + credentials.getAccessToken().getTokenValue()).GET().build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (res.statusCode() != 200) {
+                    log.warn("Vertex AI endpoints.list failed for project {} / {}: HTTP {}", projectId, location, res.statusCode());
+                    return null;
+                }
+                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(res.body());
+                root.path("endpoints").forEach(endpoints::add);
+                pageToken = root.path("nextPageToken").asText("");
+            } catch (Exception ex) {
+                log.warn("Vertex AI endpoints.list failed for project {} / {}: {}", projectId, location, ex.getMessage());
+                return null;
+            }
+        } while (!pageToken.isEmpty());
+        return endpoints;
     }
 }
