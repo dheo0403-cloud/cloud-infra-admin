@@ -58,7 +58,16 @@ public class BigQueryBatchService {
     public void runDailySnapshotBatch() {
         log.info("Starting Daily Snapshot Batch for GCP Resources");
         List<InfraEnvironment> environments = environmentService.getAllEnvironments();
-        String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        // 전날(KST) 기준 적재: 기간 지표는 전날 00:00~24:00, 상태 스냅샷은 실행 시점 상태를 전날 말 기준으로 기록 (Jira 배치와 같은 D-1 기준)
+        java.time.ZoneId kst = java.time.ZoneId.of("Asia/Seoul");
+        LocalDate targetDate = LocalDate.now(kst).minusDays(1);
+        String snapshotDate = targetDate.toString();
+        long dayStart = targetDate.atStartOfDay(kst).toEpochSecond();
+        long dayEnd = targetDate.plusDays(1).atStartOfDay(kst).toEpochSecond();
+        log.info("Daily Snapshot target date: {} (KST {} ~ {})", snapshotDate, dayStart, dayEnd);
+
+        // 같은 날짜로 다시 적재할 때 자산 행이 중복되지 않도록 해당 날짜 행을 먼저 삭제
+        deleteDailyAssets(snapshotDate);
 
         // Recommender 데이터: 과거 월(8월 등) 데이터는 보존하고, 현재 진행 중인 당월(9월) 데이터만 매일 덮어쓰기(DELETE & INSERT)
         // (자산/Jira/예약 등 타 배치는 기존대로 날짜별 누적 적재 유지)
@@ -267,9 +276,9 @@ public class BigQueryBatchService {
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_Health_Healthy_Total", 0);
                         }
 
-                        // Cloud Monitoring 최근 30일 HTTP 5XX 에러 사전 집계 및 적재
+                        // 전날까지 달력 30일 HTTP 5XX 에러 사전 집계 및 적재
                         try {
-                            long http5xx_30d = gcpResourceFetcher.getLbHttp5xxLast30DaysCount(credentials, projectId);
+                            long http5xx_30d = gcpResourceFetcher.getLbHttp5xxCount(credentials, projectId, dayEnd - 30L * 86400, dayEnd);
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http5xx_30d);
                             log.info("LB HTTP 5XX 30-day error count: {} for project {}", http5xx_30d, projectId);
                         } catch (Exception e) {
@@ -989,7 +998,7 @@ public class BigQueryBatchService {
 
                     // 21. GCP AI 서비스 직접 사용 (Direct AI Usage) 메트릭 수집 (전체 고객사 프로젝트 순회)
                     try {
-                        collectAndInsertDailyDirectAiMetrics(snapshotDate, projectId, customerName, credentials);
+                        collectAndInsertDailyDirectAiMetrics(snapshotDate, projectId, customerName, credentials, dayStart, dayEnd);
                         log.info("GCP Direct AI Metrics: successfully collected for project {}", projectId);
                     } catch (Exception e) {
                         log.error("Batch failed for Direct AI Metrics in project {}", projectId, e);
@@ -997,7 +1006,7 @@ public class BigQueryBatchService {
 
                     // 21-2. GCP AI 엔드포인트 서빙 (Endpoint Serving) 메트릭 수집 (전체 고객사 프로젝트 순회)
                     try {
-                        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials);
+                        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials, dayStart, dayEnd, null);
                         log.info("GCP Endpoint Serving Metrics: successfully collected for project {}", projectId);
                     } catch (Exception e) {
                         log.error("Batch failed for Endpoint Serving Metrics in project {}", projectId, e);
@@ -1431,6 +1440,20 @@ public class BigQueryBatchService {
             }
         }
         log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 5XX 에러 재수집 완료 ===");
+    }
+
+    /**
+     * 해당 날짜 자산 행 선삭제 (같은 날짜 재적재 시 중복 방지). 스트리밍 버퍼 등으로 실패하면 경고만 남기고 진행
+     */
+    private void deleteDailyAssets(String snapshotDate) {
+        try {
+            bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                    "DELETE FROM `%s.%s.daily_asset_inventory` WHERE snapshot_date = '%s'",
+                    targetProjectId, datasetName, snapshotDate)).build());
+            log.info("Cleared existing daily_asset_inventory rows for {}", snapshotDate);
+        } catch (Exception e) {
+            log.warn("daily_asset_inventory delete for {} failed (rows may duplicate): {}", snapshotDate, e.getMessage());
+        }
     }
 
     private void insertDailyAssetBatch(String snapshotDate, String projectId, String customerName, String resourceType, int count) {

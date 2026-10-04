@@ -999,6 +999,14 @@ public class GcpResourceFetcher {
     }
 
     public long getLbHttp5xxLast30DaysCount(GoogleCredentials credentials, String projectId) {
+        long nowSeconds = java.time.Instant.now().getEpochSecond();
+        return getLbHttp5xxCount(credentials, projectId, nowSeconds - 30L * 86400, nowSeconds);
+    }
+
+    /**
+     * 지정 구간 [startSeconds, endSeconds)의 LB HTTP 5XX 에러 수 (일 배치는 전날 기준 달력 30일을 넘긴다)
+     */
+    public long getLbHttp5xxCount(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds) {
         long total5xxCount = 0;
 
         // 1. Cloud Logging API Direct Query 시도
@@ -1009,10 +1017,11 @@ public class GcpResourceFetcher {
                     .build()
                     .getService();
 
-            String thirtyDaysAgoIso = java.time.Instant.now().minus(30, java.time.temporal.ChronoUnit.DAYS).toString();
+            String startIso = java.time.Instant.ofEpochSecond(startSeconds).toString();
+            String endIso = java.time.Instant.ofEpochSecond(endSeconds).toString();
             // HTTP 301/302 리다이렉트를 제외한 실제 HTTP 5XX 서버 에러(500~599) 및 HTTPS/백엔드 응답 기준 필터링
             String logFilter = "(resource.type=\"http_load_balancer\" OR resource.type=\"http_external_lb_rule\" OR resource.type=\"https_lb_rule\") " +
-                    "AND httpRequest.status>=500 AND httpRequest.status<600 AND timestamp>=\"" + thirtyDaysAgoIso + "\"";
+                    "AND httpRequest.status>=500 AND httpRequest.status<600 AND timestamp>=\"" + startIso + "\" AND timestamp<\"" + endIso + "\"";
 
             com.google.api.gax.paging.Page<com.google.cloud.logging.LogEntry> entries = logging.listLogEntries(
                     com.google.cloud.logging.Logging.EntryListOption.filter(logFilter),
@@ -1044,12 +1053,9 @@ public class GcpResourceFetcher {
             try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
                 String projectName = com.google.monitoring.v3.ProjectName.of(projectId).toString();
 
-                long nowSeconds = java.time.Instant.now().getEpochSecond();
-                long thirtyDaysAgoSeconds = nowSeconds - (30L * 24 * 3600);
-
                 com.google.monitoring.v3.TimeInterval interval = com.google.monitoring.v3.TimeInterval.newBuilder()
-                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(thirtyDaysAgoSeconds).build())
-                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(nowSeconds).build())
+                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds).build())
+                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds).build())
                         .build();
 
                 // HTTP 5XX 에러 클래스(response_code_class = "500" 또는 500~599 전체) 대상 필터링
