@@ -22,6 +22,9 @@ logging:
     com.example.infra: INFO
 
 app:
+  # @Scheduled 배치 실행 여부. 기본 꺼짐(로컬/테스트), 운영 Dockerfile에서 true
+  scheduling:
+    enabled: ${APP_SCHEDULING_ENABLED:false}
   security:
     encryption-key: "MZC-INFRA-SECRET-KEY"
   slack:

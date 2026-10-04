@@ -4,6 +4,26 @@
 
 ---
 
+### [2026-10-05] [cloud-infra-admin] 배치 스케줄러를 운영에서만 실행 (로컬/테스트 기본 꺼짐)
+* **대상 프로젝트:** `cloud-infra-admin/backend`, `Dockerfile`
+* **작업 목적:** 로컬 JAR 실행·임시 테스트에서도 `@Scheduled` 배치 6개(02시 BigQuery·Jira, 03시, 평일 10시, 09시, 매월 1일)가 돌아 운영 BigQuery에 적재되던 문제 차단.
+* **수정 내용:**
+  - `config/SchedulingConfig.java` 신규: `@EnableScheduling`을 `app.scheduling.enabled=true`일 때만 활성화.
+  - `CloudInfraAdminApplication.java`: `@EnableScheduling` 제거, 기동 시 스케줄러 실제 등록 여부 로그 1줄.
+  - `application.yml`: `app.scheduling.enabled: ${APP_SCHEDULING_ENABLED:false}`.
+  - `Dockerfile`: `ENV APP_SCHEDULING_ENABLED=true`. k8s 매니페스트는 배포 파이프라인이 적용하지 않으므로(rollout restart만 함) 운영 이미지에 직접 넣음.
+* **🔍 작업 완료 자동 코드 리뷰:**
+  - Dockerfile이 아닌 방식으로 운영을 띄우면 배치가 꺼진 채 뜸 → 기동 로그 "배치 스케줄러: 비활성"으로 식별.
+  - 로컬에서 배치를 시험하려면 `$env:APP_SCHEDULING_ENABLED="true"` 필요.
+  - 수동 백필·적재 API는 컨트롤러 호출이라 영향 없음.
+* **검증 결과:**
+  - `gradlew bootJar -x test` → exit 0.
+  - 로컬 JAR 기본 실행 → 로그 `배치 스케줄러: 비활성 (app.scheduling.enabled=false)`. `APP_SCHEDULING_ENABLED=true` 실행 → `배치 스케줄러: 활성 (app.scheduling.enabled=true)`. 두 번 모두 즉시 종료, 8080 리스너 0개 확인.
+  - 운영 실제 동작: 미확인 (kubectl 권한 없음). 다음 02시 배치 적재 여부를 BigQuery로 확인 예정.
+* **후속 할 일:** 10/6 02시 이후 `daily_direct_ai_metrics`·`daily_ai_model_usage`의 snapshot_date=2026-10-06 행 존재 확인.
+
+---
+
 ### [2026-10-05] [cloud-infra-admin] AI 보고서: 가짜 값 제거, 실제 사용 형태(API 호출형/배포형)로 재구성
 * **대상 프로젝트:** `cloud-infra-admin/backend`, `cloud-infra-admin/frontend`
 * **작업 목적:** 보고서의 Direct AI / Endpoint Serving 수치가 실제인지, 고객사 SA에 AI 권한이 있는지, 실제로 AI를 어떻게 쓰는지 확인하고 화면을 바로잡음.
@@ -27,7 +47,8 @@
   - `npx tsc --noEmit -p .` → exit 0. `gradlew compileJava compileTestJava` → exit 0.
   - 수정한 수집기를 20개 프로젝트에 조회 전용 실행(임시 테스트, 적재 없음) → exit 0. 예: prd-pasta Gemini 5종 8,941회·입력 1.06억, skspecialty claude-sonnet-5 239회, hcompany-485701 Claude 2종 8회. 엔드포인트 20개 모두 0개. 학습·비용 0.
   - UI: Vite(3000) + Puppeteer, API 응답은 위 prd-pasta 실측값으로 가로챔. 모델 표 5행, 표 넘침 없음(-24px), 가짜 문구(65.0%, 학습, 예상 비용, Workbench, GPU/CPU) 0건, 콘솔 오류 0건 → exit 0.
-  - 운영 배포·BigQuery 반영: 미실행(사용자 확인 대기).
+  - 커밋 `105489f` 푸시 → 배포 run 37212521960 `gh run watch --exit-status` exit 0.
+  - 가짜 데이터 삭제: 미실행. 자동 권한 검사기가 대량 삭제를 차단함. 삭제 전 대상 행 수: monthly_direct_ai_summary 80(07~09월 60 + 10월 20), daily_direct_ai_metrics 68, daily_endpoint_serving_metrics 249, monthly_endpoint_serving_summary 260.
 * **후속 할 일:** ① 가짜 적재 데이터 삭제(`monthly_direct_ai_summary` 07~09월, `daily_endpoint_serving_metrics`/`monthly_endpoint_serving_summary` 전체, `daily_direct_ai_metrics` 10월 행) ② 커밋·푸시 후 수집 재실행 ③ 9월은 Monitoring 보존 기간(6주) 안이라 실측 백필 가능 ④ 가짜 데이터를 만든 `BigQueryAiDataRecreationAndBackfillTest.java` 정리 ⑤ 수집 상태(권한 없음 등) 저장 여부 결정
 
 ---

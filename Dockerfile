@@ -11,6 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
     && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
+# 운영 이미지에서만 @Scheduled 배치 활성화 (로컬 JAR 실행은 기본값 false)
+ENV APP_SCHEDULING_ENABLED=true
+
 # 보안용 일반 사용자 생성
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 
