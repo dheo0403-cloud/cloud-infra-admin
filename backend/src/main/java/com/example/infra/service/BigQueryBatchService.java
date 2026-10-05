@@ -67,6 +67,7 @@ public class BigQueryBatchService {
         log.info("Daily Snapshot target date: {} (KST {} ~ {})", snapshotDate, dayStart, dayEnd);
 
         // 같은 날짜로 다시 적재할 때 자산 행이 중복되지 않도록 해당 날짜 행을 먼저 삭제
+        ensureAssetCreatedAtColumn();
         deleteDailyAssets(snapshotDate);
 
         // Recommender 데이터: 과거 월(8월 등) 데이터는 보존하고, 현재 진행 중인 당월(9월) 데이터만 매일 덮어쓰기(DELETE & INSERT)
@@ -1411,6 +1412,7 @@ public class BigQueryBatchService {
     public void resyncLbHttp500Metrics() {
         log.info("=== 🚀 [1회성 데이터 보정] LB 최근 30일 HTTP 5XX 에러 교정 필터 기반 재수집 시작 ===");
         String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        ensureAssetCreatedAtColumn();
 
         List<InfraEnvironment> environments = environmentService.getAllEnvironments();
         for (InfraEnvironment env : environments) {
@@ -1456,6 +1458,19 @@ public class BigQueryBatchService {
         }
     }
 
+    /**
+     * 자산 테이블 적재 시각 컬럼 보장 (이미 있으면 아무 일도 하지 않음). 기존 행은 적재 시각을 알 수 없어 NULL 유지
+     */
+    private void ensureAssetCreatedAtColumn() {
+        try {
+            bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                    "ALTER TABLE `%s.%s.daily_asset_inventory` ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
+                    targetProjectId, datasetName)).build());
+        } catch (Exception e) {
+            log.warn("daily_asset_inventory created_at column check failed: {}", e.getMessage());
+        }
+    }
+
     private void insertDailyAssetBatch(String snapshotDate, String projectId, String customerName, String resourceType, int count) {
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_asset_inventory");
         Map<String, Object> rowContent = new HashMap<>();
@@ -1464,6 +1479,7 @@ public class BigQueryBatchService {
         rowContent.put("customer_name", customerName);
         rowContent.put("resource_type", resourceType);
         rowContent.put("resource_count", count);
+        rowContent.put("created_at", java.time.Instant.now().toString()); // 실제 적재 시각(UTC)
 
         try {
             InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId)

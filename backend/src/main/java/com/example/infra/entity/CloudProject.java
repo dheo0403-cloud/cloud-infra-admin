@@ -10,8 +10,7 @@ import lombok.*;
 @Builder
 public class CloudProject {
 
-    private String id;
-
+    // 프로젝트는 infra_environment.project_ids(문자열 배열)로만 저장되므로 projectId가 유일한 식별자
     @JsonBackReference
     private InfraEnvironment environment;
 

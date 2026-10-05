@@ -624,7 +624,7 @@ public class MonthlyReportService {
 
         String selectFields = "SUBSTR(CAST(snapshot_date AS STRING), 1, 7) as ym, resource_type, resource_count, CAST(snapshot_date AS STRING) as sd";
         String whereClause = "WHERE project_id = @projectId AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) IN UNNEST(@ymList) " +
-                "QUALIFY ROW_NUMBER() OVER(PARTITION BY SUBSTR(CAST(snapshot_date AS STRING), 1, 7), resource_type ORDER BY snapshot_date DESC) = 1";
+                "QUALIFY ROW_NUMBER() OVER(PARTITION BY SUBSTR(CAST(snapshot_date AS STRING), 1, 7), resource_type ORDER BY snapshot_date DESC, created_at DESC) = 1";
 
         Map<String, QueryParameterValue> params = new HashMap<>();
         params.put("projectId", QueryParameterValue.string(projectId));
@@ -687,7 +687,7 @@ public class MonthlyReportService {
         String whereClause = "WHERE project_id = @projectId AND CAST(snapshot_date AS STRING) = (" +
                 String.format("  SELECT MAX(CAST(snapshot_date AS STRING)) FROM `%s.%s.daily_asset_inventory` ", targetProjectId, datasetName) +
                 "  WHERE project_id = @projectId AND STARTS_WITH(CAST(snapshot_date AS STRING), @yearMonthPrefix)" +
-                ")";
+                ") ORDER BY created_at";  // 같은 유형이 여러 행이면 아래 put에서 가장 최근 적재 값이 남도록 (NULL은 앞)
         for (String ym : yearMonths) {
             Map<String, QueryParameterValue> params = new HashMap<>();
             params.put("projectId", QueryParameterValue.string(projectId));
