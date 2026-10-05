@@ -832,7 +832,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 onChange={(e) => setSelectedProject(e.target.value)}
                             >
                                 {selectedCustomer?.environments?.filter(env => env.providerType === 'GCP').flatMap(env => env.projects || []).map(p => (
-                                    <option key={p.id} value={p.projectId}>{p.projectId}</option>
+                                    <option key={p.projectId} value={p.projectId}>{p.projectId}</option>
                                 ))}
                             </select>
                         </div>

@@ -243,7 +243,7 @@ const ReservationPage: React.FC = () => {
                             >
                                 <option value="">{selectedProvider === 'GCP' ? '프로젝트 선택' : selectedProvider === 'AZURE' ? '구독 선택' : '선택'}</option>
                                 {currentEnv?.projects?.map(p => (
-                                    <option key={p.id} value={p.projectId}>
+                                    <option key={p.projectId} value={p.projectId}>
                                         {p.projectId}
                                     </option>
                                 ))}
