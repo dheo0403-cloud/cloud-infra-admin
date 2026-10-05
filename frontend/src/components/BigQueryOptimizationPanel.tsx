@@ -128,15 +128,16 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                     {displayDates.map((dateStr, idx) => {
                                         const tbVal = data.dataProcessedTbTrend?.[idx] || 0;
                                         const jcVal = data.jobCountTrend?.[idx] || 0;
-                                        const heightPercent = tbVal > 0 ? Math.max(20, Math.min(85, Math.round((tbVal / maxTb) * 85))) : 0;
-                                        const jcHeight = jcVal > 0 ? Math.max(20, Math.min(85, Math.round((jcVal / maxJobs) * 85))) : 0;
+                                        // 값에 정비례 (작은 값도 0보다 크면 minHeight 2px로 표시)
+                                        const heightPercent = tbVal > 0 ? Math.min(85, (tbVal / maxTb) * 85) : 0;
+                                        const jcHeight = jcVal > 0 ? Math.min(85, (jcVal / maxJobs) * 85) : 0;
 
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                                     <div className="bq-tb-bar" style={{
                                                         width: '16px',
-                                                        height: `${heightPercent}%`,
+                                                        height: `${heightPercent}%`, minHeight: heightPercent > 0 ? '2px' : 0,
                                                         backgroundColor: tbVal > 0 ? '#3b82f6' : 'transparent',
                                                         borderRadius: '3px 3px 0 0',
                                                         position: 'relative'
@@ -150,7 +151,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                                     </div>
                                                     <div className="bq-job-bar" style={{
                                                         width: '16px',
-                                                        height: `${jcHeight}%`,
+                                                        height: `${jcHeight}%`, minHeight: jcHeight > 0 ? '2px' : 0,
                                                         backgroundColor: jcVal > 0 ? '#10b981' : 'transparent',
                                                         borderRadius: '3px 3px 0 0',
                                                         position: 'relative'
@@ -188,7 +189,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                 const pgTrend = data.newTablePhysicalGbTrend || [];
                                 // 논리·물리 모두 GB 단위라 두 계열 공통 최댓값 기준으로 높이 산정 (막대끼리 비교 가능)
                                 const maxGb = Math.max(...lgTrend.map(v => v || 0), ...pgTrend.map(v => v || 0), 0.01);
-                                const barH = (v: number | null | undefined) => v && v > 0 ? Math.max(4, Math.min(85, Math.round((v / maxGb) * 85))) : 0;
+                                const barH = (v: number | null | undefined) => v && v > 0 ? Math.min(85, (v / maxGb) * 85) : 0;
                                 const curLg = lgTrend[3];
                                 return (
                                     <div className="report-card bq-new-table-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px 14px' }}>
@@ -214,7 +215,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                                             {bars.map(b => (
-                                                                <div key={b.cls} className={b.cls} style={{ width: '16px', height: `${barH(b.v)}%`, backgroundColor: barH(b.v) > 0 ? b.color : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
+                                                                <div key={b.cls} className={b.cls} style={{ width: '16px', height: `${barH(b.v)}%`, minHeight: barH(b.v) > 0 ? '2px' : 0, backgroundColor: barH(b.v) > 0 ? b.color : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
                                                                     {/* 두 막대 라벨이 겹치지 않도록 논리는 왼쪽, 물리는 오른쪽으로 펼침 */}
                                                                     <span style={{ position: 'absolute', top: '-16px', ...b.side, fontSize: '8px', fontWeight: 700, color: b.v == null ? '#94a3b8' : b.text, whiteSpace: 'nowrap' }}>
                                                                         {b.v == null ? '-' : `${Number(b.v).toFixed(2)}GB`}
