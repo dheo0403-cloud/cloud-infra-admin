@@ -170,6 +170,17 @@ jobs:
           cluster-name: ${{ secrets.AKS_CLUSTER_NAME }}
           resource-group: ${{ secrets.AKS_RESOURCE_GROUP }}
 
+      - name: 11-1. Wait Until Daily Batch Window Ends (KST 02:00~03:05)
+        run: |
+          # 운영 일 배치(KST 02:00 시작, 약 50분) 중 롤아웃 재시작으로 배치가 끊기지 않도록 03:05까지 대기
+          now=$(TZ=Asia/Seoul date +%H%M)
+          if [ "$now" -ge 0200 ] && [ "$now" -lt 0305 ]; then
+            target=$(TZ=Asia/Seoul date -d "$(TZ=Asia/Seoul date +%F) 03:05" +%s)
+            wait=$(( target - $(date +%s) ))
+            echo "⏳ [Batch Guard] KST $now 일 배치 시간대 → ${wait}초 대기 후 롤아웃"
+            sleep "$wait"
+          fi
+
       - name: 12. Rollout Restart AKS Deployment (cloud-infra-admin)
         run: |
           DEPLOYMENT_NAME="cloud-infra-admin"
