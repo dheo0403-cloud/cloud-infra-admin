@@ -4,6 +4,7 @@ import com.example.infra.dto.BigQueryOptimizationDto;
 import com.example.infra.entity.CloudProject;
 import com.example.infra.entity.InfraEnvironment;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.ServiceAccountCredentials;
 import com.google.cloud.bigquery.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,10 @@ public class BigQueryOptimizationService {
     @Value("${spring.cloud.gcp.bigquery.dataset:infra_admin_dataset}")
     private String datasetName;
 
+    // 수집에서 제외할 사내 계정 도메인 (비우면 도메인 제외 안 함)
+    @Value("${app.bq.exclude-email-domain:}")
+    private String excludeEmailDomain;
+
     public static final String RESOURCE_SUMMARY_TABLE = "monthly_bq_resource_summary";
     public static final String STORAGE_SUMMARY_TABLE = "monthly_bq_storage_summary";
     public static final String TOP_COST_TABLE = "monthly_bq_top_cost";
@@ -61,6 +66,7 @@ public class BigQueryOptimizationService {
         "WHERE job_type = 'QUERY'\n" +
         "  AND state = 'DONE'\n" +
         "  AND FORMAT_DATE('%%Y-%%m', DATE(DATETIME(creation_time, 'Asia/Seoul'))) = '%s'\n" +
+        "%s" +
         "GROUP BY 1\n" +
         "ORDER BY 1";
 
@@ -105,6 +111,7 @@ public class BigQueryOptimizationService {
         "  AND creation_time >= TIMESTAMP('%s', 'Asia/Seoul')\n" +
         "  AND creation_time < TIMESTAMP('%s', 'Asia/Seoul')\n" +
         "  AND state = 'DONE'\n" +
+        "%s" +
         "ORDER BY total_bytes_processed DESC\n" +
         "LIMIT 10";
 
@@ -132,6 +139,7 @@ public class BigQueryOptimizationService {
         "  AND creation_time >= TIMESTAMP('%s', 'Asia/Seoul')\n" +
         "  AND creation_time < TIMESTAMP('%s', 'Asia/Seoul')\n" +
         "  AND state = 'DONE'\n" +
+        "%s" +
         "ORDER BY execution_time_ms DESC\n" +
         "LIMIT 10";
 
@@ -156,6 +164,7 @@ public class BigQueryOptimizationService {
         "  AND creation_time >= TIMESTAMP('%s', 'Asia/Seoul')\n" +
         "  AND creation_time < TIMESTAMP('%s', 'Asia/Seoul')\n" +
         "  AND state = 'DONE'\n" +
+        "%s" +
         "ORDER BY total_slot_ms DESC\n" +
         "LIMIT 10";
 
@@ -163,24 +172,36 @@ public class BigQueryOptimizationService {
     // [동적 쿼리 빌더 메서드]
     // =========================================================================
 
-    public String buildQuery1JobUsage(String projectId, String region, String yearMonth) {
-        return String.format(QUERY_1_JOB_USAGE, projectId, region, yearMonth);
+    public String buildQuery1JobUsage(String projectId, String region, String yearMonth, String excludeClause) {
+        return String.format(QUERY_1_JOB_USAGE, projectId, region, yearMonth, excludeClause);
     }
 
     public String buildQuery2StorageGb(String projectId, String region, String yearMonth) {
         return String.format(QUERY_2_STORAGE_GB, projectId, region, yearMonth);
     }
 
-    public String buildQuery3TopCost(String projectId, String region, String startTimeStr, String endTimeStr) {
-        return String.format(QUERY_3_TOP_COST, projectId, region, startTimeStr, endTimeStr);
+    public String buildQuery3TopCost(String projectId, String region, String startTimeStr, String endTimeStr, String excludeClause) {
+        return String.format(QUERY_3_TOP_COST, projectId, region, startTimeStr, endTimeStr, excludeClause);
     }
 
-    public String buildQuery4TopDuration(String projectId, String region, String startTimeStr, String endTimeStr) {
-        return String.format(QUERY_4_TOP_EXECUTION_TIME, projectId, region, startTimeStr, endTimeStr);
+    public String buildQuery4TopDuration(String projectId, String region, String startTimeStr, String endTimeStr, String excludeClause) {
+        return String.format(QUERY_4_TOP_EXECUTION_TIME, projectId, region, startTimeStr, endTimeStr, excludeClause);
     }
 
-    public String buildQuery5TopSlots(String projectId, String region, String startTimeStr, String endTimeStr) {
-        return String.format(QUERY_5_TOP_SLOTS, projectId, region, startTimeStr, endTimeStr);
+    public String buildQuery5TopSlots(String projectId, String region, String startTimeStr, String endTimeStr, String excludeClause) {
+        return String.format(QUERY_5_TOP_SLOTS, projectId, region, startTimeStr, endTimeStr, excludeClause);
+    }
+
+    // 고객 사용량이 아닌 Job 제외 조건: 수집 서비스 계정(자격증명 client_email)과 사내 도메인 계정
+    private String excludeClause(GoogleCredentials credentials) {
+        StringBuilder sb = new StringBuilder();
+        if (credentials instanceof ServiceAccountCredentials sa && sa.getClientEmail() != null) {
+            sb.append("  AND user_email != '").append(sa.getClientEmail().replace("'", "")).append("'\n");
+        }
+        if (excludeEmailDomain != null && !excludeEmailDomain.isBlank()) {
+            sb.append("  AND NOT ENDS_WITH(user_email, '@").append(excludeEmailDomain.trim().replace("'", "")).append("')\n");
+        }
+        return sb.toString();
     }
 
     /**
@@ -327,7 +348,7 @@ public class BigQueryOptimizationService {
             for (String region : regions) {
                 // 1. Job 수 및 Raw Bytes / TB 사용량 쿼리 실행 (무가공 원본 수치 수집)
                 try {
-                    String sql1 = buildQuery1JobUsage(projectId, region, yearMonth);
+                    String sql1 = buildQuery1JobUsage(projectId, region, yearMonth, excludeClause(credentials));
                     TableResult res1 = tenantClient.query(QueryJobConfiguration.newBuilder(sql1).build());
                     for (FieldValueList row : res1.iterateAll()) {
                         if (isPresent(row, "job_count")) {
@@ -414,6 +435,23 @@ public class BigQueryOptimizationService {
         double physicalGb = usage.totalPhysicalGb;
         double physicalTb = usage.totalPhysicalTb;
 
+        // 수집 계정을 뺀 Job이 0건이고 신규 테이블 용량도 없으면 BigQuery 미사용으로 보고 요약 행을 적재하지 않는다
+        if (jobCount == 0 && !(usage.storageQuerySucceeded && logicalGb > 0)) {
+            try {
+                bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                        "DELETE FROM `%s.%s.%s` WHERE snapshot_date = DATE(@snap) AND project_id = @pid",
+                        hostProjectId, datasetName, RESOURCE_SUMMARY_TABLE))
+                        .addNamedParameter("snap", QueryParameterValue.string(snapDate))
+                        .addNamedParameter("pid", QueryParameterValue.string(projectId))
+                        .build());
+                log.info("[BQ-OPTIMIZATION] No BigQuery usage for {} / {} - resource summary not written", reportYearMonth, projectId);
+            } catch (Exception e) {
+                log.error("Failed to clear resource summary for unused project {}: {}", projectId, e.getMessage());
+            }
+            collectTopQueriesWithUserQueries(snapDate, reportYearMonth, projectId, customerName, credentials);
+            return;
+        }
+
         // Resource Summary MERGE INTO
         try {
             String mergeSummarySql = String.format(
@@ -462,6 +500,7 @@ public class BigQueryOptimizationService {
         String endTimeStr = ym.plusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM")) + "-01 00:00:00";
 
         Set<String> regions = discoverProjectRegions(credentials, projectId);
+        String excludeClause = excludeClause(credentials);
 
         try {
             BigQuery tenantClient = BigQueryOptions.newBuilder()
@@ -482,9 +521,9 @@ public class BigQueryOptimizationService {
                 boolean anySucceeded = false;
                 for (String region : regions) {
                     try {
-                        String sql = "HIGH_COST".equals(category) ? buildQuery3TopCost(projectId, region, startTimeStr, endTimeStr)
-                                : "LONG_DURATION".equals(category) ? buildQuery4TopDuration(projectId, region, startTimeStr, endTimeStr)
-                                : buildQuery5TopSlots(projectId, region, startTimeStr, endTimeStr);
+                        String sql = "HIGH_COST".equals(category) ? buildQuery3TopCost(projectId, region, startTimeStr, endTimeStr, excludeClause)
+                                : "LONG_DURATION".equals(category) ? buildQuery4TopDuration(projectId, region, startTimeStr, endTimeStr, excludeClause)
+                                : buildQuery5TopSlots(projectId, region, startTimeStr, endTimeStr, excludeClause);
                         tenantClient.query(QueryJobConfiguration.newBuilder(sql).build()).iterateAll().forEach(rows::add);
                         anySucceeded = true;
                     } catch (Exception e) {

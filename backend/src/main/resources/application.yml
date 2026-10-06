@@ -29,6 +29,9 @@ app:
     encryption-key: "MZC-INFRA-SECRET-KEY"
   slack:
     webhook-url: ${SLACK_WEBHOOK_URL:}
+  bq:
+    # BigQuery 성능 보고서 수집 시 제외할 사내 계정 도메인 (수집 서비스 계정은 자격증명에서 자동 제외)
+    exclude-email-domain: ${APP_BQ_EXCLUDE_EMAIL_DOMAIN:mz.co.kr}
 
 jira:
   base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}
