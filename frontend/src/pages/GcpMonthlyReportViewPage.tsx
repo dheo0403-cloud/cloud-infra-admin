@@ -2001,7 +2001,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const connPct = isVpnExist ? Math.round((vpnConn / displayTot) * 100) : 0;
 
                                     return (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 'auto 0' }}>
                                             {/* Card Style matching 2nd image */}
                                             <div style={{
                                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px',
