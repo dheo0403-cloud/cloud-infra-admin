@@ -252,8 +252,8 @@ export interface BigQueryOptimizationDto {
     lastUpdated: string;
 }
 
-export const getBigQueryOptimizationMetrics = (projectId?: string, targetYearMonth?: string) =>
-    axios.get<BigQueryOptimizationDto>(`${API_BASE_URL}/metrics/gcp/bigquery-optimization`, { params: { projectId, targetYearMonth } });
+export const getBigQueryOptimizationMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>
+    axios.get<BigQueryOptimizationDto>(`${API_BASE_URL}/metrics/gcp/bigquery-optimization`, { params: { projectId, targetYearMonth, period } });
 
 // Legacy Aliases for Backward Compatibility
 export type VertexAiMetricsDto = DirectAiMetricsDto;

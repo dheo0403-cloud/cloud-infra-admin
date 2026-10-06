@@ -2403,6 +2403,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                             <BigQueryOptimizationPanel
                                 projectId={selectedProject || reportData?.projectId || ''}
                                 targetYearMonth={selectedYearMonth}
+                                isQuarterly={isQuarterly}
                                 isEditMode={isEditMode}
                                 onHideSection={() => setIsBqSectionVisible(false)}
                             />

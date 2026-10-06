@@ -422,7 +422,6 @@ public class BigQueryOptimizationService {
         if (!usage.jobQuerySucceeded) {
             // 모든 리전에서 쿼리 1 실패: 0으로 덮어쓰지 않고 기존 데이터 유지
             log.error("[BQ-OPTIMIZATION] Query 1 failed in all regions for {} {} - resource summary NOT written", projectId, reportYearMonth);
-            collectTopQueriesWithUserQueries(snapDate, reportYearMonth, projectId, customerName, credentials);
             return;
         }
 
@@ -448,7 +447,6 @@ public class BigQueryOptimizationService {
             } catch (Exception e) {
                 log.error("Failed to clear resource summary for unused project {}: {}", projectId, e.getMessage());
             }
-            collectTopQueriesWithUserQueries(snapDate, reportYearMonth, projectId, customerName, credentials);
             return;
         }
 
@@ -484,9 +482,41 @@ public class BigQueryOptimizationService {
         } catch (Exception e) {
             log.error("Failed to upsert resource summary for {}", projectId, e);
         }
+    }
 
-        // 2. 사용자 원본 쿼리 3, 4, 5 로 TOP 10 쿼리 수집
-        collectTopQueriesWithUserQueries(snapDate, reportYearMonth, projectId, customerName, credentials);
+    /**
+     * 일배치용: 배치 기준일 다음 날이 속한 달의 전월(끝난 달) TOP 10이 아직 없으면 한 달치를 수집한다.
+     * 매월 1일 배치(기준일=말일)에 수집되고, 실패하면 다음 날 배치가 다시 시도한다.
+     */
+    public void collectCompletedMonthTopQueries(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
+        YearMonth month = YearMonth.from(LocalDate.parse(snapshotDate).plusDays(1)).minusMonths(1);
+        if (hasTopQueries(projectId, month)) return;
+        collectTopQueriesForMonth(projectId, customerName, credentials, month);
+    }
+
+    /**
+     * 지정한 달 1일~말일의 TOP 10을 수집해 그 달 데이터를 교체한다 (스냅샷 일자 = 말일)
+     */
+    public void collectTopQueriesForMonth(String projectId, String customerName, GoogleCredentials credentials, YearMonth month) {
+        ensureTablesExist();
+        log.info("[BQ-TOP] Collecting month {} for project {} ({})", month, projectId, customerName);
+        collectTopQueriesWithUserQueries(month.atEndOfMonth().toString(), month.toString(), projectId, customerName, credentials);
+    }
+
+    private boolean hasTopQueries(String projectId, YearMonth month) {
+        try {
+            TableResult res = bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                    "SELECT COUNT(*) AS n FROM `%s.%s.%s` WHERE project_id = @pid AND report_year_month = @ym",
+                    hostProjectId, datasetName, TOP_QUERIES_TABLE))
+                    .addNamedParameter("pid", QueryParameterValue.string(projectId))
+                    .addNamedParameter("ym", QueryParameterValue.string(month.toString()))
+                    .build());
+            return res.iterateAll().iterator().next().get("n").getLongValue() > 0;
+        } catch (Exception e) {
+            // 확인 실패 시 다시 수집해도 그 달 데이터를 교체할 뿐이라 안전
+            log.warn("[BQ-TOP] Existing rows check failed for {} {}: {}", projectId, month, e.getMessage());
+            return false;
+        }
     }
 
     /**
@@ -538,11 +568,11 @@ public class BigQueryOptimizationService {
 
                 rows.sort(Comparator.comparingLong((FieldValueList r) -> isPresent(r, sortCol) ? r.get(sortCol).getLongValue() : 0L).reversed());
 
-                // 이전 실행의 잔존 행 제거 후 새 TOP 10 적재
+                // 그 달의 기존 행(이전 스냅샷 포함) 제거 후 새 TOP 10 적재
                 try {
                     String deleteSql = String.format(
-                        "DELETE FROM `%s.%s.%s` WHERE snapshot_date = DATE('%s') AND project_id = '%s' AND query_category = '%s'",
-                        hostProjectId, datasetName, TOP_QUERIES_TABLE, snapDate, projectId, category);
+                        "DELETE FROM `%s.%s.%s` WHERE report_year_month = '%s' AND project_id = '%s' AND query_category = '%s'",
+                        hostProjectId, datasetName, TOP_QUERIES_TABLE, reportYearMonth, projectId, category);
                     bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
                 } catch (Exception e) {
                     log.error("[BQ-TOP-{}] Failed to clear previous rows for {} {}: {}", category, projectId, snapDate, e.getMessage());
@@ -684,7 +714,7 @@ public class BigQueryOptimizationService {
     /**
      * GcpMetricsController 호환용: BigQuery Optimization metrics 조회
      */
-    public BigQueryOptimizationDto getBigQueryOptimizationMetrics(String projectId, String targetYearMonth) {
+    public BigQueryOptimizationDto getBigQueryOptimizationMetrics(String projectId, String targetYearMonth, String period) {
         ensureTablesExist();
         String targetYm = (targetYearMonth != null && targetYearMonth.matches("^\\d{4}-\\d{2}$"))
                 ? targetYearMonth
@@ -755,19 +785,19 @@ public class BigQueryOptimizationService {
                 }
             }
 
+            // 월간: 조회 월 TOP 10 / 분기: 조회 월 포함 3개월의 월별 TOP 10을 합쳐 다시 TOP 10
+            // (분기 TOP 10에 드는 Job은 반드시 자기 달의 TOP 10 안에 있으므로 합쳐서 다시 뽑아도 결과가 같다)
+            List<String> topMonths = "quarterly".equalsIgnoreCase(period) ? months.subList(1, 4) : months.subList(3, 4);
             String topSql = String.format(
                 "SELECT * FROM `%s.%s.%s` " +
-                "WHERE project_id = @projectId AND report_year_month = @ym " +
-                "  AND snapshot_date = ( " +
-                "    SELECT MAX(snapshot_date) FROM `%s.%s.%s` WHERE project_id = @projectId AND report_year_month = @ym " +
-                "  ) " +
-                "ORDER BY query_category, rank ASC",
-                hostProjectId, datasetName, TOP_QUERIES_TABLE,
+                "WHERE project_id = @projectId AND report_year_month IN UNNEST(@topMonths) " +
+                "QUALIFY snapshot_date = MAX(snapshot_date) OVER (PARTITION BY report_year_month) " +
+                "ORDER BY query_category, report_year_month, rank ASC",
                 hostProjectId, datasetName, TOP_QUERIES_TABLE
             );
             TableResult topRes = bigQuery.query(QueryJobConfiguration.newBuilder(topSql)
                     .addNamedParameter("projectId", QueryParameterValue.string(pid))
-                    .addNamedParameter("ym", QueryParameterValue.string(targetYm))
+                    .addNamedParameter("topMonths", QueryParameterValue.array(topMonths.toArray(new String[0]), String.class))
                     .build());
             for (FieldValueList row : topRes.iterateAll()) {
                 BigQueryOptimizationDto.BigQueryJobItemDto item = BigQueryOptimizationDto.BigQueryJobItemDto.builder()
@@ -794,6 +824,10 @@ public class BigQueryOptimizationService {
                     dto.getHighSlotQueries().add(item);
                 }
             }
+            // 분류 기준값 내림차순으로 다시 정렬해 상위 10건만 남기고 순위를 다시 매긴다 (월간은 기존 순서 그대로)
+            dto.setHighCostQueries(topTen(dto.getHighCostQueries(), Comparator.comparingDouble(BigQueryOptimizationDto.BigQueryJobItemDto::getBytesProcessedGb)));
+            dto.setLongDurationQueries(topTen(dto.getLongDurationQueries(), Comparator.comparingDouble(BigQueryOptimizationDto.BigQueryJobItemDto::getExecutionTimeSeconds)));
+            dto.setHighSlotQueries(topTen(dto.getHighSlotQueries(), Comparator.comparingLong(BigQueryOptimizationDto.BigQueryJobItemDto::getTotalSlotMs)));
         } catch (Exception e) {
             log.error("Failed to query getBigQueryOptimizationMetrics for {}", targetYm, e);
         }
@@ -833,6 +867,42 @@ public class BigQueryOptimizationService {
             return res;
         }
         throw new IllegalArgumentException("등록된 GCP 프로젝트가 아님: " + projectId);
+    }
+
+    /**
+     * 1회성 재적재용: 전체 GCP 프로젝트의 지정 월 TOP 10을 프로젝트별로 순서대로 수집해 교체
+     */
+    public Map<String, Object> collectTopQueriesAllProjects(List<String> yearMonths) {
+        Map<String, Object> res = new LinkedHashMap<>();
+        for (InfraEnvironment env : infraEnvironmentService.getAllEnvironments()) {
+            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
+            String secret = infraEnvironmentService.getDecryptedSecret(env.getId());
+            if (secret == null || secret.isEmpty()) continue;
+            String customerName = (env.getCustomer() != null && env.getCustomer().getName() != null)
+                    ? env.getCustomer().getName() : "Unknown";
+            try {
+                GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(secret.getBytes()))
+                        .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
+                for (CloudProject project : env.getProjects()) {
+                    for (String ym : yearMonths) {
+                        collectTopQueriesForMonth(project.getProjectId(), customerName, credentials, YearMonth.parse(ym.trim()));
+                    }
+                    res.put(project.getProjectId(), customerName);
+                }
+            } catch (Exception e) {
+                log.error("[BQ-TOP] Reload failed for env {}: {}", env.getEnvironmentName(), e.getMessage());
+            }
+        }
+        return res;
+    }
+
+    private static List<BigQueryOptimizationDto.BigQueryJobItemDto> topTen(
+            List<BigQueryOptimizationDto.BigQueryJobItemDto> items, Comparator<BigQueryOptimizationDto.BigQueryJobItemDto> metric) {
+        List<BigQueryOptimizationDto.BigQueryJobItemDto> sorted = new ArrayList<>(items);
+        sorted.sort(metric.reversed());  // 안정 정렬: 값이 같으면 저장된 순위 순서 유지
+        List<BigQueryOptimizationDto.BigQueryJobItemDto> top = new ArrayList<>(sorted.subList(0, Math.min(10, sorted.size())));
+        for (int i = 0; i < top.size(); i++) top.get(i).setRank(i + 1);
+        return top;
     }
 
     /**

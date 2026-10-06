@@ -1016,6 +1016,8 @@ public class BigQueryBatchService {
                     // 22. GCP BigQuery 성능 및 비용 최적화 분석 메트릭 Upsert 수집 (전체 고객사 프로젝트 순회)
                     try {
                         bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapshotDate, projectId, customerName, credentials);
+                        // TOP 10(고비용·성능·슬롯)은 끝난 달 한 달치를 한 번만 수집
+                        bigQueryOptimizationService.collectCompletedMonthTopQueries(snapshotDate, projectId, customerName, credentials);
                         log.info("BigQuery Optimization Metrics: successfully upserted for project {}", projectId);
                     } catch (Exception e) {
                         log.error("Batch failed for BigQuery Optimization Metrics in project {}", projectId, e);

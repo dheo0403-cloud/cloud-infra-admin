@@ -35,9 +35,10 @@ public class GcpMetricsController {
     @GetMapping("/bigquery-optimization")
     public ResponseEntity<BigQueryOptimizationDto> getBigQueryOptimizationMetrics(
             @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String targetYearMonth) {
-        log.info("[API] Requesting GCP BigQuery Optimization metrics for target projectId: {}, targetYearMonth: {}", projectId, targetYearMonth);
-        BigQueryOptimizationDto metrics = bigQueryOptimizationService.getBigQueryOptimizationMetrics(projectId, targetYearMonth);
+            @RequestParam(required = false) String targetYearMonth,
+            @RequestParam(required = false, defaultValue = "monthly") String period) {
+        log.info("[API] Requesting GCP BigQuery Optimization metrics for target projectId: {}, targetYearMonth: {}, period: {}", projectId, targetYearMonth, period);
+        BigQueryOptimizationDto metrics = bigQueryOptimizationService.getBigQueryOptimizationMetrics(projectId, targetYearMonth, period);
         return ResponseEntity.ok(metrics);
     }
 

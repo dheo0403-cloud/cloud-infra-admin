@@ -6,20 +6,24 @@ interface BigQueryOptimizationPanelProps {
     targetYearMonth?: string;
     isEditMode?: boolean;
     onHideSection?: () => void;
+    // 분기 보고서 고객사: TOP 10을 조회 월 포함 3개월 기준으로 조회
+    isQuarterly?: boolean;
 }
 
 const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
     projectId,
     targetYearMonth,
     isEditMode = false,
-    onHideSection
+    onHideSection,
+    isQuarterly = false
 }) => {
+    const periodLabel = isQuarterly ? ' · 분기 3개월' : '';
     const [metrics, setMetrics] = useState<BigQueryOptimizationDto | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
 
     const fetchMetrics = async () => {
         try {
-            const res = await getBigQueryOptimizationMetrics(projectId, targetYearMonth);
+            const res = await getBigQueryOptimizationMetrics(projectId, targetYearMonth, isQuarterly ? 'quarterly' : 'monthly');
             if (res.data) {
                 setMetrics(res.data);
             }
@@ -32,7 +36,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
 
     useEffect(() => {
         fetchMetrics();
-    }, [projectId, targetYearMonth]);
+    }, [projectId, targetYearMonth, isQuarterly]);
 
     const data: BigQueryOptimizationDto = metrics || {
         projectId: projectId || '',
@@ -252,7 +256,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                             <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#1e293b' }}>
-                                <i className="fas fa-coins mr-1" style={{ color: '#d97706' }}></i>2. 고비용 쿼리 분석 (가장 많은 데이터 비용을 사용한 TOP 10)
+                                <i className="fas fa-coins mr-1" style={{ color: '#d97706' }}></i>2. 고비용 쿼리 분석 (가장 많은 데이터 비용을 사용한 TOP 10{periodLabel})
                             </span>
                             <span style={{ fontSize: '9.5px', color: '#64748b' }}>
                                 * 온디맨드 쿼리 요금($6.25/TB) 기준 정렬
@@ -318,7 +322,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                             <span style={{ fontSize: '11.5px', fontWeight: 700, color: '#1e293b' }}>
-                                <i className="fas fa-tachometer-alt mr-1" style={{ color: '#059669' }}></i>3. 쿼리 성능 및 병목 현상 분석 (실행 시간 TOP 10 & 슬롯 사용량 TOP 10)
+                                <i className="fas fa-tachometer-alt mr-1" style={{ color: '#059669' }}></i>3. 쿼리 성능 및 병목 현상 분석 (실행 시간 TOP 10 & 슬롯 사용량 TOP 10{periodLabel})
                             </span>
                         </div>
 

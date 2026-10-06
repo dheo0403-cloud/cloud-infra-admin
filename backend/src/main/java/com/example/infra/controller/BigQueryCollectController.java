@@ -34,4 +34,12 @@ public class BigQueryCollectController {
         log.info("[API] Collecting BigQuery optimization data for project {} months {}", projectId, months);
         return ResponseEntity.ok(bigQueryOptimizationService.collectProjectMonths(projectId, months));
     }
+
+    // 전체 GCP 프로젝트 TOP 10(고비용·성능·슬롯)만 지정 월로 재적재
+    // 예: POST /api/metrics/gcp/bigquery-optimization/top-queries/collect?months=2026-06,2026-07
+    @PostMapping("/bigquery-optimization/top-queries/collect")
+    public ResponseEntity<Map<String, Object>> collectTopQueries(@RequestParam List<String> months) {
+        log.info("[API] Collecting BigQuery TOP queries for all GCP projects months {}", months);
+        return ResponseEntity.ok(bigQueryOptimizationService.collectTopQueriesAllProjects(months));
+    }
 }
