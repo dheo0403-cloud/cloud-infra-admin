@@ -69,6 +69,7 @@ interface MonthlyReportData {
     sqlEngines: Record<string, number>;
     sqlTiers: Record<string, number>;
     sqlHaTypes: Record<string, number>;
+    sqlBackup?: { backup?: number; pitr?: number };
     storageSummary: Record<string, number>;
     bucketSecurity: Record<string, number>;
     lbSummary: Record<string, number>;
@@ -2110,10 +2111,17 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     {(() => {
                                         const sqlTot = reportData.sqlTotal || 0;
                                         const isSqlExist = sqlTot > 0;
-                                        const haCount = reportData.sqlHaTypes?.HA || 0;
-                                        const engineName = (reportData.sqlEngines && Object.keys(reportData.sqlEngines).length > 0)
-                                            ? Object.keys(reportData.sqlEngines).join(', ')
-                                            : (isSqlExist ? 'PostgreSQL' : '없음');
+                                        // 백엔드 키: "Regional (HA)" / "Zonal (Single)"
+                                        const haCount = reportData.sqlHaTypes?.['Regional (HA)'] || 0;
+                                        // 대표 엔진: 인스턴스 수가 가장 많은 엔진 (그 외 종류 수는 '외 N'으로 표시)
+                                        const engineEntries = Object.entries(reportData.sqlEngines || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+                                        const engineName = engineEntries.length === 0 ? '미수집'
+                                            : engineEntries[0][0] + (engineEntries.length > 1 ? ` 외 ${engineEntries.length - 1}` : '');
+                                        // 자동 백업·PITR: 수집된 달만 'N/M' 표시, 수집 전이면 '수집 전'
+                                        const backupCnt = reportData.sqlBackup?.backup;
+                                        const pitrCnt = reportData.sqlBackup?.pitr;
+                                        const backupText = backupCnt === undefined ? '수집 전' : `백업 ${backupCnt}/${sqlTot} · PITR ${pitrCnt ?? 0}/${sqlTot}`;
+                                        const backupAll = backupCnt !== undefined && backupCnt >= sqlTot && (pitrCnt ?? 0) >= sqlTot;
 
                                         return (
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', margin: 'auto 0' }}>
@@ -2207,14 +2215,14 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                         <div>
                                                             <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>자동 백업 및 PITR 복구</span>
                                                             <span style={{ display: 'block', fontSize: '9px', color: isSqlExist ? '#5b21b6' : '#64748b', marginTop: '1px' }}>
-                                                                {isSqlExist ? 'Point-in-Time 복구 활성화' : '미사용 (백업 대상 DB 없음)'}
+                                                                {isSqlExist ? '활성 인스턴스 수 / 기본 인스턴스 수' : '미사용 (백업 대상 DB 없음)'}
                                                             </span>
                                                         </div>
                                                     </div>
                                                     <div>
                                                         {isSqlExist ? (
-                                                            <span style={{ fontSize: '11px', fontWeight: 800, color: '#6d28d9' }}>
-                                                                활성화 (정상)
+                                                            <span style={{ fontSize: '11px', fontWeight: 800, color: backupCnt === undefined ? '#64748b' : (backupAll ? '#6d28d9' : '#dc2626') }}>
+                                                                {backupText}
                                                             </span>
                                                         ) : (
                                                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>

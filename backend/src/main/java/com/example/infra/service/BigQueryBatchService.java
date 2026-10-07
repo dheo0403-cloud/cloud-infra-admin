@@ -771,6 +771,15 @@ public class BigQueryBatchService {
                             String diskType = getStringFromStruct(data, "settings", "dataDiskType");
                             String diskKey = (diskType != null && diskType.contains("HDD")) ? "SQL_Storage_HDD" : "SQL_Storage_SSD";
                             sqlCounts.put(diskKey, sqlCounts.getOrDefault(diskKey, 0) + 1);
+
+                            // 자동 백업 / PITR: 기본(Primary) 인스턴스만 집계 (읽기 복제본은 백업 대상 아님)
+                            // MySQL은 바이너리 로그, 그 외 엔진은 pointInTimeRecoveryEnabled
+                            if ("Primary".equals(typeName)) {
+                                sqlCounts.merge("SQL_Backup_Enabled", getBoolFromStruct(data, "settings", "backupConfiguration", "enabled") ? 1 : 0, Integer::sum);
+                                boolean pitr = getBoolFromStruct(data, "settings", "backupConfiguration", "binaryLogEnabled")
+                                        || getBoolFromStruct(data, "settings", "backupConfiguration", "pointInTimeRecoveryEnabled");
+                                sqlCounts.merge("SQL_PITR_Enabled", pitr ? 1 : 0, Integer::sum);
+                            }
                         }
 
                         for (Map.Entry<String, Integer> entry : sqlCounts.entrySet()) {
@@ -2864,6 +2873,11 @@ public class BigQueryBatchService {
     private String getStringFromStruct(com.google.protobuf.Struct struct, String... path) {
         com.google.protobuf.Value v = getValueFromStruct(struct, path);
         return v != null ? v.getStringValue() : "";
+    }
+
+    private boolean getBoolFromStruct(com.google.protobuf.Struct struct, String... path) {
+        com.google.protobuf.Value v = getValueFromStruct(struct, path);
+        return v != null && v.getBoolValue();
     }
 
     private com.google.protobuf.Value getValueFromStruct(com.google.protobuf.Struct struct, String... path) {

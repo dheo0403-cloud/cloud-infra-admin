@@ -57,6 +57,7 @@ public class MonthlyReportDto {
     private Map<String, Integer> sqlEngines;
     private Map<String, Integer> sqlTiers;
     private Map<String, Integer> sqlHaTypes;
+    private Map<String, Integer> sqlBackup; // backup / pitr 활성 기본 인스턴스 수 (수집 전이면 빈 맵)
 
     private Map<String, Integer> storageSummary;
     private Map<String, Integer> bucketSecurity;

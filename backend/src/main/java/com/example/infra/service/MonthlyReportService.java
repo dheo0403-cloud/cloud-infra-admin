@@ -329,6 +329,13 @@ public class MonthlyReportService {
         Map<String, Integer> sqlHaTypes = new HashMap<>();
         sqlHaTypes.put("Regional (HA)", getLatestValue(monthlyAssets, fullYearMonths, "SQL_Availability_Regional"));
         sqlHaTypes.put("Zonal (Single)", getLatestValue(monthlyAssets, fullYearMonths, "SQL_Availability_Zonal"));
+        // 자동 백업·PITR 활성 인스턴스 수 (수집 전 달은 키 없음 → 화면에서 '수집 전' 표시)
+        Map<String, Integer> sqlBackup = new HashMap<>();
+        if (!fullYearMonths.isEmpty()) {
+            Map<String, Integer> latestSql = monthlyAssets.getOrDefault(fullYearMonths.get(fullYearMonths.size() - 1), Collections.emptyMap());
+            if (latestSql.containsKey("SQL_Backup_Enabled")) sqlBackup.put("backup", latestSql.get("SQL_Backup_Enabled"));
+            if (latestSql.containsKey("SQL_PITR_Enabled")) sqlBackup.put("pitr", latestSql.get("SQL_PITR_Enabled"));
+        }
 
         Map<String, Integer> storageSummary = new HashMap<>();
         storageSummary.put("diskTotal", getLatestValue(monthlyAssets, fullYearMonths, "Storage_Disk_Total"));
@@ -515,6 +522,7 @@ public class MonthlyReportService {
                 .sqlEngines(sqlEngines)
                 .sqlTiers(sqlTiers)
                 .sqlHaTypes(sqlHaTypes)
+                .sqlBackup(sqlBackup)
                 .storageSummary(storageSummary)
                 .bucketSecurity(bucketSecurity)
                 .lbSummary(lbSummary)
