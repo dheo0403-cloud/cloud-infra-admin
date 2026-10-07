@@ -277,15 +277,8 @@ public class BigQueryBatchService {
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_Health_Healthy_Total", 0);
                         }
 
-                        // 전날까지 달력 30일 HTTP 5XX 에러 사전 집계 및 적재
-                        try {
-                            long http5xx_30d = gcpResourceFetcher.getLbHttp5xxCount(credentials, projectId, dayEnd - 30L * 86400, dayEnd);
-                            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http5xx_30d);
-                            log.info("LB HTTP 5XX 30-day error count: {} for project {}", http5xx_30d, projectId);
-                        } catch (Exception e) {
-                            log.warn("Failed to collect LB HTTP 5XX 30-day error count for project {}: {}", projectId, e.getMessage());
-                            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", 0);
-                        }
+                        // 전날까지 달력 30일 HTTP 5XX 에러 (합계·HTTP·HTTPS) 적재. 조회 실패 시 0으로 저장하지 않음
+                        insertLbHttp5xx(snapshotDate, projectId, customerName, credentials, rules, dayEnd - 30L * 86400, dayEnd);
 
                         log.info("Successfully inserted daily batch for {} / LoadBalancer", projectId);
                     } catch (Exception e) {
@@ -1448,12 +1441,11 @@ public class BigQueryBatchService {
                     String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
 
                     try {
-                        long http5xx_30d = gcpResourceFetcher.getLbHttp5xxLast30DaysCount(credentials, projectId);
-                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) http5xx_30d);
-                        log.info("LB HTTP 5XX (response_code_class=500) 30-day count for {} ({}): {}", projectId, customerName, http5xx_30d);
+                        long now = java.time.Instant.now().getEpochSecond();
+                        insertLbHttp5xx(snapshotDate, projectId, customerName, credentials,
+                                gcpResourceFetcher.getForwardingRules(credentials, projectId), now - 30L * 86400, now);
                     } catch (Exception e) {
                         log.warn("Failed to collect LB HTTP 5XX for project {}: {}", projectId, e.getMessage());
-                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", 0);
                     }
                 }
             } catch (Exception e) {
@@ -1461,6 +1453,31 @@ public class BigQueryBatchService {
             }
         }
         log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 5XX 에러 재수집 완료 ===");
+    }
+
+    /** 포워딩 규칙 이름 → HTTPS 여부 (targetHttpsProxies = HTTPS, targetHttpProxies = HTTP, 그 외 규칙은 제외) */
+    static Map<String, Boolean> lbHttpsByRule(List<ForwardingRule> rules) {
+        Map<String, Boolean> map = new HashMap<>();
+        for (ForwardingRule rule : rules) {
+            String target = rule.getTarget();
+            if (target == null) continue;
+            if (target.contains("/targetHttpsProxies/")) map.put(rule.getName(), true);
+            else if (target.contains("/targetHttpProxies/")) map.put(rule.getName(), false);
+        }
+        return map;
+    }
+
+    /** LB HTTP 5XX 합계·HTTP·HTTPS 적재. 조회 실패 시 아무것도 쓰지 않음 (같은 달 이전 날짜 값이 보고서에 남음) */
+    private void insertLbHttp5xx(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials,
+                                 List<ForwardingRule> rules, long startSeconds, long endSeconds) {
+        try {
+            long[] c = gcpResourceFetcher.getLbHttp5xxCounts(credentials, projectId, startSeconds, endSeconds, lbHttpsByRule(rules));
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) c[0]);
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Http", (int) c[1]);
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Https", (int) c[2]);
+        } catch (Exception e) {
+            log.warn("Failed to collect LB HTTP 5XX 30-day error count for project {}: {}", projectId, e.getMessage());
+        }
     }
 
     /**

@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import com.google.cloud.compute.v1.UrlMap;
 import com.google.cloud.compute.v1.UrlMapsClient;
 import com.google.cloud.compute.v1.UrlMapsSettings;
@@ -973,169 +972,47 @@ public class GcpResourceFetcher {
     }
 
     /**
-     * GCP Cloud Logging API / Monitoring API - 최근 30일간 Load Balancer HTTP 5XX 에러 총합 조회
-     * GCP Log Explorer 쿼리(resource.type="http_load_balancer" AND httpRequest.status>=500 AND httpRequest.status<600)와
-     * 동일한 조건으로 Cloud Logging API direct query를 수행하여 최근 30일간의 HTTP 5XX 에러(500, 502, 503, 504 등) 발생 건수를 수집합니다.
-     * Logging API 실패 시 기존 Cloud Monitoring 시계열 조회를 폴백(fallback)으로 수행합니다.
+     * Load Balancer HTTP 5XX 에러 수 - 지정 구간 [startSeconds, endSeconds) (Cloud Monitoring)
+     * 콘솔 측정항목 탐색기(https/request_count, response_code_class=500, 그룹화 합계·by 없음)와 같은 값.
+     * HTTP(80)·HTTPS(443) 포워딩 규칙은 서로 다른 요청이므로 모두 합산하고,
+     * 규칙이 연결된 프록시 종류(httpsByRule)로 HTTP/HTTPS를 나눈다. 맵에 없는 규칙(삭제됨 등)은 합계에만 포함.
      *
-     * @param credentials GCP 서비스 계정 인증 정보
-     * @param projectId   GCP 프로젝트 ID
-     * @return 최근 30일간의 HTTP 5XX 에러 총 발생 건수
+     * @return {합계, HTTP, HTTPS}. 조회 실패 시 예외 (0으로 저장하지 않도록)
      */
-    /**
-     * Load Balancer - 최근 30일간 HTTP 5XX 에러 총 건수 집계 (Cloud Logging / Cloud Monitoring)
-     *
-     * [데이터 정합성 보정 로직]
-     * 동일 URL Map(로드밸런서)에 HTTP(80) 및 HTTPS(443) 포워딩 룰이 페어로 연결된 경우,
-     * 각 포워딩 룰별 시계열(TimeSeries) 스트림이 중복 합산되어 수치가 2배로 뻥튀기되는 현상을 방지합니다.
-     * URL Map 단위로 그룹화한 뒤 HTTPS 대표 스트림을 선별 집계하여 실제 GCP 콘솔 수치와 100% 일치하도록 보정합니다.
-     *
-     * @param credentials GCP 서비스 계정 인증 정보
-     * @param projectId   GCP 프로젝트 ID
-     * @return 최근 30일간의 HTTP 5XX 에러 총 발생 건수 (중복 제거 완료)
-     */
-    public long getLbHttp500Last30DaysCount(GoogleCredentials credentials, String projectId) {
-        return getLbHttp5xxLast30DaysCount(credentials, projectId);
-    }
-
-    public long getLbHttp5xxLast30DaysCount(GoogleCredentials credentials, String projectId) {
-        long nowSeconds = java.time.Instant.now().getEpochSecond();
-        return getLbHttp5xxCount(credentials, projectId, nowSeconds - 30L * 86400, nowSeconds);
-    }
-
-    /**
-     * 지정 구간 [startSeconds, endSeconds)의 LB HTTP 5XX 에러 수 (일 배치는 전날 기준 달력 30일을 넘긴다)
-     */
-    public long getLbHttp5xxCount(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds) {
-        long total5xxCount = 0;
-
-        // 1. Cloud Logging API Direct Query 시도
-        try {
-            com.google.cloud.logging.Logging logging = com.google.cloud.logging.LoggingOptions.newBuilder()
-                    .setCredentials(credentials)
-                    .setProjectId(projectId)
-                    .build()
-                    .getService();
-
-            String startIso = java.time.Instant.ofEpochSecond(startSeconds).toString();
-            String endIso = java.time.Instant.ofEpochSecond(endSeconds).toString();
-            // HTTP 301/302 리다이렉트를 제외한 실제 HTTP 5XX 서버 에러(500~599) 및 HTTPS/백엔드 응답 기준 필터링
-            String logFilter = "(resource.type=\"http_load_balancer\" OR resource.type=\"http_external_lb_rule\" OR resource.type=\"https_lb_rule\") " +
-                    "AND httpRequest.status>=500 AND httpRequest.status<600 AND timestamp>=\"" + startIso + "\" AND timestamp<\"" + endIso + "\"";
-
-            com.google.api.gax.paging.Page<com.google.cloud.logging.LogEntry> entries = logging.listLogEntries(
-                    com.google.cloud.logging.Logging.EntryListOption.filter(logFilter),
-                    com.google.cloud.logging.Logging.EntryListOption.pageSize(1000)
-            );
-
-            long count = 0;
-            java.util.Set<String> seenInsertIds = new java.util.HashSet<>();
-            for (com.google.cloud.logging.LogEntry entry : entries.iterateAll()) {
-                String insertId = entry.getInsertId();
-                if (insertId == null || seenInsertIds.add(insertId)) {
-                    count++;
-                }
-            }
-
-            if (count > 0) {
-                log.info("Cloud Logging LB HTTP 5XX 30-day error count for project {}: {}", projectId, count);
-                return count;
-            }
-        } catch (Exception e) {
-            log.warn("Failed to fetch 30-day HTTP 5XX error count from Cloud Logging for project {}. Falling back to Cloud Monitoring: {}", projectId, e.getMessage());
-        }
-
-        // 2. Cloud Monitoring API (Fallback & 고정밀 집계)
-        try {
-            com.google.cloud.monitoring.v3.MetricServiceSettings settings = com.google.cloud.monitoring.v3.MetricServiceSettings.newBuilder()
-                    .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
+    public long[] getLbHttp5xxCounts(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds,
+                                     Map<String, Boolean> httpsByRule) throws java.io.IOException {
+        com.google.cloud.monitoring.v3.MetricServiceSettings settings = com.google.cloud.monitoring.v3.MetricServiceSettings.newBuilder()
+                .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
+                .build();
+        try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
+            com.google.monitoring.v3.ListTimeSeriesRequest request = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                    .setName(com.google.monitoring.v3.ProjectName.of(projectId).toString())
+                    .setFilter("metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code_class = \"500\"")
+                    .setInterval(com.google.monitoring.v3.TimeInterval.newBuilder()
+                            .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds))
+                            .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds)))
+                    // 구간 전체를 한 칸으로 합산
+                    .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                            .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(endSeconds - startSeconds))
+                            .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                            .setCrossSeriesReducer(com.google.monitoring.v3.Aggregation.Reducer.REDUCE_SUM)
+                            .addGroupByFields("resource.label.forwarding_rule_name"))
                     .build();
-            try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
-                String projectName = com.google.monitoring.v3.ProjectName.of(projectId).toString();
 
-                com.google.monitoring.v3.TimeInterval interval = com.google.monitoring.v3.TimeInterval.newBuilder()
-                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds).build())
-                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds).build())
-                        .build();
-
-                // HTTP 5XX 에러 클래스(response_code_class = "500" 또는 500~599 전체) 대상 필터링
-                String filter = "metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code_class = \"500\"";
-
-                // 1일(86400초) 단위 ALIGN_SUM 정렬 설정
-                com.google.monitoring.v3.Aggregation aggregation = com.google.monitoring.v3.Aggregation.newBuilder()
-                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(86400).build())
-                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
-                        .build();
-
-                com.google.monitoring.v3.ListTimeSeriesRequest request = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
-                        .setName(projectName)
-                        .setFilter(filter)
-                        .setInterval(interval)
-                        .setAggregation(aggregation)
-                        .setView(com.google.monitoring.v3.ListTimeSeriesRequest.TimeSeriesView.FULL)
-                        .build();
-
-                // URL Map(논리적 LB)별 -> 포워딩 룰별 집계 맵 (urlMap -> { forwardingRule -> count })
-                Map<String, Map<String, Long>> urlMapToRuleCount = new LinkedHashMap<>();
-
-                for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(request).iterateAll()) {
-                    String urlMap = ts.getResource().getLabelsOrDefault("url_map_name", "default_lb");
-                    String forwardingRule = ts.getResource().getLabelsOrDefault("forwarding_rule_name", "");
-                    String resourceType = ts.getResource().getType();
-
-                    long seriesSum = 0;
-                    for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
-                        if (p.getValue().hasInt64Value()) {
-                            seriesSum += p.getValue().getInt64Value();
-                        } else if (p.getValue().hasDoubleValue()) {
-                            seriesSum += (long) p.getValue().getDoubleValue();
-                        }
-                    }
-
-                    String ruleKey = !forwardingRule.isEmpty() ? forwardingRule : resourceType;
-                    urlMapToRuleCount.computeIfAbsent(urlMap, k -> new LinkedHashMap<>())
-                            .merge(ruleKey, seriesSum, Long::sum);
+            long total = 0, http = 0, https = 0;
+            for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(request).iterateAll()) {
+                long sum = 0;
+                for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                    sum += p.getValue().hasInt64Value() ? p.getValue().getInt64Value() : (long) p.getValue().getDoubleValue();
                 }
-
-                // URL Map 단위로 HTTP/HTTPS 포워딩 룰 중복 제거 및 고유 에러 건수 산출
-                for (Map.Entry<String, Map<String, Long>> entry : urlMapToRuleCount.entrySet()) {
-                    String urlMap = entry.getKey();
-                    Map<String, Long> ruleCounts = entry.getValue();
-
-                    if (ruleCounts.isEmpty()) continue;
-
-                    if (ruleCounts.size() == 1) {
-                        // 단일 포워딩 룰인 경우 그대로 반영
-                        long c = ruleCounts.values().iterator().next();
-                        total5xxCount += c;
-                        log.debug("LB 5XX error single rule [{} / {}]: {}", urlMap, ruleCounts.keySet().iterator().next(), c);
-                    } else {
-                        // 동일 URL Map에 HTTP 및 HTTPS 포워딩 룰이 중복 존재하는 경우:
-                        // HTTPS 포워딩 룰(443/https)을 우선 선별하여 중복 합산 방지 (2배 뻥튀기 버그 해결)
-                        Optional<Long> httpsCount = ruleCounts.entrySet().stream()
-                                .filter(e -> e.getKey().toLowerCase().contains("https") || e.getKey().contains("443") || e.getKey().contains("ssl"))
-                                .map(Map.Entry::getValue)
-                                .findFirst();
-
-                        if (httpsCount.isPresent()) {
-                            long c = httpsCount.get();
-                            total5xxCount += c;
-                            log.info("LB 5XX error deduplicated [{} -> selected HTTPS rule]: {}", urlMap, c);
-                        } else {
-                            // HTTPS 키워드가 명시되지 않은 경우 최대값을 대표값으로 취하여 중복 합산 차단
-                            long maxCount = ruleCounts.values().stream().max(Long::compare).orElse(0L);
-                            total5xxCount += maxCount;
-                            log.info("LB 5XX error deduplicated [{} -> max rule count]: {}", urlMap, maxCount);
-                        }
-                    }
-                }
+                total += sum;
+                Boolean isHttps = httpsByRule.get(ts.getResource().getLabelsOrDefault("forwarding_rule_name", ""));
+                if (Boolean.TRUE.equals(isHttps)) https += sum;
+                else if (Boolean.FALSE.equals(isHttps)) http += sum;
             }
-        } catch (Exception e) {
-            log.warn("Failed to fetch 30-day HTTP 5XX error count from Cloud Monitoring for project {}: {}", projectId, e.getMessage());
+            log.info("LB HTTP 5XX for project {}: total={}, http={}, https={}", projectId, total, http, https);
+            return new long[]{total, http, https};
         }
-
-        log.info("Final deduplicated LB HTTP 5XX 30-day error count for project {}: {}", projectId, total5xxCount);
-        return total5xxCount;
     }
 
     /**

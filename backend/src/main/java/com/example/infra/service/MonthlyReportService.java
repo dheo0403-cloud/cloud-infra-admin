@@ -359,6 +359,12 @@ public class MonthlyReportService {
         lbSummary.put("healthUnhealthyTotal", getLatestValue(monthlyAssets, fullYearMonths, "LB_Health_Unhealthy_Total"));
         lbSummary.put("healthHealthyTotal", getLatestValue(monthlyAssets, fullYearMonths, "LB_Health_Healthy_Total"));
         lbSummary.put("http500Last30Days", getLatestValue(monthlyAssets, fullYearMonths, "LB_HTTP_500_30D_Total"));
+        // HTTP/HTTPS 분리 값 (수집 전 달은 키 없음 → 화면에서 합계만 표시)
+        if (!fullYearMonths.isEmpty()) {
+            Map<String, Integer> latestLb = monthlyAssets.getOrDefault(fullYearMonths.get(fullYearMonths.size() - 1), Collections.emptyMap());
+            if (latestLb.containsKey("LB_HTTP_500_30D_Http")) lbSummary.put("http500Http", latestLb.get("LB_HTTP_500_30D_Http"));
+            if (latestLb.containsKey("LB_HTTP_500_30D_Https")) lbSummary.put("http500Https", latestLb.get("LB_HTTP_500_30D_Https"));
+        }
 
         Map<String, Integer> ipSummary = new HashMap<>();
         int extUsed = getLatestValue(monthlyAssets, fullYearMonths, "IP_Static_Used");

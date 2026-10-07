@@ -1623,6 +1623,14 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const isLbExist = lbCount > 0;
                                     const unhealthyCount = reportData.lbSummary?.healthUnhealthyTotal || 0;
                                     const http500Count = reportData.lbSummary?.http500Last30Days || 0;
+                                    // HTTP/HTTPS 분리 값 (수집 전 달은 undefined → 합계만 표시), 삭제된 규칙 등 분류 불가분은 '기타'
+                                    const http500Http = reportData.lbSummary?.http500Http;
+                                    const http500Https = reportData.lbSummary?.http500Https;
+                                    const hasSplit = http500Http !== undefined && http500Https !== undefined;
+                                    const http500Other = hasSplit ? http500Count - http500Http - http500Https : 0;
+                                    const http500Detail = hasSplit
+                                        ? `HTTP ${http500Http.toLocaleString()} · HTTPS ${http500Https.toLocaleString()}${http500Other > 0 ? ` · 기타 ${http500Other.toLocaleString()}` : ''}`
+                                        : `최근 30일간 HTTP 5XX 에러 ${http500Count.toLocaleString()}건 감지됨`;
                                     return (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 'auto 0' }}>
                                             {/* Horizontal Card 1: 30-Day HTTP 500 Error Metric */}
@@ -1645,7 +1653,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 HTTP 5XX 에러</span>
                                                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
-                                                            {isLbExist ? (http500Count > 0 ? `최근 30일간 HTTP 5XX 에러 ${http500Count}건 감지됨` : 'HTTP 5XX 서버 응답 트래픽 정상') : '연결된 로드밸런서 타겟 없음'}
+                                                            {isLbExist ? (http500Count > 0 ? http500Detail : 'HTTP 5XX 서버 응답 트래픽 정상') : '연결된 로드밸런서 타겟 없음'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1653,7 +1661,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     {isLbExist ? (
                                                         http500Count > 0 ? (
                                                             <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c', backgroundColor: '#fee2e2', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fca5a5' }}>
-                                                                <i className="fas fa-exclamation-triangle mr-1"></i>{http500Count}건 발생
+                                                                <i className="fas fa-exclamation-triangle mr-1"></i>{http500Count.toLocaleString()}건 발생
                                                             </span>
                                                         ) : (
                                                             <span style={{ fontSize: '12px', fontWeight: 800, color: '#15803d', backgroundColor: '#dcfce7', padding: '3px 10px', borderRadius: '6px', border: '1px solid #86efac' }}>
