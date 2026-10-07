@@ -365,6 +365,9 @@ public class MonthlyReportService {
             if (latestLb.containsKey("LB_HTTP_500_30D_Http")) lbSummary.put("http500Http", latestLb.get("LB_HTTP_500_30D_Http"));
             if (latestLb.containsKey("LB_HTTP_500_30D_Https")) lbSummary.put("http500Https", latestLb.get("LB_HTTP_500_30D_Https"));
             if (latestLb.containsKey("LB_HTTP_500_30D_Internal")) lbSummary.put("http500Internal", latestLb.get("LB_HTTP_500_30D_Internal"));
+            // 외부/내부 Application LB 수 (5XX 지표 대상 여부, 수집 전 달은 키 없음)
+            if (latestLb.containsKey("LB_App_External")) lbSummary.put("appExternal", latestLb.get("LB_App_External"));
+            if (latestLb.containsKey("LB_App_Internal")) lbSummary.put("appInternal", latestLb.get("LB_App_Internal"));
         }
 
         Map<String, Integer> ipSummary = new HashMap<>();

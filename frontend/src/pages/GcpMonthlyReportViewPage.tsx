@@ -1620,7 +1620,10 @@ const GcpMonthlyReportViewPage: React.FC = () => {
 
                                 {(() => {
                                     const lbCount = reportData.lbTotal || (reportData.lbSummary?.total || 0);
+                                    // 외부 줄은 외부 Application LB가 있을 때만 (수집 전 달은 기존처럼 전체 LB 수 기준)
+                                    const appExternal = reportData.lbSummary?.appExternal;
                                     const isLbExist = lbCount > 0;
+                                    const hasExternalAlb = appExternal !== undefined ? appExternal > 0 || (reportData.lbSummary?.http500Last30Days || 0) > 0 : isLbExist;
                                     const unhealthyCount = reportData.lbSummary?.healthUnhealthyTotal || 0;
                                     const http500Count = reportData.lbSummary?.http500Last30Days || 0;
                                     // HTTP/HTTPS 분리 값 (수집 전 달은 undefined → 합계만 표시), 삭제된 규칙 등 분류 불가분은 '기타'
@@ -1631,34 +1634,37 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const http500Detail = hasSplit
                                         ? `HTTP ${http500Http.toLocaleString()} · HTTPS ${http500Https.toLocaleString()}${http500Other > 0 ? ` · 기타 ${http500Other.toLocaleString()}` : ''}`
                                         : `최근 30일간 HTTP 5XX 에러 ${http500Count.toLocaleString()}건 감지됨`;
+                                    // 5XX 수집 전 달(분리 값·ALB 수 키 없음, 값 0)은 '정상'이 아니라 '수집 전'
+                                    const extNotCollected = !hasSplit && appExternal === undefined && http500Count === 0;
+                                    const extActive = hasExternalAlb && !extNotCollected;
                                     return (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 'auto 0' }}>
                                             {/* Horizontal Card 1: 30-Day HTTP 500 Error Metric */}
                                             <div style={{
                                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px',
-                                                backgroundColor: isLbExist ? (http500Count > 0 ? '#fef2f2' : '#f0fdf4') : '#f8fafc',
-                                                border: isLbExist ? (http500Count > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0') : '1px solid #e2e8f0',
+                                                backgroundColor: extActive ? (http500Count > 0 ? '#fef2f2' : '#f0fdf4') : '#f8fafc',
+                                                border: extActive ? (http500Count > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0') : '1px solid #e2e8f0',
                                                 borderRadius: '8px', position: 'relative'
                                             }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isLbExist ? (http500Count > 0 ? '#ef4444' : '#10b981') : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
+                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: extActive ? (http500Count > 0 ? '#ef4444' : '#10b981') : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
                                                     <div style={{
                                                         width: '32px', height: '32px', borderRadius: '50%',
-                                                        backgroundColor: isLbExist ? (http500Count > 0 ? '#fee2e2' : '#dcfce7') : '#f1f5f9',
+                                                        backgroundColor: extActive ? (http500Count > 0 ? '#fee2e2' : '#dcfce7') : '#f1f5f9',
                                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        color: isLbExist ? (http500Count > 0 ? '#dc2626' : '#16a34a') : '#64748b', fontSize: '13px'
+                                                        color: extActive ? (http500Count > 0 ? '#dc2626' : '#16a34a') : '#64748b', fontSize: '13px'
                                                     }}>
                                                         <i className="fas fa-exclamation-triangle"></i>
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 외부 LB 5XX 에러</span>
                                                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
-                                                            {isLbExist ? (http500Count > 0 ? http500Detail : 'HTTP 5XX 서버 응답 트래픽 정상') : '연결된 로드밸런서 타겟 없음'}
+                                                            {extActive ? (http500Count > 0 ? http500Detail : 'HTTP 5XX 서버 응답 트래픽 정상') : extNotCollected ? '외부 LB 5XX 수집 전' : '연결된 외부 로드밸런서 없음'}
                                                         </span>
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
-                                                    {isLbExist ? (
+                                                    {extActive ? (
                                                         http500Count > 0 ? (
                                                             <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c', backgroundColor: '#fee2e2', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fca5a5' }}>
                                                                 <i className="fas fa-exclamation-triangle mr-1"></i>{http500Count.toLocaleString()}건 발생
@@ -1670,7 +1676,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                         )
                                                     ) : (
                                                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                                                            N/A (LB 미사용)
+                                                            {extNotCollected ? '수집 전' : 'N/A (외부 LB 없음)'}
                                                         </span>
                                                     )}
                                                 </div>
@@ -1679,7 +1685,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                             {/* Horizontal Card 1-2: 내부 LB 30일 5XX (수집 전 달은 '수집 전', 내부 LB 없으면 N/A) */}
                                             {(() => {
                                                 const internal5xx = reportData.lbSummary?.http500Internal;
-                                                const hasInternalLb = (reportData.lbSummary?.internal || 0) > 0;
+                                                const appInternal = reportData.lbSummary?.appInternal;
+                                                const hasInternalLb = (appInternal !== undefined ? appInternal : (reportData.lbSummary?.internal || 0)) > 0;
                                                 const tone = internal5xx === undefined || (!hasInternalLb && internal5xx === 0) ? 'none' : internal5xx > 0 ? 'bad' : 'ok';
                                                 const c = { bad: ['#fef2f2', '#fecaca', '#ef4444', '#fee2e2', '#dc2626'], ok: ['#f0fdf4', '#bbf7d0', '#10b981', '#dcfce7', '#16a34a'], none: ['#f8fafc', '#e2e8f0', '#94a3b8', '#f1f5f9', '#64748b'] }[tone];
                                                 return (

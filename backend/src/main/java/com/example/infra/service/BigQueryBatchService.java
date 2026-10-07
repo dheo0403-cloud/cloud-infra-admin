@@ -145,123 +145,11 @@ public class BigQueryBatchService {
                         Map<String, String> httpProxyToUrlMap  = gcpResourceFetcher.getTargetHttpProxyUrlMapMap(credentials, projectId);
                         Map<String, String> httpsProxyToUrlMap = gcpResourceFetcher.getTargetHttpsProxyUrlMapMap(credentials, projectId);
 
-                        // 논리적 LB 단위로 그루핑: key = (urlMapName | backendServiceName | fallback:name) + "@" + region
-                        Map<String, List<ForwardingRule>> groupedRules = new java.util.LinkedHashMap<>();
-
-                        for (ForwardingRule rule : rules) {
-                            String scheme = rule.getLoadBalancingScheme();
-                            // Private Service Connect 및 scheme 없는 항목 제외
-                            if (scheme == null || scheme.isEmpty()) continue;
-                            // Cloud VPN Gateway 제외
-                            String target = rule.getTarget();
-                            if (target != null && target.contains("/targetVpnGateways/")) continue;
-                            // Exclude Private Service Connect endpoints - these appear as forwarding rules but aren't user-facing LBs
-                            if (target != null && target.contains("/serviceAttachments/")) continue;
-
-                            // 리전 추출
-                            String regionRaw = rule.getRegion();
-                            String regionSuffix;
-                            if (regionRaw == null || regionRaw.isEmpty()) {
-                                regionSuffix = "@global";
-                            } else {
-                                regionSuffix = "@" + regionRaw.substring(regionRaw.lastIndexOf("/") + 1);
-                            }
-
-                            String canonicalKey;
-                            if (target != null && target.contains("/targetHttpsProxies/")) {
-                                String proxyName = target.substring(target.lastIndexOf("/") + 1);
-                                String urlMapName = httpsProxyToUrlMap.get(proxyName);
-                                canonicalKey = "urlmap:" + (urlMapName != null ? urlMapName : proxyName) + regionSuffix;
-                            } else if (target != null && target.contains("/targetHttpProxies/")) {
-                                String proxyName = target.substring(target.lastIndexOf("/") + 1);
-                                String urlMapName = httpProxyToUrlMap.get(proxyName);
-                                canonicalKey = "urlmap:" + (urlMapName != null ? urlMapName : proxyName) + regionSuffix;
-                            } else if (target != null && (target.contains("/targetTcpProxies/") || target.contains("/targetSslProxies/") || target.contains("/targetGrpcProxies/"))) {
-                                // L4 proxy-based LB: target proxy name = canonical key
-                                String proxyName = target.substring(target.lastIndexOf("/") + 1);
-                                canonicalKey = "proxy:" + proxyName + regionSuffix;
-                            } else if (target != null && target.contains("/targetPools/")) {
-                                // Legacy 외부 Network LB (Target Pool 기반): 하나의 target pool에 TCP/UDP 등 여러 forwarding rule이 연결될 수 있음
-                                String poolName = target.substring(target.lastIndexOf("/") + 1);
-                                canonicalKey = "pool:" + poolName + regionSuffix;
-                            } else if (rule.hasBackendService() && !rule.getBackendService().isEmpty()) {
-                                // Network Pass-through LB: backendService 직접 참조
-                                String bs = rule.getBackendService();
-                                canonicalKey = "bs:" + bs.substring(bs.lastIndexOf("/") + 1) + regionSuffix;
-                            } else {
-                                // 기타 fallback: forwarding rule 이름 사용
-                                canonicalKey = "name:" + rule.getName() + regionSuffix;
-                            }
-
-                            groupedRules.computeIfAbsent(canonicalKey, k -> new ArrayList<>()).add(rule);
-                        }
-
-                        Map<String, Integer> lbCounts = new HashMap<>();
-                        int totalLoadBalancers = groupedRules.size();
-                        log.debug("LB grouping for {}: {} forwarding rules -> {} logical LBs, keys={}",
-                                projectId, rules.size(), totalLoadBalancers, groupedRules.keySet());
-
-                        for (Map.Entry<String, List<ForwardingRule>> entry : groupedRules.entrySet()) {
-                            List<ForwardingRule> group = entry.getValue();
-
-                            // Access Type (Internal/External)
-                            boolean isInternal = false;
-                            for (ForwardingRule rule : group) {
-                                String s = rule.getLoadBalancingScheme();
-                                if (s != null && s.toUpperCase().contains("INTERNAL")) {
-                                    isInternal = true;
-                                    break;
-                                }
-                            }
-                            if (isInternal) {
-                                lbCounts.put("LB_Access_Internal", lbCounts.getOrDefault("LB_Access_Internal", 0) + 1);
-                            } else {
-                                lbCounts.put("LB_Access_External", lbCounts.getOrDefault("LB_Access_External", 0) + 1);
-                            }
-
-                            // Service Type (Application/Network)
-                            boolean isApplication = false;
-                            for (ForwardingRule rule : group) {
-                                String s = rule.getLoadBalancingScheme();
-                                if (s != null && (s.toUpperCase().contains("EXTERNAL_MANAGED") || s.toUpperCase().contains("INTERNAL_MANAGED"))) {
-                                    isApplication = true;
-                                    break;
-                                }
-                                String t = rule.getTarget();
-                                if (t != null && (t.contains("/targetHttpProxies/") || t.contains("/targetHttpsProxies/") || t.contains("/targetGrpcProxies/"))) {
-                                    isApplication = true;
-                                    break;
-                                }
-                            }
-                            if (isApplication) {
-                                lbCounts.put("LB_Type_Application", lbCounts.getOrDefault("LB_Type_Application", 0) + 1);
-                            } else {
-                                lbCounts.put("LB_Type_Network", lbCounts.getOrDefault("LB_Type_Network", 0) + 1);
-                            }
-
-                            // Region (그룹의 첫 번째 rule 기준)
-                            if (!group.isEmpty()) {
-                                ForwardingRule firstRule = group.get(0);
-                                String region = firstRule.getRegion();
-                                if (region == null || region.isEmpty()) {
-                                    region = "Global";
-                                } else if (region.contains("/regions/")) {
-                                    region = region.substring(region.lastIndexOf("/regions/") + 9);
-                                }
-                                String regionKey = "LB_Region_" + region;
-                                lbCounts.put(regionKey, lbCounts.getOrDefault(regionKey, 0) + 1);
-                            }
-                        }
-
-                        // Application/Network 타입은 0이더라도 항상 명시적으로 INSERT
-                        // (값이 없을 경우 보고서 쿼리가 이전 날짜의 잘못된 데이터를 최신값으로 오인하는 문제 방지)
-                        lbCounts.putIfAbsent("LB_Type_Application", 0);
-                        lbCounts.putIfAbsent("LB_Type_Network", 0);
-
+                        // 논리적 LB 단위 집계 (LoadBalancer 총수 포함)
+                        Map<String, Integer> lbCounts = summarizeLoadBalancers(rules, httpProxyToUrlMap, httpsProxyToUrlMap);
                         for (Map.Entry<String, Integer> entry : lbCounts.entrySet()) {
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, entry.getKey(), entry.getValue());
                         }
-                        insertDailyAssetBatch(snapshotDate, projectId, customerName, "LoadBalancer", totalLoadBalancers);
 
                         // Backend Health 상태 집계 및 적재
                         try {
@@ -1453,6 +1341,127 @@ public class BigQueryBatchService {
             }
         }
         log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 5XX 에러 재수집 완료 ===");
+    }
+
+    /** 포워딩 규칙을 논리적 LB 단위로 묶어 유형·접근·리전별 수와 총수(LoadBalancer)를 센다 */
+    static Map<String, Integer> summarizeLoadBalancers(List<ForwardingRule> rules, Map<String, String> httpProxyToUrlMap,
+                                                       Map<String, String> httpsProxyToUrlMap) {
+        // 논리적 LB 단위로 그루핑: key = (urlMapName | backendServiceName | fallback:name) + "@" + region
+        Map<String, List<ForwardingRule>> groupedRules = new java.util.LinkedHashMap<>();
+
+        for (ForwardingRule rule : rules) {
+            String scheme = rule.getLoadBalancingScheme();
+            // Private Service Connect 및 scheme 없는 항목 제외
+            if (scheme == null || scheme.isEmpty()) continue;
+            // Cloud VPN Gateway 제외
+            String target = rule.getTarget();
+            if (target != null && target.contains("/targetVpnGateways/")) continue;
+            // Exclude Private Service Connect endpoints - these appear as forwarding rules but aren't user-facing LBs
+            if (target != null && target.contains("/serviceAttachments/")) continue;
+
+            // 리전 추출
+            String regionRaw = rule.getRegion();
+            String regionSuffix;
+            if (regionRaw == null || regionRaw.isEmpty()) {
+                regionSuffix = "@global";
+            } else {
+                regionSuffix = "@" + regionRaw.substring(regionRaw.lastIndexOf("/") + 1);
+            }
+
+            String canonicalKey;
+            if (target != null && target.contains("/targetHttpsProxies/")) {
+                String proxyName = target.substring(target.lastIndexOf("/") + 1);
+                String urlMapName = httpsProxyToUrlMap.get(proxyName);
+                canonicalKey = "urlmap:" + (urlMapName != null ? urlMapName : proxyName) + regionSuffix;
+            } else if (target != null && target.contains("/targetHttpProxies/")) {
+                String proxyName = target.substring(target.lastIndexOf("/") + 1);
+                String urlMapName = httpProxyToUrlMap.get(proxyName);
+                canonicalKey = "urlmap:" + (urlMapName != null ? urlMapName : proxyName) + regionSuffix;
+            } else if (target != null && (target.contains("/targetTcpProxies/") || target.contains("/targetSslProxies/") || target.contains("/targetGrpcProxies/"))) {
+                // L4 proxy-based LB: target proxy name = canonical key
+                String proxyName = target.substring(target.lastIndexOf("/") + 1);
+                canonicalKey = "proxy:" + proxyName + regionSuffix;
+            } else if (target != null && target.contains("/targetPools/")) {
+                // Legacy 외부 Network LB (Target Pool 기반): 하나의 target pool에 TCP/UDP 등 여러 forwarding rule이 연결될 수 있음
+                String poolName = target.substring(target.lastIndexOf("/") + 1);
+                canonicalKey = "pool:" + poolName + regionSuffix;
+            } else if (rule.hasBackendService() && !rule.getBackendService().isEmpty()) {
+                // Network Pass-through LB: backendService 직접 참조
+                String bs = rule.getBackendService();
+                canonicalKey = "bs:" + bs.substring(bs.lastIndexOf("/") + 1) + regionSuffix;
+            } else {
+                // 기타 fallback: forwarding rule 이름 사용
+                canonicalKey = "name:" + rule.getName() + regionSuffix;
+            }
+
+            groupedRules.computeIfAbsent(canonicalKey, k -> new ArrayList<>()).add(rule);
+        }
+
+        Map<String, Integer> lbCounts = new HashMap<>();
+        int totalLoadBalancers = groupedRules.size();
+
+        for (Map.Entry<String, List<ForwardingRule>> entry : groupedRules.entrySet()) {
+            List<ForwardingRule> group = entry.getValue();
+
+            // Access Type (Internal/External)
+            boolean isInternal = false;
+            for (ForwardingRule rule : group) {
+                String s = rule.getLoadBalancingScheme();
+                if (s != null && s.toUpperCase().contains("INTERNAL")) {
+                    isInternal = true;
+                    break;
+                }
+            }
+            if (isInternal) {
+                lbCounts.put("LB_Access_Internal", lbCounts.getOrDefault("LB_Access_Internal", 0) + 1);
+            } else {
+                lbCounts.put("LB_Access_External", lbCounts.getOrDefault("LB_Access_External", 0) + 1);
+            }
+
+            // Service Type (Application/Network)
+            boolean isApplication = false;
+            for (ForwardingRule rule : group) {
+                String s = rule.getLoadBalancingScheme();
+                if (s != null && (s.toUpperCase().contains("EXTERNAL_MANAGED") || s.toUpperCase().contains("INTERNAL_MANAGED"))) {
+                    isApplication = true;
+                    break;
+                }
+                String t = rule.getTarget();
+                if (t != null && (t.contains("/targetHttpProxies/") || t.contains("/targetHttpsProxies/") || t.contains("/targetGrpcProxies/"))) {
+                    isApplication = true;
+                    break;
+                }
+            }
+            if (isApplication) {
+                lbCounts.put("LB_Type_Application", lbCounts.getOrDefault("LB_Type_Application", 0) + 1);
+                // 외부/내부 Application LB 수 (HTTP 5XX 지표 대상 여부 판단용)
+                lbCounts.merge(isInternal ? "LB_App_Internal" : "LB_App_External", 1, Integer::sum);
+            } else {
+                lbCounts.put("LB_Type_Network", lbCounts.getOrDefault("LB_Type_Network", 0) + 1);
+            }
+
+            // Region (그룹의 첫 번째 rule 기준)
+            if (!group.isEmpty()) {
+                ForwardingRule firstRule = group.get(0);
+                String region = firstRule.getRegion();
+                if (region == null || region.isEmpty()) {
+                    region = "Global";
+                } else if (region.contains("/regions/")) {
+                    region = region.substring(region.lastIndexOf("/regions/") + 9);
+                }
+                String regionKey = "LB_Region_" + region;
+                lbCounts.put(regionKey, lbCounts.getOrDefault(regionKey, 0) + 1);
+            }
+        }
+
+        // Application/Network 타입은 0이더라도 항상 명시적으로 INSERT
+        // (값이 없을 경우 보고서 쿼리가 이전 날짜의 잘못된 데이터를 최신값으로 오인하는 문제 방지)
+        lbCounts.putIfAbsent("LB_Type_Application", 0);
+        lbCounts.putIfAbsent("LB_Type_Network", 0);
+        lbCounts.putIfAbsent("LB_App_External", 0);
+        lbCounts.putIfAbsent("LB_App_Internal", 0);
+        lbCounts.put("LoadBalancer", totalLoadBalancers);
+        return lbCounts;
     }
 
     /** 포워딩 규칙 이름 → HTTPS 여부 (targetHttpsProxies = HTTPS, targetHttpProxies = HTTP, 그 외 규칙은 제외) */

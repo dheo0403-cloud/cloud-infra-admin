@@ -28,4 +28,31 @@ class LbHttpsByRuleTest {
 
         assertEquals(Map.of("gcp-iis-http-https-lb-front-80", false, "gcp-iis-http-https-lb-front-443", true), map);
     }
+
+    private ForwardingRule rule(String name, String scheme, String target, String backendService) {
+        ForwardingRule.Builder b = ForwardingRule.newBuilder().setName(name).setLoadBalancingScheme(scheme);
+        if (target != null) b.setTarget(target);
+        if (backendService != null) b.setBackendService(backendService);
+        return b.build();
+    }
+
+    @Test
+    void 외부_내부_Application_LB를_따로_센다() {
+        String g = "https://www.googleapis.com/compute/v1/projects/p/global/";
+        Map<String, Integer> c = BigQueryBatchService.summarizeLoadBalancers(List.of(
+                // 외부 ALB: 같은 URL Map의 HTTP·HTTPS 규칙 → 1개
+                rule("ext-80", "EXTERNAL", g + "targetHttpProxies/hp", null),
+                rule("ext-443", "EXTERNAL", g + "targetHttpsProxies/sp", null),
+                // 내부 ALB
+                rule("int-alb", "INTERNAL_MANAGED", "https://www.googleapis.com/compute/v1/projects/p/regions/r/targetHttpsProxies/ip", null),
+                // 외부 네트워크 LB (Application 아님)
+                rule("ext-nlb", "EXTERNAL", null, "https://www.googleapis.com/compute/v1/projects/p/regions/r/backendServices/bs")),
+                Map.of("hp", "um"), Map.of("sp", "um", "ip", "ium"));
+
+        assertEquals(3, c.get("LoadBalancer"));
+        assertEquals(2, c.get("LB_Access_External"));
+        assertEquals(1, c.get("LB_App_External"));
+        assertEquals(1, c.get("LB_App_Internal"));
+        assertEquals(1, c.get("LB_Type_Network"));
+    }
 }
