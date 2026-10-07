@@ -272,8 +272,6 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                         <th style={{ padding: '5px 6px', width: '130px', fontWeight: 700 }}>실행 계정 (IAM)</th>
                                         <th style={{ padding: '5px 6px', fontWeight: 700 }}>SQL 쿼리문</th>
                                         <th style={{ padding: '5px 6px', width: '70px', textAlign: 'right', fontWeight: 700 }}>스캔량 (GB)</th>
-                                        <th style={{ padding: '5px 6px', width: '65px', textAlign: 'right', fontWeight: 700 }}>예상 비용</th>
-                                        <th style={{ padding: '5px 6px', width: '65px', textAlign: 'right', fontWeight: 700 }}>실행 시간</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -296,17 +294,11 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                                 <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#dc2626' }}>
                                                     {Number(item.bytesProcessedGb || 0).toFixed(1)} GB
                                                 </td>
-                                                <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 800, color: '#b45309' }}>
-                                                    ${Number(item.estimatedCostUsd || 0).toFixed(2)}
-                                                </td>
-                                                <td style={{ padding: '5px 6px', textAlign: 'right', color: '#475569' }}>
-                                                    {Number(item.executionTimeSeconds || 0).toFixed(1)}초
-                                                </td>
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={7} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
+                                            <td colSpan={5} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
                                                 조회 대상 연월에 기록된 고비용 쿼리 내역이 없습니다.
                                             </td>
                                         </tr>
@@ -343,7 +335,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                         <th style={{ padding: '5px 6px', width: '130px', fontWeight: 700 }}>실행 계정 (IAM)</th>
                                         <th style={{ padding: '5px 6px', fontWeight: 700 }}>SQL 쿼리문</th>
                                         {section.key === 'duration' && <th style={{ padding: '5px 6px', width: '75px', textAlign: 'right', fontWeight: 700 }}>실행 소요시간</th>}
-                                        <th style={{ padding: '5px 6px', width: '65px', textAlign: 'right', fontWeight: 700 }}>평균 슬롯</th>
+                                        {section.key === 'slot' && <th style={{ padding: '5px 6px', width: '65px', textAlign: 'right', fontWeight: 700 }}>평균 슬롯</th>}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -368,14 +360,16 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                                         {Number(item.executionTimeSeconds || 0).toFixed(1)}초
                                                     </td>
                                                 )}
-                                                <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
-                                                    {Number(item.jobAverageSlots || 0).toFixed(0)} Slots
-                                                </td>
+                                                {section.key === 'slot' && (
+                                                    <td style={{ padding: '5px 6px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                                                        {Number(item.jobAverageSlots || 0).toFixed(0)} Slots
+                                                    </td>
+                                                )}
                                             </tr>
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={section.key === 'duration' ? 6 : 5} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
+                                            <td colSpan={5} style={{ padding: '12px', textAlign: 'center', color: '#94a3b8' }}>
                                                 {section.empty}
                                             </td>
                                         </tr>
