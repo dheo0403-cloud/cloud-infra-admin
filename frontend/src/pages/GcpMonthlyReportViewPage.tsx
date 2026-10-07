@@ -1369,7 +1369,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 return (
                                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                            <div style={{ width: '20px', backgroundColor: '#3b82f6', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                            <div style={{ width: '16px', backgroundColor: '#3b82f6', borderRadius: '3px 3px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                                 {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#1e3a8a' }}>{val}</span>}
                                                             </div>
                                                         </div>
@@ -1605,7 +1605,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '20px', backgroundColor: '#10b981', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#10b981', borderRadius: '3px 3px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                         {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#059669' }}>{val}</span>}
                                                     </div>
                                                 </div>
@@ -1751,7 +1751,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '20px', backgroundColor: '#7c3aed', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#7c3aed', borderRadius: '3px 3px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                         {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#7c3aed' }}>{val}</span>}
                                                     </div>
                                                 </div>
@@ -1833,7 +1833,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '20px', backgroundColor: '#d97706', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#d97706', borderRadius: '3px 3px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                         {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#b45309' }}>{val}</span>}
                                                     </div>
                                                 </div>
@@ -1993,10 +1993,10 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '14px', backgroundColor: '#06b6d4', borderRadius: '3px 3px 0 0', height: `${dPct}%`, minHeight: dPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#06b6d4', borderRadius: '3px 3px 0 0', height: `${dPct}%`, minHeight: dPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                         {dVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#0891b2' }}>{dVal}</span>}
                                                     </div>
-                                                    <div style={{ width: '14px', backgroundColor: '#f59e0b', borderRadius: '3px 3px 0 0', height: `${sPct}%`, minHeight: sPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#f59e0b', borderRadius: '3px 3px 0 0', height: `${sPct}%`, minHeight: sPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                         {sVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#d97706' }}>{sVal}</span>}
                                                     </div>
                                                 </div>
@@ -2113,7 +2113,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '20px', backgroundColor: '#6366f1', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#6366f1', borderRadius: '3px 3px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
                                                         {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#4338ca' }}>{val}</span>}
                                                     </div>
                                                 </div>

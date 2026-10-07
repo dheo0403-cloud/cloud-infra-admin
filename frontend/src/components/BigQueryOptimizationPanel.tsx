@@ -138,7 +138,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
 
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                                     <div className="bq-tb-bar" style={{
                                                         width: '16px',
                                                         height: `${heightPercent}%`, minHeight: heightPercent > 0 ? '2px' : 0,
@@ -217,7 +217,7 @@ const BigQueryOptimizationPanel: React.FC<BigQueryOptimizationPanelProps> = ({
                                                 ];
                                                 return (
                                                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                                             {bars.map(b => (
                                                                 <div key={b.cls} className={b.cls} style={{ width: '16px', height: `${barH(b.v)}%`, minHeight: barH(b.v) > 0 ? '2px' : 0, backgroundColor: barH(b.v) > 0 ? b.color : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
                                                                     {/* 두 막대 라벨이 겹치지 않도록 논리는 왼쪽, 물리는 오른쪽으로 펼침 */}
