@@ -94,7 +94,9 @@ public class BigQueryBatchService {
                     try {
                         List<Instance> instances = gcpResourceFetcher.getVmInstances(credentials, projectId);
                         Map<String, Integer> vmCounts = new HashMap<>();
-                        
+                        // 외부 IP가 설정된 VM 수 (중지 VM의 고정 IP 포함, 콘솔 '외부 IP' 열 기준). 0도 적재
+                        vmCounts.put("VM_External_IP", (int) instances.stream().filter(BigQueryBatchService::hasExternalIp).count());
+
                         for (Instance inst : instances) {
                             // Type parsing
                             String type = inst.getMachineType();
@@ -1341,6 +1343,13 @@ public class BigQueryBatchService {
             }
         }
         log.info("=== 🏁 [1회성 데이터 보정] LB HTTP 5XX 에러 재수집 완료 ===");
+    }
+
+    /** VM 네트워크 인터페이스에 외부 IP(natIP)가 하나라도 있으면 true */
+    static boolean hasExternalIp(Instance vm) {
+        return vm.getNetworkInterfacesList().stream()
+                .flatMap(ni -> ni.getAccessConfigsList().stream())
+                .anyMatch(ac -> ac.hasNatIP() && !ac.getNatIP().isEmpty());
     }
 
     /** 포워딩 규칙을 논리적 LB 단위로 묶어 유형·접근·리전별 수와 총수(LoadBalancer)를 센다 */

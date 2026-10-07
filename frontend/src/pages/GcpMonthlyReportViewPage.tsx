@@ -1393,6 +1393,8 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const running = reportData.vmSummary?.running != null ? reportData.vmSummary.running : (reportData.vmTotal || 0);
                                     const stopped = reportData.vmSummary?.stopped || 0;
                                     const total = running + stopped;
+                                    const extIpRaw = reportData.vmSummary?.externalIp;
+                                    const extIp = extIpRaw || 0;
 
                                     // Dynamic Machine Type determination with format: "custom-4 8192 외(2대) (총 3대)"
                                     let machineTypeTitle = "해당 없음 (0대)";
@@ -1466,20 +1468,24 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Card 3: 외부 IP 할당 VM — 실행 중 vs 중지/주요 머신 유형과 동일 크기 (가로형) */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: total > 0 ? '#eff6ff' : '#f8fafc', border: `1px solid ${total > 0 ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: '10px', position: 'relative' }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: total > 0 ? '#3b82f6' : '#94a3b8', borderRadius: '10px 0 0 10px' }}></div>
+                                            {/* Card 3: 외부 IP 할당 VM — 외부 IP가 설정된 VM 수 (수집 전 달은 '수집 전') */}
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', backgroundColor: extIp > 0 ? '#eff6ff' : '#f8fafc', border: `1px solid ${extIp > 0 ? '#bfdbfe' : '#e2e8f0'}`, borderRadius: '10px', position: 'relative' }}>
+                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: extIp > 0 ? '#3b82f6' : '#94a3b8', borderRadius: '10px 0 0 10px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
-                                                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: total > 0 ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: total > 0 ? '#2563eb' : '#64748b', fontSize: '12px' }}>
+                                                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: extIp > 0 ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: extIp > 0 ? '#2563eb' : '#64748b', fontSize: '12px' }}>
                                                         <i className="fas fa-globe"></i>
                                                     </div>
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '11px' }}>외부 IP 할당 VM</span>
-                                                        <span style={{ display: 'block', fontSize: '9px', color: total > 0 ? '#1e40af' : '#64748b', marginTop: '1px' }}>공인 IP 보유 인스턴스</span>
+                                                        <span style={{ display: 'block', fontSize: '9px', color: extIp > 0 ? '#1e40af' : '#64748b', marginTop: '1px' }}>공인 IP 보유 인스턴스</span>
                                                     </div>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
-                                                    <span style={{ fontSize: '14px', fontWeight: 900, color: total > 0 ? '#2563eb' : '#64748b' }}>{running}<span style={{ fontSize: '10px', fontWeight: 500, color: '#64748b' }}>대</span></span>
+                                                    {extIpRaw === undefined ? (
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>수집 전</span>
+                                                    ) : (
+                                                        <span style={{ fontSize: '14px', fontWeight: 900, color: extIp > 0 ? '#2563eb' : '#64748b' }}>{extIp}<span style={{ fontSize: '10px', fontWeight: 500, color: '#64748b' }}>대</span></span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>

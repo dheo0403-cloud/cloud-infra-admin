@@ -414,6 +414,11 @@ public class MonthlyReportService {
         vmSummary.put("running", vmRunning);
         vmSummary.put("stopped", vmDeallocated);
         vmSummary.put("total", vmTot);
+        // 외부 IP 보유 VM 수 (수집 전 달은 키 없음 → 화면에서 '수집 전' 표시)
+        if (!fullYearMonths.isEmpty()) {
+            Map<String, Integer> latestVm = monthlyAssets.getOrDefault(fullYearMonths.get(fullYearMonths.size() - 1), Collections.emptyMap());
+            if (latestVm.containsKey("VM_External_IP")) vmSummary.put("externalIp", latestVm.get("VM_External_IP"));
+        }
 
         int vmTotal = vmTotalTrend.size() >= 4 ? vmTotalTrend.get(3) : 0;
         int vmTotalDelta = vmTotalTrend.size() >= 4 ? (vmTotalTrend.get(3) - vmTotalTrend.get(2)) : 0;
