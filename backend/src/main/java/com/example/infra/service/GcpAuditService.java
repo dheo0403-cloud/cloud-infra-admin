@@ -2215,18 +2215,11 @@ public class GcpAuditService {
         try {
             List<Asset> assets = new ArrayList<>();
             
-            // 1. Cloud SQL 에셋 수집 (API 미활성화 대비 개별 예외 처리)
+            // 1. Cloud SQL 에셋 수집 (Asset API 실패 시 fetcher가 SQL Admin API로 대신 조회)
             try {
                 assets.addAll(gcpResourceFetcher.getCloudSqlAssets(credentials, projectId));
             } catch (Exception e) {
-                log.warn("Failed to list Cloud SQL assets via Asset API, trying REST API fallback... Error: " + e.getMessage());
-                List<Asset> restAssets = fetchCloudSqlViaRest(credentials, projectId);
-                if (!restAssets.isEmpty()) {
-                    assets.addAll(restAssets);
-                    log.info("Successfully fetched " + restAssets.size() + " Cloud SQL assets via REST API fallback.");
-                } else {
-                    log.error("Cloud SQL REST API fallback also returned no assets or failed.");
-                }
+                log.error("Failed to list Cloud SQL instances (Asset API and SQL Admin API): " + e.getMessage());
             }
             
             // 2. AlloyDB 에셋 수집 (API 미활성화 대비 개별 예외 처리)
@@ -2478,63 +2471,6 @@ public class GcpAuditService {
             }
         } catch (Exception e) { log.error("DB failed: ", e); }
         return details;
-    }
-
-    private List<Asset> fetchCloudSqlViaRest(GoogleCredentials credentials, String projectId) {
-        List<Asset> assets = new ArrayList<>();
-        try {
-            credentials.refreshIfExpired();
-            String accessToken = credentials.getAccessToken().getTokenValue();
-            
-            String urlStr = "https://sqladmin.googleapis.com/v1/projects/" + projectId + "/instances";
-            java.net.URL url = new java.net.URL(urlStr);
-            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Authorization", "Bearer " + accessToken);
-            conn.setRequestProperty("Accept", "application/json");
-            
-            int responseCode = conn.getResponseCode();
-            if (responseCode == 200) {
-                try (java.io.InputStream is = conn.getInputStream()) {
-                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                    com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(is);
-                    if (root.has("items")) {
-                        com.fasterxml.jackson.databind.JsonNode items = root.get("items");
-                        for (com.fasterxml.jackson.databind.JsonNode item : items) {
-                            try {
-                                com.google.protobuf.Struct.Builder structBuilder = com.google.protobuf.Struct.newBuilder();
-                                com.google.protobuf.util.JsonFormat.parser().ignoringUnknownFields().merge(item.toString(), structBuilder);
-                                
-                                Asset mockAsset = Asset.newBuilder()
-                                    .setName("//sqladmin.googleapis.com/projects/" + projectId + "/instances/" + item.get("name").asText())
-                                    .setAssetType("sqladmin.googleapis.com/Instance")
-                                    .setResource(Resource.newBuilder().setData(structBuilder.build()).build())
-                                    .build();
-                                assets.add(mockAsset);
-                            } catch (Exception ex) {
-                                log.error("Failed to parse instance JSON via JsonFormat: " + item.get("name").asText(), ex);
-                            }
-                        }
-                    }
-                }
-            } else {
-                log.warn("Cloud SQL REST API returned non-200 response: " + responseCode);
-                try (java.io.InputStream es = conn.getErrorStream()) {
-                    if (es != null) {
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(es));
-                        StringBuilder errorResponse = new StringBuilder();
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            errorResponse.append(line);
-                        }
-                        log.warn("Error response body: " + errorResponse.toString());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            log.error("Failed to fetch Cloud SQL via REST API fallback: ", e);
-        }
-        return assets;
     }
 
     private String getStringFromStruct(com.google.protobuf.Struct struct, String... path) {

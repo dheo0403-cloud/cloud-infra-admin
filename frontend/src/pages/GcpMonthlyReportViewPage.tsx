@@ -1632,7 +1632,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     const appExternal = reportData.lbSummary?.appExternal;
                                     const isLbExist = lbCount > 0;
                                     const hasExternalAlb = appExternal !== undefined ? appExternal > 0 || (reportData.lbSummary?.http500Last30Days || 0) > 0 : isLbExist;
-                                    const unhealthyCount = reportData.lbSummary?.healthUnhealthyTotal || 0;
                                     const http500Count = reportData.lbSummary?.http500Last30Days || 0;
                                     // HTTP/HTTPS 분리 값 (수집 전 달은 undefined → 합계만 표시), 삭제된 규칙 등 분류 불가분은 '기타'
                                     const http500Http = reportData.lbSummary?.http500Http;
@@ -1729,49 +1728,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     </div>
                                                 );
                                             })()}
-
-                                            {/* Horizontal Card 2: Backend Health Check Metric */}
-                                            <div style={{
-                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px',
-                                                backgroundColor: isLbExist ? (unhealthyCount > 0 ? '#fef2f2' : '#f0fdf4') : '#f8fafc',
-                                                border: isLbExist ? (unhealthyCount > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0') : '1px solid #e2e8f0',
-                                                borderRadius: '8px', position: 'relative'
-                                            }}>
-                                                <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: isLbExist ? (unhealthyCount > 0 ? '#ef4444' : '#10b981') : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
-                                                    <div style={{
-                                                        width: '32px', height: '32px', borderRadius: '50%',
-                                                        backgroundColor: isLbExist ? (unhealthyCount > 0 ? '#fee2e2' : '#dcfce7') : '#f1f5f9',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        color: isLbExist ? (unhealthyCount > 0 ? '#dc2626' : '#16a34a') : '#64748b', fontSize: '13px'
-                                                    }}>
-                                                        <i className="fas fa-heartbeat"></i>
-                                                    </div>
-                                                    <div>
-                                                        <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>백엔드 헬스 체크 상태</span>
-                                                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
-                                                            {isLbExist ? (unhealthyCount > 0 ? `비정상 백엔드 ${unhealthyCount}개 감지됨` : '백엔드 인스턴스 헬스 프로브 정상') : '헬스 체크 대상 인스턴스 없음'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div style={{ textAlign: 'right' }}>
-                                                    {isLbExist ? (
-                                                        unhealthyCount > 0 ? (
-                                                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c', backgroundColor: '#fee2e2', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fca5a5' }}>
-                                                                <i className="fas fa-exclamation-triangle mr-1"></i>비정상 {unhealthyCount}건
-                                                            </span>
-                                                        ) : (
-                                                            <span style={{ fontSize: '12px', fontWeight: 800, color: '#15803d', backgroundColor: '#dcfce7', padding: '3px 10px', borderRadius: '6px', border: '1px solid #86efac' }}>
-                                                                <i className="fas fa-check mr-1"></i>정상
-                                                            </span>
-                                                        )
-                                                    ) : (
-                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                                                            N/A (LB 미사용)
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
                                         </div>
                                     );
                                 })()}

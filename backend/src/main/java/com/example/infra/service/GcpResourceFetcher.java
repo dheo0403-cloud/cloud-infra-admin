@@ -232,8 +232,48 @@ public class GcpResourceFetcher {
                 assets.add(asset);
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Cloud SQL Assets for project: {}", projectId, e);
-            throw new RuntimeException("Asset API failed for Cloud SQL", e);
+            // Asset API 권한이 없는 고객사(예: 카카오헬스케어)는 SQL Admin API로 같은 형식의 데이터를 받는다
+            log.warn("Cloud SQL Asset API failed for project {} ({}), falling back to SQL Admin API", projectId, e.getMessage());
+            return getCloudSqlInstancesViaSqlAdmin(credentials, projectId);
+        }
+        return assets;
+    }
+
+    /**
+     * SQL Admin API(instances.list)로 Cloud SQL 인스턴스 조회. Asset 형태(resource.data = 인스턴스 JSON)로 감싸서 반환.
+     * 응답이 200이 아니면 예외 (0개로 저장하지 않도록)
+     */
+    public List<Asset> getCloudSqlInstancesViaSqlAdmin(GoogleCredentials credentials, String projectId) {
+        List<Asset> assets = new ArrayList<>();
+        try {
+            credentials.refreshIfExpired();
+            java.net.http.HttpClient http = java.net.http.HttpClient.newHttpClient();
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            String pageToken = "";
+            do {
+                String url = "https://sqladmin.googleapis.com/v1/projects/" + projectId + "/instances"
+                        + (pageToken.isEmpty() ? "" : "?pageToken=" + java.net.URLEncoder.encode(pageToken, java.nio.charset.StandardCharsets.UTF_8));
+                java.net.http.HttpResponse<String> res = http.send(java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                        .header("Authorization", "Bearer " + credentials.getAccessToken().getTokenValue()).GET().build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString());
+                if (res.statusCode() != 200) {
+                    throw new IllegalStateException("SQL Admin API HTTP " + res.statusCode() + ": " + res.body());
+                }
+                com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(res.body());
+                for (com.fasterxml.jackson.databind.JsonNode item : root.path("items")) {
+                    com.google.protobuf.Struct.Builder data = com.google.protobuf.Struct.newBuilder();
+                    com.google.protobuf.util.JsonFormat.parser().ignoringUnknownFields().merge(item.toString(), data);
+                    assets.add(Asset.newBuilder()
+                            .setName("//sqladmin.googleapis.com/projects/" + projectId + "/instances/" + item.path("name").asText())
+                            .setAssetType("sqladmin.googleapis.com/Instance")
+                            .setResource(com.google.cloud.asset.v1.Resource.newBuilder().setData(data.build()).build())
+                            .build());
+                }
+                pageToken = root.path("nextPageToken").asText("");
+            } while (!pageToken.isEmpty());
+        } catch (Exception e) {
+            log.error("Failed to fetch Cloud SQL via SQL Admin API for project: {}", projectId, e);
+            throw new RuntimeException("Cloud SQL fetch failed (Asset API and SQL Admin API)", e);
         }
         return assets;
     }

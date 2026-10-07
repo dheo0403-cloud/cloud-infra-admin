@@ -620,50 +620,7 @@ public class BigQueryBatchService {
                     // 11. Cloud SQL
                     try {
                         List<com.google.cloud.asset.v1.Asset> sqlAssets = gcpResourceFetcher.getCloudSqlAssets(credentials, projectId);
-                        Map<String, Integer> sqlCounts = new HashMap<>();
-
-                        for (com.google.cloud.asset.v1.Asset asset : sqlAssets) {
-                            com.google.protobuf.Struct data = asset.getResource().getData();
-                            
-                            // Region
-                            String region = getStringFromStruct(data, "region");
-                            if (region == null || region.isEmpty()) region = "Unknown";
-                            sqlCounts.put("SQL_Region_" + region, sqlCounts.getOrDefault("SQL_Region_" + region, 0) + 1);
-
-                            // Instance Type (Primary / ReadReplica)
-                            String instType = getStringFromStruct(data, "instanceType");
-                            String typeName = "CLOUD_SQL_INSTANCE".equalsIgnoreCase(instType) ? "Primary" : ("READ_REPLICA_INSTANCE".equalsIgnoreCase(instType) ? "ReadReplica" : "Other");
-                            sqlCounts.put("SQL_Instance_Type_" + typeName, sqlCounts.getOrDefault("SQL_Instance_Type_" + typeName, 0) + 1);
-
-                            // Machine Type (Tier)
-                            String tier = getStringFromStruct(data, "settings", "tier");
-                            if (tier == null || tier.isEmpty()) tier = "Unknown";
-                            sqlCounts.put("SQL_Machine_Type_" + tier, sqlCounts.getOrDefault("SQL_Machine_Type_" + tier, 0) + 1);
-
-                            // DB Engine & Version
-                            String engine = getStringFromStruct(data, "databaseVersion");
-                            if (engine == null || engine.isEmpty()) engine = "Unknown";
-                            sqlCounts.put("SQL_Engine_" + engine, sqlCounts.getOrDefault("SQL_Engine_" + engine, 0) + 1);
-
-                            // Availability Type (REGIONAL vs ZONAL)
-                            String avail = getStringFromStruct(data, "settings", "availabilityType");
-                            String availKey = "REGIONAL".equalsIgnoreCase(avail) ? "SQL_Availability_Regional" : "SQL_Availability_Zonal";
-                            sqlCounts.put(availKey, sqlCounts.getOrDefault(availKey, 0) + 1);
-
-                            // Storage Type (PD_SSD vs PD_HDD)
-                            String diskType = getStringFromStruct(data, "settings", "dataDiskType");
-                            String diskKey = (diskType != null && diskType.contains("HDD")) ? "SQL_Storage_HDD" : "SQL_Storage_SSD";
-                            sqlCounts.put(diskKey, sqlCounts.getOrDefault(diskKey, 0) + 1);
-
-                            // 자동 백업 / PITR: 기본(Primary) 인스턴스만 집계 (읽기 복제본은 백업 대상 아님)
-                            // MySQL은 바이너리 로그, 그 외 엔진은 pointInTimeRecoveryEnabled
-                            if ("Primary".equals(typeName)) {
-                                sqlCounts.merge("SQL_Backup_Enabled", getBoolFromStruct(data, "settings", "backupConfiguration", "enabled") ? 1 : 0, Integer::sum);
-                                boolean pitr = getBoolFromStruct(data, "settings", "backupConfiguration", "binaryLogEnabled")
-                                        || getBoolFromStruct(data, "settings", "backupConfiguration", "pointInTimeRecoveryEnabled");
-                                sqlCounts.merge("SQL_PITR_Enabled", pitr ? 1 : 0, Integer::sum);
-                            }
-                        }
+                        Map<String, Integer> sqlCounts = summarizeCloudSql(sqlAssets);
 
                         for (Map.Entry<String, Integer> entry : sqlCounts.entrySet()) {
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, entry.getKey(), entry.getValue());
@@ -2906,17 +2863,68 @@ public class BigQueryBatchService {
         }
     }
 
-    private String getStringFromStruct(com.google.protobuf.Struct struct, String... path) {
+    /** Cloud SQL 인스턴스(Asset 형태) 목록을 리전·유형·머신·엔진·HA·스토리지·백업/PITR별 개수로 집계 */
+    static Map<String, Integer> summarizeCloudSql(List<com.google.cloud.asset.v1.Asset> sqlAssets) {
+        Map<String, Integer> sqlCounts = new HashMap<>();
+
+        for (com.google.cloud.asset.v1.Asset asset : sqlAssets) {
+            com.google.protobuf.Struct data = asset.getResource().getData();
+            
+            // Region
+            String region = getStringFromStruct(data, "region");
+            if (region == null || region.isEmpty()) region = "Unknown";
+            sqlCounts.put("SQL_Region_" + region, sqlCounts.getOrDefault("SQL_Region_" + region, 0) + 1);
+
+            // Instance Type (Primary / ReadReplica)
+            String instType = getStringFromStruct(data, "instanceType");
+            String typeName = "CLOUD_SQL_INSTANCE".equalsIgnoreCase(instType) ? "Primary" : ("READ_REPLICA_INSTANCE".equalsIgnoreCase(instType) ? "ReadReplica" : "Other");
+            sqlCounts.put("SQL_Instance_Type_" + typeName, sqlCounts.getOrDefault("SQL_Instance_Type_" + typeName, 0) + 1);
+
+            // Machine Type (Tier)
+            String tier = getStringFromStruct(data, "settings", "tier");
+            if (tier == null || tier.isEmpty()) tier = "Unknown";
+            sqlCounts.put("SQL_Machine_Type_" + tier, sqlCounts.getOrDefault("SQL_Machine_Type_" + tier, 0) + 1);
+
+            // DB Engine & Version
+            String engine = getStringFromStruct(data, "databaseVersion");
+            if (engine == null || engine.isEmpty()) engine = "Unknown";
+            sqlCounts.put("SQL_Engine_" + engine, sqlCounts.getOrDefault("SQL_Engine_" + engine, 0) + 1);
+
+            // Availability Type (REGIONAL vs ZONAL): 보고서 SQL 수(기본 인스턴스)와 맞추려고 기본 인스턴스만 집계
+            if ("Primary".equals(typeName)) {
+                String avail = getStringFromStruct(data, "settings", "availabilityType");
+                String availKey = "REGIONAL".equalsIgnoreCase(avail) ? "SQL_Availability_Regional" : "SQL_Availability_Zonal";
+                sqlCounts.put(availKey, sqlCounts.getOrDefault(availKey, 0) + 1);
+            }
+
+            // Storage Type (PD_SSD vs PD_HDD)
+            String diskType = getStringFromStruct(data, "settings", "dataDiskType");
+            String diskKey = (diskType != null && diskType.contains("HDD")) ? "SQL_Storage_HDD" : "SQL_Storage_SSD";
+            sqlCounts.put(diskKey, sqlCounts.getOrDefault(diskKey, 0) + 1);
+
+            // 자동 백업 / PITR: 기본(Primary) 인스턴스만 집계 (읽기 복제본은 백업 대상 아님)
+            // MySQL은 바이너리 로그, 그 외 엔진은 pointInTimeRecoveryEnabled
+            if ("Primary".equals(typeName)) {
+                sqlCounts.merge("SQL_Backup_Enabled", getBoolFromStruct(data, "settings", "backupConfiguration", "enabled") ? 1 : 0, Integer::sum);
+                boolean pitr = getBoolFromStruct(data, "settings", "backupConfiguration", "binaryLogEnabled")
+                        || getBoolFromStruct(data, "settings", "backupConfiguration", "pointInTimeRecoveryEnabled");
+                sqlCounts.merge("SQL_PITR_Enabled", pitr ? 1 : 0, Integer::sum);
+            }
+        }
+        return sqlCounts;
+    }
+
+    static String getStringFromStruct(com.google.protobuf.Struct struct, String... path) {
         com.google.protobuf.Value v = getValueFromStruct(struct, path);
         return v != null ? v.getStringValue() : "";
     }
 
-    private boolean getBoolFromStruct(com.google.protobuf.Struct struct, String... path) {
+    static boolean getBoolFromStruct(com.google.protobuf.Struct struct, String... path) {
         com.google.protobuf.Value v = getValueFromStruct(struct, path);
         return v != null && v.getBoolValue();
     }
 
-    private com.google.protobuf.Value getValueFromStruct(com.google.protobuf.Struct struct, String... path) {
+    static com.google.protobuf.Value getValueFromStruct(com.google.protobuf.Struct struct, String... path) {
         if (struct == null) return null;
         com.google.protobuf.Value current = com.google.protobuf.Value.newBuilder().setStructValue(struct).build();
         for (String key : path) {
