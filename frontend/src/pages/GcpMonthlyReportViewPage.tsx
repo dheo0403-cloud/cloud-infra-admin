@@ -1651,7 +1651,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                         <i className="fas fa-exclamation-triangle"></i>
                                                     </div>
                                                     <div>
-                                                        <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 HTTP 5XX 에러</span>
+                                                        <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 외부 LB 5XX 에러</span>
                                                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
                                                             {isLbExist ? (http500Count > 0 ? http500Detail : 'HTTP 5XX 서버 응답 트래픽 정상') : '연결된 로드밸런서 타겟 없음'}
                                                         </span>
@@ -1675,6 +1675,45 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     )}
                                                 </div>
                                             </div>
+
+                                            {/* Horizontal Card 1-2: 내부 LB 30일 5XX (수집 전 달은 '수집 전', 내부 LB 없으면 N/A) */}
+                                            {(() => {
+                                                const internal5xx = reportData.lbSummary?.http500Internal;
+                                                const hasInternalLb = (reportData.lbSummary?.internal || 0) > 0;
+                                                const tone = internal5xx === undefined || (!hasInternalLb && internal5xx === 0) ? 'none' : internal5xx > 0 ? 'bad' : 'ok';
+                                                const c = { bad: ['#fef2f2', '#fecaca', '#ef4444', '#fee2e2', '#dc2626'], ok: ['#f0fdf4', '#bbf7d0', '#10b981', '#dcfce7', '#16a34a'], none: ['#f8fafc', '#e2e8f0', '#94a3b8', '#f1f5f9', '#64748b'] }[tone];
+                                                return (
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: c[0], border: `1px solid ${c[1]}`, borderRadius: '8px', position: 'relative' }}>
+                                                        <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: c[2], borderRadius: '8px 0 0 8px' }}></div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
+                                                            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: c[3], display: 'flex', alignItems: 'center', justifyContent: 'center', color: c[4], fontSize: '13px' }}>
+                                                                <i className="fas fa-exclamation-triangle"></i>
+                                                            </div>
+                                                            <div>
+                                                                <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 내부 LB 5XX 에러</span>
+                                                                <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
+                                                                    {internal5xx === undefined ? '내부 LB 5XX 수집 전' : tone === 'none' ? '연결된 내부 로드밸런서 없음' : tone === 'bad' ? '내부 서비스 간 요청 5XX 감지됨' : '내부 LB 5XX 응답 트래픽 정상'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <div style={{ textAlign: 'right' }}>
+                                                            {tone === 'bad' ? (
+                                                                <span style={{ fontSize: '12px', fontWeight: 800, color: '#b91c1c', backgroundColor: '#fee2e2', padding: '3px 10px', borderRadius: '6px', border: '1px solid #fca5a5' }}>
+                                                                    <i className="fas fa-exclamation-triangle mr-1"></i>{internal5xx.toLocaleString()}건 발생
+                                                                </span>
+                                                            ) : tone === 'ok' ? (
+                                                                <span style={{ fontSize: '12px', fontWeight: 800, color: '#15803d', backgroundColor: '#dcfce7', padding: '3px 10px', borderRadius: '6px', border: '1px solid #86efac' }}>
+                                                                    <i className="fas fa-check mr-1"></i>정상 (0건)
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', backgroundColor: '#f1f5f9', padding: '3px 8px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                                                                    {internal5xx === undefined ? '수집 전' : 'N/A (내부 LB 없음)'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
 
                                             {/* Horizontal Card 2: Backend Health Check Metric */}
                                             <div style={{

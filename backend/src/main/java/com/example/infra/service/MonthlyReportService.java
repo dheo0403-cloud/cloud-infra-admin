@@ -364,6 +364,7 @@ public class MonthlyReportService {
             Map<String, Integer> latestLb = monthlyAssets.getOrDefault(fullYearMonths.get(fullYearMonths.size() - 1), Collections.emptyMap());
             if (latestLb.containsKey("LB_HTTP_500_30D_Http")) lbSummary.put("http500Http", latestLb.get("LB_HTTP_500_30D_Http"));
             if (latestLb.containsKey("LB_HTTP_500_30D_Https")) lbSummary.put("http500Https", latestLb.get("LB_HTTP_500_30D_Https"));
+            if (latestLb.containsKey("LB_HTTP_500_30D_Internal")) lbSummary.put("http500Internal", latestLb.get("LB_HTTP_500_30D_Internal"));
         }
 
         Map<String, Integer> ipSummary = new HashMap<>();

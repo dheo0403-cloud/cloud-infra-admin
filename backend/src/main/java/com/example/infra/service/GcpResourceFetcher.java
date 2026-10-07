@@ -973,11 +973,12 @@ public class GcpResourceFetcher {
 
     /**
      * Load Balancer HTTP 5XX 에러 수 - 지정 구간 [startSeconds, endSeconds) (Cloud Monitoring)
-     * 콘솔 측정항목 탐색기(https/request_count, response_code_class=500, 그룹화 합계·by 없음)와 같은 값.
+     * 외부 LB: 콘솔 측정항목 탐색기(https/request_count, response_code_class=500, 그룹화 합계·by 없음)와 같은 값.
      * HTTP(80)·HTTPS(443) 포워딩 규칙은 서로 다른 요청이므로 모두 합산하고,
      * 규칙이 연결된 프록시 종류(httpsByRule)로 HTTP/HTTPS를 나눈다. 맵에 없는 규칙(삭제됨 등)은 합계에만 포함.
+     * 내부 LB: https/internal/request_count 합계 (외부 합계와 별도).
      *
-     * @return {합계, HTTP, HTTPS}. 조회 실패 시 예외 (0으로 저장하지 않도록)
+     * @return {외부 합계, 외부 HTTP, 외부 HTTPS, 내부 합계}. 조회 실패 시 예외 (0으로 저장하지 않도록)
      */
     public long[] getLbHttp5xxCounts(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds,
                                      Map<String, Boolean> httpsByRule) throws java.io.IOException {
@@ -985,34 +986,44 @@ public class GcpResourceFetcher {
                 .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
                 .build();
         try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
-            com.google.monitoring.v3.ListTimeSeriesRequest request = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
-                    .setName(com.google.monitoring.v3.ProjectName.of(projectId).toString())
-                    .setFilter("metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND metric.label.response_code_class = \"500\"")
-                    .setInterval(com.google.monitoring.v3.TimeInterval.newBuilder()
-                            .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds))
-                            .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds)))
-                    // 구간 전체를 한 칸으로 합산
-                    .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
-                            .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(endSeconds - startSeconds))
-                            .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
-                            .setCrossSeriesReducer(com.google.monitoring.v3.Aggregation.Reducer.REDUCE_SUM)
-                            .addGroupByFields("resource.label.forwarding_rule_name"))
-                    .build();
-
             long total = 0, http = 0, https = 0;
-            for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(request).iterateAll()) {
-                long sum = 0;
-                for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
-                    sum += p.getValue().hasInt64Value() ? p.getValue().getInt64Value() : (long) p.getValue().getDoubleValue();
-                }
-                total += sum;
-                Boolean isHttps = httpsByRule.get(ts.getResource().getLabelsOrDefault("forwarding_rule_name", ""));
-                if (Boolean.TRUE.equals(isHttps)) https += sum;
-                else if (Boolean.FALSE.equals(isHttps)) http += sum;
+            for (Map.Entry<String, Long> e : sumLb5xxByRule(client, projectId, "loadbalancing.googleapis.com/https/request_count", startSeconds, endSeconds).entrySet()) {
+                total += e.getValue();
+                Boolean isHttps = httpsByRule.get(e.getKey());
+                if (Boolean.TRUE.equals(isHttps)) https += e.getValue();
+                else if (Boolean.FALSE.equals(isHttps)) http += e.getValue();
             }
-            log.info("LB HTTP 5XX for project {}: total={}, http={}, https={}", projectId, total, http, https);
-            return new long[]{total, http, https};
+            long internal = sumLb5xxByRule(client, projectId, "loadbalancing.googleapis.com/https/internal/request_count", startSeconds, endSeconds)
+                    .values().stream().mapToLong(Long::longValue).sum();
+            log.info("LB HTTP 5XX for project {}: external={} (http={}, https={}), internal={}", projectId, total, http, https, internal);
+            return new long[]{total, http, https, internal};
         }
+    }
+
+    /** 지정 LB 요청 수 지표의 5XX를 구간 전체 한 칸으로 합산 (포워딩 규칙 이름별) */
+    private Map<String, Long> sumLb5xxByRule(com.google.cloud.monitoring.v3.MetricServiceClient client, String projectId, String metricType,
+                                             long startSeconds, long endSeconds) {
+        com.google.monitoring.v3.ListTimeSeriesRequest request = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                .setName(com.google.monitoring.v3.ProjectName.of(projectId).toString())
+                .setFilter("metric.type = \"" + metricType + "\" AND metric.label.response_code_class = \"500\"")
+                .setInterval(com.google.monitoring.v3.TimeInterval.newBuilder()
+                        .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds))
+                        .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds)))
+                .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                        .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(endSeconds - startSeconds))
+                        .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_SUM)
+                        .setCrossSeriesReducer(com.google.monitoring.v3.Aggregation.Reducer.REDUCE_SUM)
+                        .addGroupByFields("resource.label.forwarding_rule_name"))
+                .build();
+        Map<String, Long> byRule = new HashMap<>();
+        for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(request).iterateAll()) {
+            long sum = 0;
+            for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                sum += p.getValue().hasInt64Value() ? p.getValue().getInt64Value() : (long) p.getValue().getDoubleValue();
+            }
+            byRule.merge(ts.getResource().getLabelsOrDefault("forwarding_rule_name", ""), sum, Long::sum);
+        }
+        return byRule;
     }
 
     /**

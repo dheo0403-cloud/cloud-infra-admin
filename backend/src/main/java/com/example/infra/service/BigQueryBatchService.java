@@ -1475,6 +1475,7 @@ public class BigQueryBatchService {
             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Total", (int) c[0]);
             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Http", (int) c[1]);
             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Https", (int) c[2]);
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Internal", (int) c[3]);
         } catch (Exception e) {
             log.warn("Failed to collect LB HTTP 5XX 30-day error count for project {}: {}", projectId, e.getMessage());
         }
