@@ -1782,27 +1782,21 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         <div className={isGkeEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
-                                    <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 & 노드 수량</span>
+                                    <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 수량</span>
                                     <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
                                 <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
                                     {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
-                                        // 클러스터 수(연보라)와 노드 수(진보라)를 같은 축에 함께 표시
+                                        // 클러스터 수만 표시 (노드 수는 옆 'GKE 핵심 지표' 카드)
                                         const clusterArr = reportData.gkeClusterTrend || [];
-                                        const nodeArr = reportData.gkeNodeTrend || [];
-                                        const cVal = clusterArr[idx] || 0;
-                                        const nVal = nodeArr[idx] || 0;
-                                        const maxV = Math.max(1, ...clusterArr, ...nodeArr);
-                                        const cPct = cVal > 0 ? (cVal / maxV) * 85 : 0;
-                                        const nPct = nVal > 0 ? (nVal / maxV) * 85 : 0;
+                                        const val = clusterArr[idx] || 0;
+                                        const maxV = Math.max(1, ...clusterArr);
+                                        const hPct = val > 0 ? (val / maxV) * 85 : 0;
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '16px', backgroundColor: '#a78bfa', borderRadius: '3px 3px 0 0', height: `${cPct}%`, minHeight: cPct > 0 ? '2px' : 0, position: 'relative' }}>
-                                                        {cVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#7c3aed' }}>{cVal}</span>}
-                                                    </div>
-                                                    <div style={{ width: '16px', backgroundColor: '#5b21b6', borderRadius: '3px 3px 0 0', height: `${nPct}%`, minHeight: nPct > 0 ? '2px' : 0, position: 'relative' }}>
-                                                        {nVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#5b21b6' }}>{nVal}</span>}
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '20px', backgroundColor: '#7c3aed', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                        {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#7c3aed' }}>{val}</span>}
                                                     </div>
                                                 </div>
                                                 <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
@@ -1812,10 +1806,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
                                     <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#a78bfa', marginRight: '5px' }}></span>클러스터
-                                    </span>
-                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#5b21b6', marginRight: '5px' }}></span>노드
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#7c3aed', marginRight: '5px' }}></span>GKE 클러스터
                                     </span>
                                 </div>
                             </div>
