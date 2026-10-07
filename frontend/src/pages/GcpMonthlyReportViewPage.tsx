@@ -1644,7 +1644,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px',
                                                 backgroundColor: extActive ? (http500Count > 0 ? '#fef2f2' : '#f0fdf4') : '#f8fafc',
                                                 border: extActive ? (http500Count > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0') : '1px solid #e2e8f0',
-                                                borderRadius: '8px', position: 'relative'
+                                                borderRadius: '8px', position: 'relative', minHeight: '52px' // 설명 줄이 없는 N/A 상태도 다른 줄과 같은 높이
                                             }}>
                                                 <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: extActive ? (http500Count > 0 ? '#ef4444' : '#10b981') : '#94a3b8', borderRadius: '8px 0 0 8px' }}></div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
@@ -1659,7 +1659,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                     <div>
                                                         <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 외부 LB 5XX 에러</span>
                                                         <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
-                                                            {extActive ? (http500Count > 0 ? http500Detail : 'HTTP 5XX 서버 응답 트래픽 정상') : extNotCollected ? '외부 LB 5XX 수집 전' : '연결된 외부 로드밸런서 없음'}
+                                                            {extActive ? (http500Count > 0 ? http500Detail : 'HTTP 5XX 서버 응답 트래픽 정상') : extNotCollected ? '외부 LB 5XX 수집 전' : ''}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -1690,7 +1690,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                 const tone = internal5xx === undefined || (!hasInternalLb && internal5xx === 0) ? 'none' : internal5xx > 0 ? 'bad' : 'ok';
                                                 const c = { bad: ['#fef2f2', '#fecaca', '#ef4444', '#fee2e2', '#dc2626'], ok: ['#f0fdf4', '#bbf7d0', '#10b981', '#dcfce7', '#16a34a'], none: ['#f8fafc', '#e2e8f0', '#94a3b8', '#f1f5f9', '#64748b'] }[tone];
                                                 return (
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: c[0], border: `1px solid ${c[1]}`, borderRadius: '8px', position: 'relative' }}>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: c[0], border: `1px solid ${c[1]}`, borderRadius: '8px', position: 'relative', minHeight: '52px' }}>
                                                         <div style={{ position: 'absolute', left: 0, top: 0, width: '4px', height: '100%', backgroundColor: c[2], borderRadius: '8px 0 0 8px' }}></div>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingLeft: '4px' }}>
                                                             <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: c[3], display: 'flex', alignItems: 'center', justifyContent: 'center', color: c[4], fontSize: '13px' }}>
@@ -1699,7 +1699,7 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                                             <div>
                                                                 <span style={{ display: 'block', fontWeight: 700, color: '#0f172a', fontSize: '12px' }}>최근 30일 내부 LB 5XX 에러</span>
                                                                 <span style={{ display: 'block', fontSize: '10px', color: '#64748b', marginTop: '1px' }}>
-                                                                    {internal5xx === undefined ? '내부 LB 5XX 수집 전' : tone === 'none' ? '연결된 내부 로드밸런서 없음' : tone === 'bad' ? '내부 서비스 간 요청 5XX 감지됨' : '내부 LB 5XX 응답 트래픽 정상'}
+                                                                    {internal5xx === undefined ? '내부 LB 5XX 수집 전' : tone === 'none' ? '' : tone === 'bad' ? '내부 서비스 간 요청 5XX 감지됨' : '내부 LB 5XX 응답 트래픽 정상'}
                                                                 </span>
                                                             </div>
                                                         </div>
