@@ -1031,6 +1031,8 @@ public class BigQueryBatchService {
 
         // === Azure RI (Reserved Instances) 수집 ===
         Set<String> processedTenants = new HashSet<>();
+        Set<String> clearedCustomers = new HashSet<>();
+        Set<String> appCheckedTenants = new HashSet<>();
         for (InfraEnvironment env : environments) {
             if (!"AZURE".equalsIgnoreCase(env.getProviderType())) continue;
 
@@ -1040,17 +1042,18 @@ public class BigQueryBatchService {
             if (tenantId == null || clientId == null || clientSecret == null) continue;
 
             String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
-            String subscriptionId = (env.getProjects() != null && !env.getProjects().isEmpty()) ? env.getProjects().get(0).getProjectId() : "";
 
-            // 동일 테넌트/고객사는 루프당 1회만 처리하여 중복 수집 방지
+            // 동일 테넌트/고객사는 수집에 성공한 경우에만 이후 환경을 건너뜀 (실패 시 다음 환경 자격증명으로 재시도)
             String tenantKey = customerName + "_" + tenantId;
-            if (!processedTenants.add(tenantKey)) {
+            if (processedTenants.contains(tenantKey)) {
                 log.info("Skipping duplicate Azure RI fetch for already processed tenant: {}", tenantKey);
                 continue;
             }
 
-            // 당일 수집 시 기존 당일 데이터 삭제하여 누적 중복 적재 방지
-            deleteDailyReservations(snapshotDate, customerName, "AZURE");
+            // 당일 기존 데이터는 고객사별 첫 환경에서 한 번만 삭제 (테넌트가 여러 개인 고객사의 앞 테넌트 적재분 보존)
+            if (clearedCustomers.add(customerName)) {
+                deleteDailyReservations(snapshotDate, customerName, "AZURE");
+            }
 
             try {
                 // 1. Get Azure AD Token
@@ -1105,12 +1108,13 @@ public class BigQueryBatchService {
                         String name = ri.has("name") ? ri.get("name").asText() : "";
                         String displayName = props.has("displayName") ? props.get("displayName").asText() : name;
                         String expiryDate = props.has("expiryDate") ? props.get("expiryDate").asText() : "";
-                        String effectiveDate = props.has("effectiveDateTime") ? props.get("effectiveDateTime").asText().substring(0, 10) : "";
+                        String effectiveDate = ReservationService.azureRiStartDate(props);
+                        String subscriptionId = ReservationService.azureRiSubscription(props);
                         String riType = props.has("reservedResourceType") ? props.get("reservedResourceType").asText() : "";
                         String skuName = (ri.has("sku") && ri.get("sku").has("name")) ? ri.get("sku").get("name").asText() : "";
                         String location = props.has("location") ? props.get("location").asText() : "";
                         String riScope = props.has("appliedScopeType") ? props.get("appliedScopeType").asText() : "";
-                        String term = props.has("term") ? props.get("term").asText() : "";
+                        String term = ReservationService.azureRiPlan(props);
                         int quantity = props.has("quantity") ? props.get("quantity").asInt() : 1;
 
                         String resourceDetail = skuName;
@@ -1119,7 +1123,7 @@ public class BigQueryBatchService {
                         }
 
                         // 수집 건 단위 중복 키 체크
-                        String uniqueKey = (displayName.isEmpty() ? name : displayName) + "_" + effectiveDate + "_" + skuName + "_" + location;
+                        String uniqueKey = ReservationService.azureRiDedupKey(ri, props, skuName, location);
                         if (!processedRiKeys.add(uniqueKey)) {
                             log.info("Skipping duplicate RI entry in API response: {}", uniqueKey);
                             continue;
@@ -1135,11 +1139,15 @@ public class BigQueryBatchService {
                     }
                 }
                 log.info("Azure RI: {} valid reservations collected for customer {}", riCount, customerName);
+                processedTenants.add(tenantKey);
             } catch (Exception e) {
                 log.error("Failed to process Azure RI for environment: {}", env.getEnvironmentName(), e);
             }
             try {
-                collectAzureAppCredentials(env, snapshotDate, tenantId, clientId, clientSecret);
+                // 앱 키 점검은 기존처럼 테넌트당 1회만 (RI 재시도 시 중복 적재 방지)
+                if (appCheckedTenants.add(tenantKey)) {
+                    collectAzureAppCredentials(env, snapshotDate, tenantId, clientId, clientSecret);
+                }
             } catch (Exception e) {
                 log.error("Failed to process Azure App keys check for environment: {}", env.getEnvironmentName(), e);
             }
@@ -2613,7 +2621,7 @@ public class BigQueryBatchService {
                 ")\n" +
                 "SELECT r.customer_name, r.provider, r.project_id, r.reservation_name,\n" +
                 "       COALESCE(r.type, r.plan, 'Standard') as commitment_type,\n" +
-                "       r.region, r.resource_detail, r.start_date, r.expiry_date, r.status\n" +
+                "       r.plan, r.region, r.resource_detail, r.start_date, r.expiry_date, r.status\n" +
                 "FROM `%s.%s.daily_reservation_inventory` r\n" +
                 "JOIN latest_snapshots l\n" +
                 "    ON r.customer_name = l.customer_name\n" +
@@ -2639,6 +2647,7 @@ public class BigQueryBatchService {
                 item.put("reservationName", row.get("reservation_name").isNull() ? "-" : row.get("reservation_name").getStringValue());
                 item.put("commitmentType", row.get("commitment_type").isNull() ? "CUD/RI" : row.get("commitment_type").getStringValue());
                 item.put("region", row.get("region").isNull() ? "-" : row.get("region").getStringValue());
+                item.put("plan", row.get("plan").isNull() || row.get("plan").getStringValue().isEmpty() ? "-" : row.get("plan").getStringValue());
                 item.put("resourceDetail", row.get("resource_detail").isNull() ? "표준 약정 리소스" : row.get("resource_detail").getStringValue());
                 item.put("startDate", row.get("start_date").isNull() ? "-" : row.get("start_date").getStringValue());
                 item.put("expiryDate", row.get("expiry_date").isNull() ? "" : row.get("expiry_date").getStringValue());
@@ -2735,6 +2744,8 @@ public class BigQueryBatchService {
                 fields.add(createMrkdwnField("*⏳ 만료 예정일:*\n`" + item.get("expiryDate") + "` *(D-30)*"));
                 fields.add(createMrkdwnField("*🆔 프로젝트/구독:*\n`" + item.get("projectId") + "`"));
                 fields.add(createMrkdwnField("*🏷️ 약정 식별명:*\n`" + item.get("reservationName") + "`"));
+                // 약정 기간·자동 갱신 여부 (예: P1Y (자동 갱신))
+                fields.add(createMrkdwnField("*🔁 약정 기간/갱신:*\n`" + item.getOrDefault("plan", "-") + "`"));
 
                 itemSection.put("fields", fields);
                 blocks.add(itemSection);

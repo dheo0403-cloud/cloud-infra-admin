@@ -207,8 +207,6 @@ public class ReservationService {
         String clientSecret = environmentService.getDecryptedSecret(env.getId());
         if (tenantId == null || clientId == null || clientSecret == null) return results;
 
-        String subscriptionId = (env.getProjects() != null && !env.getProjects().isEmpty()) ? env.getProjects().get(0).getProjectId() : "";
-
         // 새로고침 시 당일 기존 데이터 제거하여 누적 중복 방지
         deleteDailyReservations(snapshotDate, customerName, "AZURE");
 
@@ -260,12 +258,13 @@ public class ReservationService {
                     String name = ri.has("name") ? ri.get("name").asText() : "";
                     String displayName = props.has("displayName") ? props.get("displayName").asText() : name;
                     String expiryDate = props.has("expiryDate") ? props.get("expiryDate").asText() : "";
-                    String effectiveDate = props.has("effectiveDateTime") ? props.get("effectiveDateTime").asText().substring(0, 10) : "";
+                    String effectiveDate = azureRiStartDate(props);
+                    String subscriptionId = azureRiSubscription(props);
                     String riType = props.has("reservedResourceType") ? props.get("reservedResourceType").asText() : "";
                     String skuName = ri.has("sku") && ri.get("sku").has("name") ? ri.get("sku").get("name").asText() : "";
                     String location = props.has("location") ? props.get("location").asText() : "";
                     String riScope = props.has("appliedScopeType") ? props.get("appliedScopeType").asText() : "";
-                    String term = props.has("term") ? props.get("term").asText() : "";
+                    String term = azureRiPlan(props);
                     int quantity = props.has("quantity") ? props.get("quantity").asInt() : 1;
 
                     String resourceDetail = skuName;
@@ -273,7 +272,7 @@ public class ReservationService {
                         resourceDetail += " (수량: " + quantity + ")";
                     }
 
-                    String uniqueKey = (displayName.isEmpty() ? name : displayName) + "_" + effectiveDate + "_" + skuName + "_" + location;
+                    String uniqueKey = azureRiDedupKey(ri, props, skuName, location);
                     if (!processedRiKeys.add(uniqueKey)) continue;
 
                     String mappedStatus = "Succeeded".equalsIgnoreCase(status) ? "ACTIVE" : status.toUpperCase();
@@ -456,6 +455,36 @@ public class ReservationService {
         } catch (Exception e) {
             log.error("Failed to clear existing daily_reservation_inventory for customer: {}", customerName, e);
         }
+    }
+
+    private static final java.util.regex.Pattern AZURE_SUBSCRIPTION = java.util.regex.Pattern.compile("/subscriptions/([^/]+)");
+
+    /** RI가 실제 적용되는 구독 ID (Single/ResourceGroup → 적용 구독, Shared 등 → 결제 구독, 없으면 빈 값) */
+    static String azureRiSubscription(JsonNode props) {
+        JsonNode sp = props.path("appliedScopeProperties");
+        String scope = sp.path("subscriptionId").asText(sp.path("resourceGroupId").asText(props.path("billingScopeId").asText("")));
+        java.util.regex.Matcher m = AZURE_SUBSCRIPTION.matcher(scope);
+        return m.find() ? m.group(1) : "";
+    }
+
+    /** RI 시작일: 혜택 시작 → 구매일 순 (effectiveDateTime은 마지막 변경 시각이라 쓰지 않음) */
+    static String azureRiStartDate(JsonNode props) {
+        String start = props.path("benefitStartTime").asText(props.path("purchaseDate").asText(""));
+        return start.length() >= 10 ? start.substring(0, 10) : start;
+    }
+
+    /** API 응답 중복 판정 키 (기존과 같게 이름 + effectiveDateTime 날짜 + SKU + 지역) */
+    static String azureRiDedupKey(JsonNode ri, JsonNode props, String skuName, String location) {
+        String name = ri.path("name").asText("");
+        String displayName = props.path("displayName").asText(name);
+        String changed = props.path("effectiveDateTime").asText("");
+        return (displayName.isEmpty() ? name : displayName) + "_" + changed.substring(0, Math.min(10, changed.length())) + "_" + skuName + "_" + location;
+    }
+
+    /** 약정 기간 + 자동 갱신 여부 (예: "P1Y (자동 갱신)") */
+    static String azureRiPlan(JsonNode props) {
+        String term = props.path("term").asText("");
+        return props.path("renew").asBoolean(false) ? term + " (자동 갱신)" : term;
     }
 
     private String getStringValue(FieldValueList row, String field) {
