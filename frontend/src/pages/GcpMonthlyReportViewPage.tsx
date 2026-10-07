@@ -82,6 +82,8 @@ interface MonthlyReportData {
     vpcSubnetTrend?: number[];
     lbTrend?: number[];
     gkeNodeTrend?: number[];
+    gkeClusterTrend?: number[];
+    gkeSummary?: { nodes?: number; autopilot?: number; standard?: number };
     serverlessTrend?: number[];
     diskTrend?: number[];
     snapshotTrend?: number[];
@@ -1780,20 +1782,27 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                         <div className={isGkeEmpty ? "print-hide-empty" : ""} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
-                                    <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 수량</span>
+                                    <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 클러스터 & 노드 수량</span>
                                     <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
                                 </div>
                                 <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
                                     {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
-                                        const trendArr = (reportData.gkeNodeTrend && reportData.gkeNodeTrend.length > 0) ? reportData.gkeNodeTrend : [(reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0), (reportData.gkeTotal || 0)];
-                                        const val = trendArr[idx] || 0;
-                                        const maxV = Math.max(1, ...trendArr);
-                                        const hPct = val > 0 ? (val / maxV) * 85 : 0;
+                                        // 클러스터 수(연보라)와 노드 수(진보라)를 같은 축에 함께 표시
+                                        const clusterArr = reportData.gkeClusterTrend || [];
+                                        const nodeArr = reportData.gkeNodeTrend || [];
+                                        const cVal = clusterArr[idx] || 0;
+                                        const nVal = nodeArr[idx] || 0;
+                                        const maxV = Math.max(1, ...clusterArr, ...nodeArr);
+                                        const cPct = cVal > 0 ? (cVal / maxV) * 85 : 0;
+                                        const nPct = nVal > 0 ? (nVal / maxV) * 85 : 0;
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                                    <div style={{ width: '20px', backgroundColor: '#7c3aed', borderRadius: '4px 4px 0 0', height: `${hPct}%`, minHeight: hPct > 0 ? '2px' : 0, position: 'relative' }}>
-                                                        {val > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#7c3aed' }}>{val}</span>}
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#a78bfa', borderRadius: '3px 3px 0 0', height: `${cPct}%`, minHeight: cPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                        {cVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#7c3aed' }}>{cVal}</span>}
+                                                    </div>
+                                                    <div style={{ width: '16px', backgroundColor: '#5b21b6', borderRadius: '3px 3px 0 0', height: `${nPct}%`, minHeight: nPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                        {nVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#5b21b6' }}>{nVal}</span>}
                                                     </div>
                                                 </div>
                                                 <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
@@ -1803,7 +1812,10 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
                                     <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#7c3aed', marginRight: '5px' }}></span>GKE 클러스터
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#a78bfa', marginRight: '5px' }}></span>클러스터
+                                    </span>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#5b21b6', marginRight: '5px' }}></span>노드
                                     </span>
                                 </div>
                             </div>
@@ -1816,31 +1828,39 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     {(() => {
                                         const gkeCount = reportData.gkeTotal || 0;
                                         const isGkeExist = gkeCount > 0;
-                                        const nodeCount = isGkeExist ? (reportData.gkeNodeTotal || gkeCount * 3) : 0;
-                                        const nodePct = isGkeExist ? 100 : 0;
+                                        const gs = reportData.gkeSummary;
+                                        const collected = gs !== undefined && gs.nodes !== undefined;
+                                        const nodeCount = gs?.nodes || 0;
+                                        const autopilot = gs?.autopilot || 0;
+                                        const standard = gs?.standard || 0;
+                                        const autoPct = isGkeExist && collected ? (autopilot / Math.max(1, autopilot + standard)) * 100 : 0;
                                         return (
                                             <>
                                                 <div style={{ marginBottom: '12px' }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                                         <span style={{ color: '#475569' }}>GKE 클러스터 노드 총량</span>
-                                                        <span style={{ fontWeight: 700, color: isGkeExist ? '#7c3aed' : '#64748b' }}>
-                                                            {isGkeExist ? `${nodeCount}개 노드 가동 중` : '0개 (데이터 없음)'}
+                                                        <span style={{ fontWeight: 700, color: isGkeExist && collected ? '#7c3aed' : '#64748b' }}>
+                                                            {!isGkeExist ? '0개 (데이터 없음)' : collected ? `${nodeCount.toLocaleString()}개 노드 가동 중` : '수집 전'}
                                                         </span>
                                                     </div>
                                                     <div className="progress-bar-bg">
-                                                        <div className="progress-bar-fill" style={{ width: `${nodePct}%`, backgroundColor: '#8b5cf6' }}></div>
+                                                        <div className="progress-bar-fill" style={{ width: `${isGkeExist && collected && nodeCount > 0 ? 100 : 0}%`, backgroundColor: '#8b5cf6' }}></div>
                                                     </div>
                                                 </div>
 
                                                 <div>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                                                         <span style={{ color: '#475569' }}>Standard / Autopilot 구성</span>
-                                                        <span style={{ fontWeight: 700, color: isGkeExist ? '#d97706' : '#64748b' }}>
-                                                            {isGkeExist ? `Standard / Autopilot 모드` : '0개 (데이터 없음)'}
+                                                        <span style={{ fontWeight: 700, color: isGkeExist && collected ? '#d97706' : '#64748b' }}>
+                                                            {!isGkeExist ? '0개 (데이터 없음)' : collected ? `Standard ${standard} · Autopilot ${autopilot}` : '수집 전'}
                                                         </span>
                                                     </div>
                                                     <div className="progress-bar-bg">
-                                                        <div className="progress-bar-fill" style={{ width: `${isGkeExist ? 100 : 0}%`, backgroundColor: '#f59e0b' }}></div>
+                                                        <div className="progress-bar-fill" style={{ width: `${autoPct}%`, backgroundColor: '#f59e0b' }}></div>
+                                                    </div>
+                                                    {/* 용어 설명: 보고서를 받는 고객도 바로 이해할 수 있게 한 줄로 */}
+                                                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
+                                                        Standard: 노드를 직접 관리 · Autopilot: Google이 노드를 자동 관리 (막대: Autopilot 비율)
                                                     </div>
                                                 </div>
                                             </>

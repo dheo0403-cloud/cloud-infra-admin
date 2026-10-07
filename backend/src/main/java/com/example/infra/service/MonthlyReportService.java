@@ -497,8 +497,15 @@ public class MonthlyReportService {
         List<Integer> vpcSubnetTrend = getTrendList(monthlyAssets, fullYearMonths, "VPC_Subnet_Total");
         List<Integer> lbTrend = getTrendList(monthlyAssets, fullYearMonths, "LoadBalancer");
         List<Integer> gkeNodeTrend = getTrendList(monthlyAssets, fullYearMonths, "GKE_Node_Total");
-        if (gkeNodeTrend.stream().allMatch(v -> v == 0)) {
-            gkeNodeTrend = getTrendList(monthlyAssets, fullYearMonths, "GKE_Cluster_Total");
+        // GKE 핵심 지표: 최근 달에 클러스터 수집 값이 있을 때만 노드 수·Standard/Autopilot 수 (유형 키는 1개 이상일 때만 적재되므로 없으면 0)
+        Map<String, Integer> gkeSummary = new HashMap<>();
+        if (!fullYearMonths.isEmpty()) {
+            Map<String, Integer> latestGke = monthlyAssets.getOrDefault(fullYearMonths.get(fullYearMonths.size() - 1), Collections.emptyMap());
+            if (latestGke.containsKey("GKE_Cluster_Total")) {
+                gkeSummary.put("nodes", latestGke.getOrDefault("GKE_Node_Total", 0));
+                gkeSummary.put("autopilot", latestGke.getOrDefault("GKE_Cluster_Type_Autopilot", 0));
+                gkeSummary.put("standard", latestGke.getOrDefault("GKE_Cluster_Type_Standard", 0));
+            }
         }
         List<Integer> serverlessTrend = getTrendList(monthlyAssets, fullYearMonths, "CloudRun_Svc_Total");
         if (serverlessTrend.stream().allMatch(v -> v == 0)) {
@@ -561,6 +568,8 @@ public class MonthlyReportService {
                 .vpcSubnetTrend(vpcSubnetTrend)
                 .lbTrend(lbTrend)
                 .gkeNodeTrend(gkeNodeTrend)
+                .gkeClusterTrend(gkeTotalTrend)
+                .gkeSummary(gkeSummary)
                 .serverlessTrend(serverlessTrend)
                 .diskTrend(diskTotalTrend)
                 .snapshotTrend(snapshotTrend)

@@ -73,6 +73,8 @@ public class MonthlyReportDto {
     private List<Integer> vpcSubnetTrend;
     private List<Integer> lbTrend;
     private List<Integer> gkeNodeTrend;
+    private List<Integer> gkeClusterTrend;
+    private Map<String, Integer> gkeSummary; // nodes / autopilot / standard (수집 전이면 빈 맵)
     private List<Integer> serverlessTrend;
     private List<Integer> diskTrend;
     private List<Integer> snapshotTrend;
