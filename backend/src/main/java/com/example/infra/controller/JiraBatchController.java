@@ -26,8 +26,8 @@ public class JiraBatchController {
     private final JiraBigQueryService jiraBigQueryService;
     private final InfraCustomerRepository customerRepository;
 
-    /** Jira 프로젝트 키 형식 — 삭제 SQL과 JQL에 들어가므로 이 형식만 받음 (SQL·JQL 인젝션 방지) */
-    private static final String PROJECT_KEY_PATTERN = "^[A-Z][A-Z0-9_]{0,49}$";
+    /** Jira 프로젝트 키 형식 — 요청값은 400으로 먼저 거름 (서비스에서도 같은 규칙으로 한 번 더 검사) */
+    private static final String PROJECT_KEY_PATTERN = JiraClientService.PROJECT_KEY_PATTERN;
 
     /**
      * 전체 등록 고객사 Jira 일괄 수동 동기화

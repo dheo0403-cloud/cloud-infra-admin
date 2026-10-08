@@ -83,10 +83,15 @@ public class JiraBigQueryService {
         Map<String, String> assetMap = getAssetMapping();
 
         // 1. 당일 해당 프로젝트 기존 데이터 삭제 (멱등성 보장)
-        String deleteSql = String.format("DELETE FROM `%s.%s.%s` WHERE snapshot_date = '%s' AND project_key = '%s' AND provider_type = '%s'",
-                targetProjectId, datasetName, TABLE_NAME, dateStr, projectKey, providerType);
+        // Jira 키·provider는 저장값이라 파라미터로 전달 (SQL 인젝션 방지)
+        String deleteSql = String.format("DELETE FROM `%s.%s.%s` WHERE snapshot_date = @snap AND project_key = @key AND provider_type = @provider",
+                targetProjectId, datasetName, TABLE_NAME);
         try {
-            QueryJobConfiguration deleteConfig = QueryJobConfiguration.newBuilder(deleteSql).build();
+            QueryJobConfiguration deleteConfig = QueryJobConfiguration.newBuilder(deleteSql)
+                    .addNamedParameter("snap", QueryParameterValue.date(dateStr))
+                    .addNamedParameter("key", QueryParameterValue.string(projectKey))
+                    .addNamedParameter("provider", QueryParameterValue.string(providerType))
+                    .build();
             bigQuery.query(deleteConfig);
             log.info("[JIRA-BQ] Cleared existing rows for date {}, provider {}, project {}", dateStr, providerType, projectKey);
         } catch (Exception e) {

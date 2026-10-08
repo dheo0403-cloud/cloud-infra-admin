@@ -29,6 +29,9 @@ public class JiraClientService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** Jira 프로젝트 키 형식 (대문자로 시작, 대문자·숫자·밑줄) */
+    public static final String PROJECT_KEY_PATTERN = "^[A-Z][A-Z0-9_]{0,49}$";
+
     private static final String FIELDS_PARAM = "summary,status,created,updated,resolutiondate,assignee,reporter,issuetype,priority,labels,customfield_13299,customfield_13300,customfield_13301,customfield_14833,customfield_12757,customfield_14536,customfield_12842,customfield_16190";
 
 
@@ -64,6 +67,12 @@ public class JiraClientService {
 
     public List<Map<String, Object>> fetchIssuesWithJql(String projectKey, String jql) {
         List<Map<String, Object>> allIssues = new ArrayList<>();
+
+        // 키가 JQL에 그대로 들어가므로 Jira 키 형식만 허용 (저장값·요청값 모두 JQL 인젝션 방지). 빈 목록이면 적재·삭제도 건너뜀
+        if (projectKey == null || !projectKey.matches(PROJECT_KEY_PATTERN)) {
+            log.warn("[JIRA-CLIENT] Jira 프로젝트 키 형식이 아니어서 조회를 건너뜀: {}", projectKey);
+            return allIssues;
+        }
 
         if (apiToken == null || apiToken.trim().isEmpty()) {
             log.warn("[JIRA-CLIENT] Jira API Token is empty. Skipping issue fetch for project: {}", projectKey);

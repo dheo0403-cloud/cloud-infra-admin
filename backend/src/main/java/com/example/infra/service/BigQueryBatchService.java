@@ -2498,9 +2498,14 @@ public class BigQueryBatchService {
         try {
             String query = String.format(
                 "DELETE FROM `%s.%s.daily_reservation_inventory` " +
-                "WHERE snapshot_date = '%s' AND customer_name = '%s' AND provider = '%s'",
-                targetProjectId, datasetName, snapshotDate, customerName, provider);
-            bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
+                "WHERE snapshot_date = @snap AND customer_name = @cust AND provider = @provider",
+                targetProjectId, datasetName);
+            // 고객사 이름은 저장값이라 파라미터로 전달 (SQL 인젝션 방지)
+            bigQuery.query(QueryJobConfiguration.newBuilder(query)
+                    .addNamedParameter("snap", QueryParameterValue.string(snapshotDate))
+                    .addNamedParameter("cust", QueryParameterValue.string(customerName))
+                    .addNamedParameter("provider", QueryParameterValue.string(provider))
+                    .build());
             log.info("Cleared existing daily_reservation_inventory for snapshot: {}, customer: {}, provider: {}", snapshotDate, customerName, provider);
         } catch (Exception e) {
             log.error("Failed to clear existing daily_reservation_inventory for customer: {}", customerName, e);

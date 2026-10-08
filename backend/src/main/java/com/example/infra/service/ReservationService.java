@@ -49,18 +49,20 @@ public class ReservationService {
         String customerName = env.getCustomer() != null ? env.getCustomer().getName() : "Unknown";
         String provider = env.getProviderType();
 
-        // BigQuery에서 최신 snapshot_date의 데이터 조회
+        // BigQuery에서 최신 snapshot_date의 데이터 조회 (고객사 이름은 저장값이라 파라미터로 전달 — SQL 인젝션 방지)
         String query = String.format(
             "SELECT * FROM `%s.%s.daily_reservation_inventory` " +
-            "WHERE customer_name = '%s' AND provider = '%s' AND provider != 'AZURE_APP' AND (type IS NULL OR type NOT IN ('CLIENT_SECRET', 'CERTIFICATE')) " +
-            "AND snapshot_date = (SELECT MAX(snapshot_date) FROM `%s.%s.daily_reservation_inventory` WHERE customer_name = '%s' AND provider = '%s') " +
+            "WHERE customer_name = @cust AND provider = @provider AND provider != 'AZURE_APP' AND (type IS NULL OR type NOT IN ('CLIENT_SECRET', 'CERTIFICATE')) " +
+            "AND snapshot_date = (SELECT MAX(snapshot_date) FROM `%s.%s.daily_reservation_inventory` WHERE customer_name = @cust AND provider = @provider) " +
             "ORDER BY expiry_date ASC",
-            targetProjectId, datasetName, customerName, provider,
-            targetProjectId, datasetName, customerName, provider);
+            targetProjectId, datasetName, targetProjectId, datasetName);
 
         List<ReservationDto> results = new ArrayList<>();
         try {
-            TableResult tableResult = bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
+            TableResult tableResult = bigQuery.query(QueryJobConfiguration.newBuilder(query)
+                    .addNamedParameter("cust", QueryParameterValue.string(customerName))
+                    .addNamedParameter("provider", QueryParameterValue.string(provider))
+                    .build());
             for (FieldValueList row : tableResult.iterateAll()) {
                 results.add(ReservationDto.builder()
                     .snapshotDate(getStringValue(row, "snapshot_date"))
@@ -448,9 +450,13 @@ public class ReservationService {
         try {
             String query = String.format(
                 "DELETE FROM `%s.%s.daily_reservation_inventory` " +
-                "WHERE snapshot_date = '%s' AND customer_name = '%s' AND provider = '%s'",
-                targetProjectId, datasetName, snapshotDate, customerName, provider);
-            bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
+                "WHERE snapshot_date = @snap AND customer_name = @cust AND provider = @provider",
+                targetProjectId, datasetName);
+            bigQuery.query(QueryJobConfiguration.newBuilder(query)
+                    .addNamedParameter("snap", QueryParameterValue.string(snapshotDate))
+                    .addNamedParameter("cust", QueryParameterValue.string(customerName))
+                    .addNamedParameter("provider", QueryParameterValue.string(provider))
+                    .build());
             log.info("Cleared existing daily_reservation_inventory for snapshot: {}, customer: {}, provider: {}", snapshotDate, customerName, provider);
         } catch (Exception e) {
             log.error("Failed to clear existing daily_reservation_inventory for customer: {}", customerName, e);

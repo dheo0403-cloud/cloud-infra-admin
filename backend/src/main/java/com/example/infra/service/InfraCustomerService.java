@@ -22,12 +22,13 @@ public class InfraCustomerService {
 
     public InfraCustomer saveCustomer(InfraCustomer customer) {
         boolean isUpdate = (customer.getId() != null);
-        if (isUpdate) {
+        // 환경 목록이 아예 없으면(null) 기존 환경을 그대로 둔다. 빈 배열([])일 때만 화면에서 모두 지운 것으로 보고 삭제
+        if (isUpdate && customer.getEnvironments() != null) {
             List<com.example.infra.entity.InfraEnvironment> existingEnvs = infraEnvironmentRepository.findAllByCustomerId(customer.getId());
-            List<String> newEnvIds = customer.getEnvironments() != null ? customer.getEnvironments().stream()
+            List<String> newEnvIds = customer.getEnvironments().stream()
                 .map(com.example.infra.entity.InfraEnvironment::getId)
                 .filter(id -> id != null)
-                .toList() : java.util.List.of();
+                .toList();
             
             existingEnvs.stream()
                 .filter(env -> !newEnvIds.contains(env.getId()))
