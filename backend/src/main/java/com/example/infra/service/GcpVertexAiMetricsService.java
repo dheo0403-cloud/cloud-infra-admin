@@ -7,6 +7,7 @@ import com.example.infra.dto.VertexEndpointMetricsDto;
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.FieldValueList;
 import com.google.cloud.bigquery.QueryJobConfiguration;
+import com.google.cloud.bigquery.QueryParameterValue;
 import com.google.cloud.bigquery.TableResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,15 @@ public class GcpVertexAiMetricsService {
     private static final String MONTHLY_DIRECT_AI_SUMMARY_TABLE = "monthly_direct_ai_summary";
     private static final String MONTHLY_ENDPOINT_SERVING_SUMMARY_TABLE = "monthly_endpoint_serving_summary";
     private static final String MODEL_USAGE_TABLE = "daily_ai_model_usage";
+
+    /** 요청으로 받은 프로젝트 ID·연월은 SQL 문자열에 넣지 않고 이름 붙은 파라미터(@pid, @fromYm, @toYm)로 전달 (SQL 인젝션 방지) */
+    private TableResult query(String sql, String projectId, String fromYm, String toYm) throws InterruptedException {
+        return bigQuery.query(QueryJobConfiguration.newBuilder(sql)
+                .addNamedParameter("pid", QueryParameterValue.string(projectId))
+                .addNamedParameter("fromYm", QueryParameterValue.string(fromYm))
+                .addNamedParameter("toYm", QueryParameterValue.string(toYm))
+                .build());
+    }
 
     /**
      * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회 (기본 4개월 추이)
@@ -100,11 +110,11 @@ public class GcpVertexAiMetricsService {
                     "  monthly_translation_calls AS monthly_trans, " +
                     "  monthly_nlp_calls AS monthly_nlp " +
                     "FROM `%s.%s.%s` " +
-                    "WHERE project_id = '%s' AND report_year_month BETWEEN '%s' AND '%s' " +
+                    "WHERE project_id = @pid AND report_year_month BETWEEN @fromYm AND @toYm " +
                     "ORDER BY ym ASC",
-                    hostProjectId, datasetName, MONTHLY_DIRECT_AI_SUMMARY_TABLE, effectiveProjectId, startYm, endYm
+                    hostProjectId, datasetName, MONTHLY_DIRECT_AI_SUMMARY_TABLE
                 );
-                TableResult summaryResult = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql).build());
+                TableResult summaryResult = query(summarySql, effectiveProjectId, startYm, endYm);
                 for (FieldValueList row : summaryResult.iterateAll()) {
                     String ym = row.get("ym").getStringValue();
                     monthDataMap.put(ym, row);
@@ -131,12 +141,12 @@ public class GcpVertexAiMetricsService {
                     "  SUM(translation_api_calls) AS monthly_trans, " +
                     "  SUM(nlp_api_calls) AS monthly_nlp " +
                     "FROM `%s.%s.%s` " +
-                    "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN '%s' AND '%s' " +
+                    "WHERE project_id = @pid AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN @fromYm AND @toYm " +
                     "GROUP BY ym ORDER BY ym ASC",
-                    hostProjectId, datasetName, DIRECT_AI_TABLE, effectiveProjectId, startYm, endYm
+                    hostProjectId, datasetName, DIRECT_AI_TABLE
                 );
 
-                TableResult monthlyResult = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+                TableResult monthlyResult = query(monthlySql, effectiveProjectId, startYm, endYm);
                 for (FieldValueList row : monthlyResult.iterateAll()) {
                     String ym = row.get("ym").getStringValue();
                     monthDataMap.putIfAbsent(ym, row);
@@ -193,11 +203,11 @@ public class GcpVertexAiMetricsService {
                 String modelSql = String.format(
                     "SELECT publisher, model, SUM(invocations) AS inv, SUM(input_tokens) AS in_tok, SUM(output_tokens) AS out_tok " +
                     "FROM `%s.%s.%s` " +
-                    "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) = '%s' " +
+                    "WHERE project_id = @pid AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN @fromYm AND @toYm " +
                     "GROUP BY publisher, model ORDER BY inv DESC, model ASC",
-                    hostProjectId, datasetName, MODEL_USAGE_TABLE, effectiveProjectId, effectiveYearMonth
+                    hostProjectId, datasetName, MODEL_USAGE_TABLE
                 );
-                for (FieldValueList row : bigQuery.query(QueryJobConfiguration.newBuilder(modelSql).build()).iterateAll()) {
+                for (FieldValueList row : query(modelSql, effectiveProjectId, effectiveYearMonth, effectiveYearMonth).iterateAll()) {
                     long inv = row.get("inv").isNull() ? 0L : row.get("inv").getLongValue();
                     totalInvocations += inv;
                     models.add(DirectAiMetricsDto.ModelUsageDto.builder()
@@ -347,11 +357,11 @@ public class GcpVertexAiMetricsService {
                     "  AVG(avg_latency_ms) AS monthly_avg_latency, " +
                     "  AVG(avg_qps) AS monthly_qps " +
                     "FROM `%s.%s.%s` " +
-                    "WHERE project_id = '%s' AND report_year_month BETWEEN '%s' AND '%s' " +
+                    "WHERE project_id = @pid AND report_year_month BETWEEN @fromYm AND @toYm " +
                     "GROUP BY ym ORDER BY ym ASC",
-                    hostProjectId, datasetName, MONTHLY_ENDPOINT_SERVING_SUMMARY_TABLE, effectiveProjectId, startYm, endYm
+                    hostProjectId, datasetName, MONTHLY_ENDPOINT_SERVING_SUMMARY_TABLE
                 );
-                TableResult summaryRes = bigQuery.query(QueryJobConfiguration.newBuilder(summarySql).build());
+                TableResult summaryRes = query(summarySql, effectiveProjectId, startYm, endYm);
                 for (FieldValueList row : summaryRes.iterateAll()) {
                     String ym = row.get("ym").getStringValue();
                     monthDataMap.put(ym, row);
@@ -368,12 +378,12 @@ public class GcpVertexAiMetricsService {
                     "  AVG(avg_latency_ms) AS monthly_avg_latency, " +
                     "  AVG(qps) AS monthly_qps " +
                     "FROM `%s.%s.%s` " +
-                    "WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN '%s' AND '%s' " +
+                    "WHERE project_id = @pid AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN @fromYm AND @toYm " +
                     "GROUP BY ym ORDER BY ym ASC",
-                    hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, startYm, endYm
+                    hostProjectId, datasetName, ENDPOINT_SERVING_TABLE
                 );
 
-                TableResult monthlyRes = bigQuery.query(QueryJobConfiguration.newBuilder(monthlySql).build());
+                TableResult monthlyRes = query(monthlySql, effectiveProjectId, startYm, endYm);
                 for (FieldValueList row : monthlyRes.iterateAll()) {
                     String ym = row.get("ym").getStringValue();
                     monthDataMap.putIfAbsent(ym, row);
@@ -403,12 +413,12 @@ public class GcpVertexAiMetricsService {
                 "SELECT * FROM (" +
                 "  SELECT *, ROW_NUMBER() OVER(PARTITION BY endpoint_id ORDER BY snapshot_date DESC, created_at DESC) as rn " +
                 "  FROM `%s.%s.%s` " +
-                "  WHERE project_id = '%s' AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) = '%s' " +
+                "  WHERE project_id = @pid AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN @fromYm AND @toYm " +
                 ") WHERE rn = 1 ORDER BY endpoint_name ASC",
-                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE, effectiveProjectId, effectiveYearMonth
+                hostProjectId, datasetName, ENDPOINT_SERVING_TABLE
             );
 
-            TableResult epRes = bigQuery.query(QueryJobConfiguration.newBuilder(endpointSql).build());
+            TableResult epRes = query(endpointSql, effectiveProjectId, effectiveYearMonth, effectiveYearMonth);
             List<EndpointServingMetricsDto.EndpointDetailDto> endpointItems = new ArrayList<>();
             String customerName = "고객사 GCP 프로젝트";
             long totalRequestsTargetMonth = monthlyRequestsTrend.get(3);

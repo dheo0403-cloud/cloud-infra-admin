@@ -44,14 +44,17 @@ public class ReservationController {
     }
 
     /**
-     * Azure RI & GCP CUD 약정 만료 D-30 Slack 알람 1회성 테스트 발송
+     * Azure RI & GCP CUD 약정 만료 D-30 Slack 알람 수동 실행 (실제 만료 대상이 있을 때만 발송, 가짜 데이터 없음)
      */
     @PostMapping("/trigger-d30-slack-alert")
-    public ResponseEntity<Map<String, Object>> triggerD30SlackAlert(@RequestParam(defaultValue = "true") boolean sendMockIfEmpty) {
-        boolean success = bigQueryBatchService.checkReservationsD30ExpiryAndNotifySlack(sendMockIfEmpty);
+    public ResponseEntity<Map<String, Object>> triggerD30SlackAlert() {
+        int count = bigQueryBatchService.notifyReservationsD30Expiry();
         Map<String, Object> res = new HashMap<>();
-        res.put("success", success);
-        res.put("message", success ? "Slack D-30 alert triggered and sent successfully" : "Slack D-30 alert failed to send (check webhook configuration or logs)");
+        res.put("success", count >= 0);
+        res.put("sentCount", Math.max(count, 0));
+        res.put("message", count > 0 ? "D-30 만료 대상 " + count + "건 Slack 발송"
+                : count == 0 ? "D-30 만료 대상 없음 (발송 안 함)"
+                : "조회 또는 Slack 발송 실패 (웹훅 설정·로그 확인)");
         return ResponseEntity.ok(res);
     }
 }

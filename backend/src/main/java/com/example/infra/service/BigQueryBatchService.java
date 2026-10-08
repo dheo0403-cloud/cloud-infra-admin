@@ -2605,14 +2605,15 @@ public class BigQueryBatchService {
      */
     @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Seoul")
     public void checkReservationsD30ExpiryAndNotifySlack() {
-        checkReservationsD30ExpiryAndNotifySlack(false);
+        notifyReservationsD30Expiry();
     }
 
     /**
-     * Azure RI & GCP CUD 약정 만료 D-30 Slack 알람 발송 (테스트 시 sendMockIfEmpty=true 지원)
+     * Azure RI & GCP CUD 약정 만료 D-30 Slack 알람 발송. 실제 만료 대상이 있을 때만 발송한다.
+     * @return 발송 대상 건수 (0이면 발송 안 함), 조회·발송 실패 시 -1
      */
-    public boolean checkReservationsD30ExpiryAndNotifySlack(boolean sendMockIfEmpty) {
-        log.info("Starting Slack notification batch for Azure RI & GCP CUD D-30 expiration check (sendMockIfEmpty: {})", sendMockIfEmpty);
+    public int notifyReservationsD30Expiry() {
+        log.info("Starting Slack notification batch for Azure RI & GCP CUD D-30 expiration check");
         try {
             String query = String.format(
                 "WITH latest_snapshots AS (\n" +
@@ -2656,45 +2657,14 @@ public class BigQueryBatchService {
                 d30List.add(item);
             }
 
-            if (d30List.isEmpty() && sendMockIfEmpty) {
-                log.info("No D-30 expiration data found in DB, generating mock D-30 item for 1-time Slack test verification...");
-                LocalDate today = LocalDate.now();
-                LocalDate mockExpiry = today.plusDays(30);
-
-                Map<String, String> mockItem1 = new HashMap<>();
-                mockItem1.put("customerName", "(주)메가존클라우드 데모 (GCP)");
-                mockItem1.put("provider", "GCP");
-                mockItem1.put("projectId", "mzc-prod-service-485701");
-                mockItem1.put("reservationName", "compute-engine-cud-3yr-n2");
-                mockItem1.put("commitmentType", "COMPUTE_OPTIMIZED_CUD");
-                mockItem1.put("region", "asia-northeast3 (서울)");
-                mockItem1.put("resourceDetail", "vCPU: 64 Core, RAM: 256 GB (N2 계열)");
-                mockItem1.put("startDate", today.minusYears(3).plusDays(30).toString());
-                mockItem1.put("expiryDate", mockExpiry.toString());
-                d30List.add(mockItem1);
-
-                Map<String, String> mockItem2 = new HashMap<>();
-                mockItem2.put("customerName", "(주)메가존클라우드 데모 (Azure)");
-                mockItem2.put("provider", "AZURE");
-                mockItem2.put("projectId", "sub-prod-enterprise-001");
-                mockItem2.put("reservationName", "Standard_D8s_v5_RI_1Year");
-                mockItem2.put("commitmentType", "VirtualMachines (RI)");
-                mockItem2.put("region", "koreacentral");
-                mockItem2.put("resourceDetail", "Standard_D8s_v5 (수량: 4개)");
-                mockItem2.put("startDate", today.minusYears(1).plusDays(30).toString());
-                mockItem2.put("expiryDate", mockExpiry.toString());
-                d30List.add(mockItem2);
-            }
-
-            if (!d30List.isEmpty()) {
-                return sendSlackBlockKitNotification(d30List);
-            } else {
+            if (d30List.isEmpty()) {
                 log.info("No Azure RI or GCP CUD expiring exactly in 30 days today.");
-                return true;
+                return 0;
             }
+            return sendSlackBlockKitNotification(d30List) ? d30List.size() : -1;
         } catch (Exception e) {
             log.error("Failed to execute Slack notification batch for D-30 reservations", e);
-            return false;
+            return -1;
         }
     }
 

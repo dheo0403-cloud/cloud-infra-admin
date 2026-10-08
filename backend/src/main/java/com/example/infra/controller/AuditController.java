@@ -353,8 +353,14 @@ public class AuditController {
      */
     @PostMapping("/trigger-monthly-cleanup")
     public ResponseEntity<String> triggerMonthlyCleanup(@RequestParam(required = false) String snapshotDate) {
+        String date;
         try {
-            String date = (snapshotDate != null && !snapshotDate.isEmpty()) ? snapshotDate : java.time.LocalDate.now().toString();
+            // 날짜(yyyy-MM-dd)로 해석되는 값만 받음 — 테이블을 덮어쓰는 SQL에 들어가므로 형식이 다르면 400
+            date = (snapshotDate != null && !snapshotDate.isEmpty()) ? java.time.LocalDate.parse(snapshotDate).toString() : java.time.LocalDate.now().toString();
+        } catch (java.time.format.DateTimeParseException e) {
+            return ResponseEntity.badRequest().body("snapshotDate는 yyyy-MM-dd 형식이어야 합니다");
+        }
+        try {
             bigQueryBatchService.cleanAllPastMonthlySnapshots(date);
             return ResponseEntity.ok("Past monthly snapshot cleanup executed successfully for " + date);
         } catch (Exception e) {

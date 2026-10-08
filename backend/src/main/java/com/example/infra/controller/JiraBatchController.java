@@ -26,6 +26,9 @@ public class JiraBatchController {
     private final JiraBigQueryService jiraBigQueryService;
     private final InfraCustomerRepository customerRepository;
 
+    /** Jira 프로젝트 키 형식 — 삭제 SQL과 JQL에 들어가므로 이 형식만 받음 (SQL·JQL 인젝션 방지) */
+    private static final String PROJECT_KEY_PATTERN = "^[A-Z][A-Z0-9_]{0,49}$";
+
     /**
      * 전체 등록 고객사 Jira 일괄 수동 동기화
      */
@@ -50,6 +53,9 @@ public class JiraBatchController {
             @RequestParam String projectKey,
             @RequestParam(required = false, defaultValue = "GCP") String providerType) {
         String trimmed = projectKey.trim().toUpperCase();
+        if (!trimmed.matches(PROJECT_KEY_PATTERN)) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "projectKey 형식이 올바르지 않습니다"));
+        }
         LocalDate today = LocalDate.now();
 
         // 등록된 고객사 매칭 탐색
@@ -93,6 +99,9 @@ public class JiraBatchController {
             @RequestParam String projectKey,
             @RequestParam(required = false, defaultValue = "7") Integer days) {
         String trimmed = projectKey.trim().toUpperCase();
+        if (!trimmed.matches(PROJECT_KEY_PATTERN)) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "projectKey 형식이 올바르지 않습니다"));
+        }
         List<Map<String, Object>> issues = jiraClientService.fetchIssuesByProjectAndDays(trimmed, (days != null && days > 0) ? days : null);
 
         Map<String, Object> res = new HashMap<>();
