@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getCustomers, getEnvironmentsByCustomer, getReservations, refreshReservations, getUpcomingExpiryReservations, InfraCustomer, InfraEnvironment, ReservationDto } from '../services/api';
+import { getCustomers, getEnvironmentsByCustomer, getReservations, refreshReservations, getUpcomingExpiryReservations, getAzureAppCredentials, InfraCustomer, InfraEnvironment, ReservationDto } from '../services/api';
 
 const ReservationPage: React.FC = () => {
     const [customers, setCustomers] = useState<InfraCustomer[]>([]);
@@ -16,6 +16,10 @@ const ReservationPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<string>('AZURE');
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    // 처음 화면 탭: 만료 임박 예약(RI/CUD) / Azure 앱 자격 증명 만료
+    const [overviewTab, setOverviewTab] = useState<'RESERVATION' | 'APP_CREDENTIAL'>('RESERVATION');
+    const [appCredentials, setAppCredentials] = useState<ReservationDto[]>([]);
+    const [appCredLoading, setAppCredLoading] = useState<boolean>(false);
 
     const handleCspChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const csp = e.target.value;
@@ -31,7 +35,20 @@ const ReservationPage: React.FC = () => {
     useEffect(() => {
         loadCustomers();
         loadUpcomingReservations();
+        loadAppCredentials();
     }, []);
+
+    const loadAppCredentials = async () => {
+        setAppCredLoading(true);
+        try {
+            const res = await getAzureAppCredentials();
+            setAppCredentials(res.data || []);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setAppCredLoading(false);
+        }
+    };
 
     const loadUpcomingReservations = async () => {
         setUpcomingLoading(true);
@@ -193,6 +210,26 @@ const ReservationPage: React.FC = () => {
             return ddayA - ddayB;
         });
 
+    // 앱 자격 증명: 남은 키를 D-Day 오름차순, 이미 만료된 키는 아래로
+    const sortedAppCredentials = [...appCredentials].sort((a, b) => {
+        const expiredA = getDday(a.expiryDate) < 0 ? 1 : 0;
+        const expiredB = getDday(b.expiryDate) < 0 ? 1 : 0;
+        if (expiredA !== expiredB) return expiredA - expiredB;
+        return getDday(a.expiryDate) - getDday(b.expiryDate);
+    });
+    const appCredWithin30 = appCredentials.filter(r => { const d = getDday(r.expiryDate); return d >= 0 && d <= 30; }).length;
+    const appCredExpired = appCredentials.filter(r => getDday(r.expiryDate) < 0).length;
+    const credentialTypeLabel = (type: string) => type === 'CLIENT_SECRET' ? '클라이언트 비밀값' : type === 'CERTIFICATE' ? '인증서' : type;
+
+    const overviewTabStyle = (active: boolean): React.CSSProperties => ({
+        backgroundColor: active ? '#17a2b8' : 'transparent',
+        color: active ? '#fff' : '#6c757d',
+        border: 'none',
+        borderRadius: '4px 4px 0 0',
+        fontWeight: active ? 'bold' : 'normal',
+        padding: '10px 20px',
+    });
+
     return (
         <div className="container-fluid">
             <div className="content-header">
@@ -262,6 +299,89 @@ const ReservationPage: React.FC = () => {
             {/* 처음에 아무것도 선택하지 않았을 때 (selectedEnvId 가 없을 때) */}
             {!selectedEnvId && (
                 <div className="card bg-dark border-0 shadow-sm mb-4">
+                    <div className="card-header p-0" style={{ borderBottom: '2px solid #495057' }}>
+                        <ul className="nav nav-tabs" style={{ borderBottom: 'none' }}>
+                            <li className="nav-item">
+                                <button className="nav-link" id="tab-overview-reservation" onClick={() => setOverviewTab('RESERVATION')} style={overviewTabStyle(overviewTab === 'RESERVATION')}>
+                                    <i className="fas fa-calendar-check mr-1"></i> 만료 임박 예약 (RI/CUD)
+                                    <span className="badge ml-2" style={{ backgroundColor: overviewTab === 'RESERVATION' ? 'rgba(255,255,255,0.3)' : '#495057' }}>{upcomingReservations.length}</span>
+                                </button>
+                            </li>
+                            <li className="nav-item">
+                                <button className="nav-link" id="tab-overview-app-credential" onClick={() => setOverviewTab('APP_CREDENTIAL')} style={overviewTabStyle(overviewTab === 'APP_CREDENTIAL')}>
+                                    <i className="fas fa-key mr-1"></i> 앱 자격 증명 만료 (Azure)
+                                    <span className="badge ml-2" style={{ backgroundColor: appCredWithin30 > 0 ? '#ff3860' : (overviewTab === 'APP_CREDENTIAL' ? 'rgba(255,255,255,0.3)' : '#495057'), color: '#fff' }}>{appCredentials.length}</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    {overviewTab === 'APP_CREDENTIAL' ? (
+                        <>
+                            <div className="card-header border-0">
+                                <h3 className="card-title text-light">
+                                    <i className="fas fa-key text-warning mr-2"></i>
+                                    Azure 앱 자격 증명 만료 현황
+                                </h3>
+                                <p className="text-muted small mb-0 mt-1">모든 고객사 테넌트의 접속용 앱(mz-api*) 클라이언트 비밀값·인증서 만료일입니다. 30일 이내는 '만료 임박'으로 표시합니다.</p>
+                            </div>
+                            <div className="card-body p-0">
+                                {appCredLoading ? (
+                                    <div className="text-center p-5">
+                                        <i className="fas fa-spinner fa-spin fa-2x text-info"></i>
+                                        <p className="mt-3 text-muted">데이터를 불러오는 중...</p>
+                                    </div>
+                                ) : sortedAppCredentials.length === 0 ? (
+                                    <div className="text-center p-5">
+                                        <i className="fas fa-inbox fa-2x text-muted"></i>
+                                        <p className="mt-3 text-muted">수집된 Azure 앱 자격 증명이 없습니다.</p>
+                                    </div>
+                                ) : (
+                                    <div className="table-responsive">
+                                        <table className="table table-dark mb-0" id="app-credential-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>고객사</th>
+                                                    <th>앱 이름</th>
+                                                    <th>종류</th>
+                                                    <th>상태</th>
+                                                    <th>만료일</th>
+                                                    <th>D-Day</th>
+                                                    <th>키 ID</th>
+                                                    <th>구독 ID</th>
+                                                    <th>마지막 수집</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {sortedAppCredentials.map((r, idx) => (
+                                                    <tr key={idx} style={getDday(r.expiryDate) < 0 ? { opacity: 0.5 } : {}}>
+                                                        <td><strong className="text-white">{r.customerName}</strong></td>
+                                                        <td><strong className="text-white">{r.reservationName}</strong></td>
+                                                        <td><span style={{ color: '#cbd5e1' }}>{credentialTypeLabel(r.type)}</span></td>
+                                                        <td>{getStatusBadge(r.status, r.expiryDate)}</td>
+                                                        <td><span style={{ color: '#cbd5e1' }}>{r.expiryDate}</span></td>
+                                                        <td>{getDdayText(r.status, r.expiryDate)}</td>
+                                                        <td><code style={{ color: '#cbd5e1', backgroundColor: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px' }}>{r.resourceDetail}</code></td>
+                                                        <td><code style={{ color: '#00f2c3', backgroundColor: 'rgba(0,0,0,0.25)', padding: '2px 6px', borderRadius: '4px' }}>{r.projectId}</code></td>
+                                                        {/* 3일 넘게 수집되지 않은 고객사는 경고색 (키 만료·권한 오류로 수집 중단 가능) */}
+                                                        <td>{getDday(r.snapshotDate.substring(0, 10)) < -3
+                                                            ? <span className="text-warning font-weight-bold" title="최근 수집 실패 — 키 만료·권한 확인 필요">{r.snapshotDate.substring(0, 10)} (수집 중단)</span>
+                                                            : <span style={{ color: '#cbd5e1' }}>{r.snapshotDate.substring(0, 10)}</span>}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                            {sortedAppCredentials.length > 0 && (
+                                <div className="card-footer text-muted small">
+                                    <i className="fas fa-info-circle mr-1"></i>
+                                    총 {sortedAppCredentials.length}건 | 30일 이내 {appCredWithin30}건 | 만료 {appCredExpired}건 | Slack 알림: 평일 10시, 만료 10일 이내
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                    <>
                     <div className="card-header border-0">
                         <h3 className="card-title text-light">
                             <i className="fas fa-exclamation-triangle text-warning mr-2"></i>
@@ -330,6 +450,8 @@ const ReservationPage: React.FC = () => {
                             <i className="fas fa-info-circle mr-1"></i>
                             총 {upcomingReservations.length}건의 만료 임박(100일 미만) 예약이 존재합니다.
                         </div>
+                    )}
+                    </>
                     )}
                 </div>
             )}

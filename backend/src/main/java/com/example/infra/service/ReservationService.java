@@ -114,26 +114,65 @@ public class ReservationService {
         try {
             TableResult tableResult = bigQuery.query(QueryJobConfiguration.newBuilder(query).build());
             for (FieldValueList row : tableResult.iterateAll()) {
-                results.add(ReservationDto.builder()
-                    .snapshotDate(getStringValue(row, "snapshot_date"))
-                    .projectId(getStringValue(row, "project_id"))
-                    .customerName(getStringValue(row, "customer_name"))
-                    .provider(getStringValue(row, "provider"))
-                    .reservationName(getStringValue(row, "reservation_name"))
-                    .status(getStringValue(row, "status"))
-                    .startDate(getStringValue(row, "start_date"))
-                    .expiryDate(getStringValue(row, "expiry_date"))
-                    .plan(getStringValue(row, "plan"))
-                    .type(getStringValue(row, "type"))
-                    .region(getStringValue(row, "region"))
-                    .scope(getStringValue(row, "scope"))
-                    .resourceDetail(getStringValue(row, "resource_detail"))
-                    .build());
+                results.add(toDto(row));
             }
         } catch (Exception e) {
             log.error("Failed to query upcoming expiry reservations from BigQuery", e);
         }
         return results;
+    }
+
+    /**
+     * 현재 등록된 고객사의 Azure 앱(mz-api*) 비밀값·인증서 만료 목록 (고객사별 최신 스냅샷, 만료된 키 포함, 만료일 순)
+     * - 고객사별 최신 스냅샷: 수집이 멈춘 고객사(키 만료로 401 등)도 마지막 수집 값으로 남긴다 (snapshot_date로 화면에 표시)
+     * - 삭제·이름이 바뀐 옛 고객사 기록은 제외, 같은 날 두 번 적재된 행(Azure 환경 2개 이상)은 DISTINCT로 거른다
+     */
+    public List<ReservationDto> getAzureAppCredentials() {
+        String query = String.format(
+            "WITH latest AS (\n" +
+            "    SELECT customer_name, MAX(snapshot_date) AS max_snapshot\n" +
+            "    FROM `%s.%s.daily_reservation_inventory`\n" +
+            "    WHERE provider = 'AZURE_APP'\n" +
+            "      AND customer_name IN (SELECT name FROM `%s.%s.infra_customer` WHERE is_deleted IS NULL OR is_deleted = FALSE)\n" +
+            "    GROUP BY customer_name\n" +
+            ")\n" +
+            "SELECT DISTINCT r.snapshot_date, r.project_id, r.customer_name, r.provider, r.reservation_name,\n" +
+            "       r.status, r.expiry_date, r.type, r.resource_detail\n" +
+            "FROM `%s.%s.daily_reservation_inventory` r\n" +
+            "JOIN latest l ON r.customer_name = l.customer_name AND r.snapshot_date = l.max_snapshot\n" +
+            "WHERE r.provider = 'AZURE_APP'\n" +
+            "ORDER BY r.expiry_date ASC, r.customer_name ASC",
+            targetProjectId, datasetName, targetProjectId, datasetName, targetProjectId, datasetName
+        );
+
+        List<ReservationDto> results = new ArrayList<>();
+        try {
+            for (FieldValueList row : bigQuery.query(QueryJobConfiguration.newBuilder(query).build()).iterateAll()) {
+                results.add(toDto(row));
+            }
+        } catch (Exception e) {
+            log.error("Failed to query Azure app credentials from BigQuery", e);
+        }
+        return results;
+    }
+
+    /** 예약 테이블 한 행 → DTO (없는 열은 빈 문자열) */
+    private ReservationDto toDto(FieldValueList row) {
+        return ReservationDto.builder()
+            .snapshotDate(getStringValue(row, "snapshot_date"))
+            .projectId(getStringValue(row, "project_id"))
+            .customerName(getStringValue(row, "customer_name"))
+            .provider(getStringValue(row, "provider"))
+            .reservationName(getStringValue(row, "reservation_name"))
+            .status(getStringValue(row, "status"))
+            .startDate(getStringValue(row, "start_date"))
+            .expiryDate(getStringValue(row, "expiry_date"))
+            .plan(getStringValue(row, "plan"))
+            .type(getStringValue(row, "type"))
+            .region(getStringValue(row, "region"))
+            .scope(getStringValue(row, "scope"))
+            .resourceDetail(getStringValue(row, "resource_detail"))
+            .build();
     }
 
     /**

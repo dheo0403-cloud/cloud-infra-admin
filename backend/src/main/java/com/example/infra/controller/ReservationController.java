@@ -36,6 +36,14 @@ public class ReservationController {
     }
 
     /**
+     * 모든 고객사의 Azure 앱(mz-api*) 비밀값·인증서 만료 목록 (예약 페이지 '앱 자격 증명 만료' 탭)
+     */
+    @GetMapping("/app-credentials")
+    public ResponseEntity<List<ReservationDto>> getAzureAppCredentials() {
+        return ResponseEntity.ok(reservationService.getAzureAppCredentials());
+    }
+
+    /**
      * 수동 새로고침: 즉시 API 호출하여 BigQuery 갱신 후 결과 반환
      */
     @PostMapping("/{environmentId}/refresh")

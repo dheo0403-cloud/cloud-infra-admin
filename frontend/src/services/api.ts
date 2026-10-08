@@ -75,6 +75,8 @@ export interface ReservationDto {
 export const getReservations = (envId: string) => axios.get<ReservationDto[]>(`${API_BASE_URL}/reservations/${envId}`);
 export const refreshReservations = (envId: string) => axios.post<ReservationDto[]>(`${API_BASE_URL}/reservations/${envId}/refresh`);
 export const getUpcomingExpiryReservations = () => axios.get<ReservationDto[]>(`${API_BASE_URL}/reservations/upcoming-expiry`);
+// Azure 앱(mz-api*) 비밀값·인증서 만료 목록 (전체 고객사)
+export const getAzureAppCredentials = () => axios.get<ReservationDto[]>(`${API_BASE_URL}/reservations/app-credentials`);
 
 // Jira
 export interface JiraIssueItem {
