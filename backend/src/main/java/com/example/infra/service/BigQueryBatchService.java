@@ -162,9 +162,8 @@ public class BigQueryBatchService {
                             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_Health_Healthy_Total", healthy);
                             log.info("LB Backend Health: healthy={}, unhealthy={} for project {}", healthy, unhealthy, projectId);
                         } catch (Exception e) {
+                            // 조회 실패를 0/0(정상)으로 저장하지 않음
                             log.warn("Failed to collect LB Backend Health for project {}: {}", projectId, e.getMessage());
-                            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_Health_Unhealthy_Total", 0);
-                            insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_Health_Healthy_Total", 0);
                         }
 
                         // 전날까지 달력 30일 HTTP 5XX 에러 (합계·HTTP·HTTPS) 적재. 조회 실패 시 0으로 저장하지 않음
@@ -704,12 +703,11 @@ public class BigQueryBatchService {
 
                     // 13. Cloud Run Jobs
                     try {
-                        List<com.google.cloud.run.v2.Job> runJobs = gcpResourceFetcher.getCloudRunJobs(credentials, projectId);
+                        List<String> runJobs = gcpResourceFetcher.getCloudRunJobs(credentials, projectId);
                         Map<String, Integer> runJobCounts = new HashMap<>();
 
-                        for (com.google.cloud.run.v2.Job job : runJobs) {
-                            // 리전: name = projects/{proj}/locations/{region}/jobs/{job}
-                            String jobName = job.getName();
+                        for (String jobName : runJobs) {
+                            // 리전: name = //run.googleapis.com/projects/{proj}/locations/{region}/jobs/{job}
                             String region = "unknown";
                             if (jobName != null && jobName.contains("/locations/")) {
                                 String after = jobName.substring(jobName.indexOf("/locations/") + 11);

@@ -205,7 +205,13 @@ public class ReservationService {
 
             for (CloudProject project : env.getProjects()) {
                 String projectId = project.getProjectId();
-                List<Commitment> commitments = gcpResourceFetcher.getCommitments(credentials, projectId);
+                List<Commitment> commitments;
+                try {
+                    commitments = gcpResourceFetcher.getCommitments(credentials, projectId);
+                } catch (Exception e) {
+                    // 한 프로젝트 조회 실패가 나머지 프로젝트 수집을 막지 않도록 건너뜀 (로그는 fetcher가 남김)
+                    continue;
+                }
                 for (Commitment c : commitments) {
                     String region = "";
                     if (c.hasRegion()) {

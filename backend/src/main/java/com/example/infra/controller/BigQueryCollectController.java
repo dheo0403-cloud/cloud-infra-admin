@@ -42,4 +42,13 @@ public class BigQueryCollectController {
         log.info("[API] Collecting BigQuery TOP queries for all GCP projects months {}", months);
         return ResponseEntity.ok(bigQueryOptimizationService.collectTopQueriesAllProjects(months));
     }
+
+    // 전체 GCP 프로젝트 2026-06 ~ 2026-10 일괄 백필 (기존 공개 GET에서 이동, 날짜는 서비스에 고정)
+    // 예: POST /api/metrics/gcp/bigquery-optimization/backfill
+    @PostMapping("/bigquery-optimization/backfill")
+    public ResponseEntity<Map<String, Object>> backfill() {
+        log.info("[API] Triggering BigQuery optimization backfill for all GCP projects (2026-06 ~ 2026-10)");
+        bigQueryOptimizationService.backfillAllProjects4MonthsBulk();
+        return ResponseEntity.ok(Map.of("status", "SUCCESS"));
+    }
 }

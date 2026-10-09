@@ -39,6 +39,22 @@ import com.google.cloud.compute.v1.UrlMapsScopedList;
 public class GcpResourceFetcher {
 
     /**
+     * 조회 실패 처리: 고객사가 해당 API를 켜지 않았으면 리소스가 실제로 0개이므로 빈 결과를 허용하고,
+     * 그 밖의 실패(권한·네트워크·요청 오류)는 예외를 던져 호출 측이 0으로 저장하지 않게 한다.
+     */
+    private static void rethrowUnlessApiDisabled(String what, String projectId, Exception e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String msg = t.getMessage();
+            if (msg != null && (msg.contains("has not been used in project") || msg.contains("SERVICE_DISABLED"))) {
+                log.info("{} API 비활성 → 0개로 처리 (project: {})", what, projectId);
+                return;
+            }
+        }
+        log.error("Failed to fetch {} for project: {}", what, projectId, e);
+        throw new RuntimeException("Failed to fetch " + what, e);
+    }
+
+    /**
      * Compute Engine - VM 인스턴스 목록 조회
      * GCP Compute Engine API를 사용하여 프로젝트 내 모든 리전/영역(Zone)의 VM 인스턴스 목록을 수집합니다.
      * 
@@ -206,7 +222,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Owner account counts for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Owner account counts", projectId, e);
         }
 
         return counts;
@@ -345,7 +361,7 @@ public class GcpResourceFetcher {
                     disks.add(disk);
                 }
             }
-        } catch (Exception e) { log.error("Failed to fetch Disks for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Disks", projectId, e); }
         return disks;
     }
 
@@ -369,7 +385,7 @@ public class GcpResourceFetcher {
                     snapshots.add(s);
                 }
             }
-        } catch (Exception e) { log.error("Failed to fetch Snapshots for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Snapshots", projectId, e); }
 
         // 2. Instant Snapshots (영역/리전별 인스턴트 및 자동 백업 스냅샷 보강)
         try (InstantSnapshotsClient instantClient = InstantSnapshotsClient.create(InstantSnapshotsSettings.newBuilder().setCredentialsProvider(FixedCredentialsProvider.create(credentials)).build())) {
@@ -409,7 +425,7 @@ public class GcpResourceFetcher {
             for (Image i : client.list(projectId).iterateAll()) {
                 images.add(i);
             }
-        } catch (Exception e) { log.error("Failed to fetch Images for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Images", projectId, e); }
         return images;
     }
 
@@ -427,7 +443,7 @@ public class GcpResourceFetcher {
             for (Firewall fw : client.list(projectId).iterateAll()) {
                 firewalls.add(fw);
             }
-        } catch (Exception e) { log.error("Failed to fetch Firewalls for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Firewalls", projectId, e); }
         return firewalls;
     }
 
@@ -446,7 +462,7 @@ public class GcpResourceFetcher {
                 if (entry.getValue().getAddressesList() == null) continue;
                 addresses.addAll(entry.getValue().getAddressesList());
             }
-        } catch (Exception e) { log.error("Failed to fetch Addresses for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Addresses", projectId, e); }
         return addresses;
     }
 
@@ -464,7 +480,7 @@ public class GcpResourceFetcher {
             for (Network n : client.list(projectId).iterateAll()) {
                 networks.add(n);
             }
-        } catch (Exception e) { log.error("Failed to fetch Networks for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Networks", projectId, e); }
         return networks;
     }
 
@@ -483,7 +499,7 @@ public class GcpResourceFetcher {
                 if (entry.getValue().getSubnetworksList() == null) continue;
                 subnetworks.addAll(entry.getValue().getSubnetworksList());
             }
-        } catch (Exception e) { log.error("Failed to fetch Subnetworks for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Subnetworks", projectId, e); }
         return subnetworks;
     }
 
@@ -501,7 +517,7 @@ public class GcpResourceFetcher {
             for (Route r : client.list(projectId).iterateAll()) {
                 routes.add(r);
             }
-        } catch (Exception e) { log.error("Failed to fetch Routes for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Routes", projectId, e); }
         return routes;
     }
 
@@ -520,7 +536,7 @@ public class GcpResourceFetcher {
                 if (entry.getValue().getRoutersList() == null) continue;
                 routers.addAll(entry.getValue().getRoutersList());
             }
-        } catch (Exception e) { log.error("Failed to fetch Routers for project: {}", projectId, e); }
+        } catch (Exception e) { rethrowUnlessApiDisabled("Routers", projectId, e); }
         return routers;
     }
 
@@ -547,7 +563,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch ServiceAccounts for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("ServiceAccounts", projectId, e);
         }
         return accounts;
     }
@@ -574,7 +590,9 @@ public class GcpResourceFetcher {
                 keys.addAll(client.listServiceAccountKeys(request).getKeysList());
             }
         } catch (Exception e) {
+            // 키 조회 실패를 '키 없음'으로 세지 않도록 예외를 던진다
             log.error("Failed to fetch Keys for SA: {}", serviceAccountName, e);
+            throw new RuntimeException("Failed to fetch Keys for SA", e);
         }
         return keys;
     }
@@ -595,7 +613,7 @@ public class GcpResourceFetcher {
                 commitments.addAll(entry.getValue().getCommitmentsList());
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Commitments(CUD) for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Commitments(CUD)", projectId, e);
         }
         return commitments;
     }
@@ -622,7 +640,7 @@ public class GcpResourceFetcher {
                 certificates.addAll(scopedList.getSslCertificatesList());
             }
         } catch (Exception e) {
-            log.error("Failed to fetch SSL certificates for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("SSL certificates", projectId, e);
         }
         return certificates;
     }
@@ -650,7 +668,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch TargetHttpProxies for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("TargetHttpProxies", projectId, e);
         }
         return proxyToUrlMap;
     }
@@ -678,7 +696,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to fetch TargetHttpsProxies for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("TargetHttpsProxies", projectId, e);
         }
         return proxyToUrlMap;
     }
@@ -694,7 +712,7 @@ public class GcpResourceFetcher {
                 vpnGateways.addAll(entry.getValue().getVpnGatewaysList());
             }
         } catch (Exception e) {
-            log.error("Failed to fetch VPN Gateways for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("VPN Gateways", projectId, e);
         }
         return vpnGateways;
     }
@@ -710,7 +728,7 @@ public class GcpResourceFetcher {
                 targetVpnGateways.addAll(entry.getValue().getTargetVpnGatewaysList());
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Target VPN Gateways for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Target VPN Gateways", projectId, e);
         }
         return targetVpnGateways;
     }
@@ -726,7 +744,7 @@ public class GcpResourceFetcher {
                 vpnTunnels.addAll(entry.getValue().getVpnTunnelsList());
             }
         } catch (Exception e) {
-            log.error("Failed to fetch VPN Tunnels for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("VPN Tunnels", projectId, e);
         }
         return vpnTunnels;
     }
@@ -754,35 +772,36 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Cloud Run Services for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Cloud Run Services", projectId, e);
         }
         return services;
     }
 
     /**
-     * Cloud Run - Jobs 목록 조회
-     * 프로젝트 내 모든 Cloud Run Jobs를 수집합니다.
+     * Cloud Run - Jobs 목록 조회 (Asset Inventory 방식)
+     * Jobs API는 전체 리전(-) 조회를 지원하지 않으므로(INVALID_ARGUMENT) Asset API로 전 리전을 한 번에 조회합니다.
      *
      * @param credentials GCP 서비스 계정 인증 정보
      * @param projectId   GCP 프로젝트 ID
-     * @return Cloud Run Job 리스트
+     * @return Job 리소스 이름 리스트 (//run.googleapis.com/projects/{p}/locations/{region}/jobs/{job})
      */
-    public List<com.google.cloud.run.v2.Job> getCloudRunJobs(GoogleCredentials credentials, String projectId) {
-        List<com.google.cloud.run.v2.Job> jobs = new ArrayList<>();
+    public List<String> getCloudRunJobs(GoogleCredentials credentials, String projectId) {
+        List<String> jobs = new ArrayList<>();
         try {
-            com.google.cloud.run.v2.JobsSettings settings = com.google.cloud.run.v2.JobsSettings.newBuilder()
+            AssetServiceSettings settings = AssetServiceSettings.newBuilder()
                     .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
                     .build();
-            try (com.google.cloud.run.v2.JobsClient client = com.google.cloud.run.v2.JobsClient.create(settings)) {
-                String parent = "projects/" + projectId + "/locations/-";
-                com.google.cloud.run.v2.ListJobsRequest request =
-                        com.google.cloud.run.v2.ListJobsRequest.newBuilder().setParent(parent).build();
-                for (com.google.cloud.run.v2.Job job : client.listJobs(request).iterateAll()) {
-                    jobs.add(job);
+            try (AssetServiceClient client = AssetServiceClient.create(settings)) {
+                ListAssetsRequest request = ListAssetsRequest.newBuilder()
+                        .setParent("projects/" + projectId)
+                        .addAssetTypes("run.googleapis.com/Job")
+                        .build();
+                for (Asset asset : client.listAssets(request).iterateAll()) {
+                    jobs.add(asset.getName());
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Cloud Run Jobs for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Cloud Run Jobs", projectId, e);
         }
         return jobs;
     }
@@ -810,14 +829,14 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch App Engine Service count for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("App Engine Service count", projectId, e);
         }
         return count;
     }
 
     /**
-     * Cloud KMS - KeyRing 및 CryptoKey 목록 조회
-     * 전체 리전(-) 대상으로 KeyRing을 조회합니다.
+     * Cloud KMS - KeyRing 목록 조회
+     * KMS는 전체 리전(-) 조회를 지원하지 않으므로(NOT_FOUND) 위치 목록을 받아 위치마다 조회합니다.
      */
     public List<com.google.cloud.kms.v1.KeyRing> getKmsKeyRings(GoogleCredentials credentials, String projectId) {
         List<com.google.cloud.kms.v1.KeyRing> keyRings = new ArrayList<>();
@@ -826,15 +845,18 @@ public class GcpResourceFetcher {
                     .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
                     .build();
             try (com.google.cloud.kms.v1.KeyManagementServiceClient client = com.google.cloud.kms.v1.KeyManagementServiceClient.create(settings)) {
-                String parent = "projects/" + projectId + "/locations/-";
-                com.google.cloud.kms.v1.ListKeyRingsRequest request = com.google.cloud.kms.v1.ListKeyRingsRequest.newBuilder()
-                        .setParent(parent).build();
-                for (com.google.cloud.kms.v1.KeyRing kr : client.listKeyRings(request).iterateAll()) {
-                    keyRings.add(kr);
+                com.google.cloud.location.ListLocationsRequest locReq = com.google.cloud.location.ListLocationsRequest.newBuilder()
+                        .setName("projects/" + projectId).build();
+                for (com.google.cloud.location.Location loc : client.listLocations(locReq).iterateAll()) {
+                    com.google.cloud.kms.v1.ListKeyRingsRequest request = com.google.cloud.kms.v1.ListKeyRingsRequest.newBuilder()
+                            .setParent(loc.getName()).build();
+                    for (com.google.cloud.kms.v1.KeyRing kr : client.listKeyRings(request).iterateAll()) {
+                        keyRings.add(kr);
+                    }
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch KMS KeyRings for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("KMS KeyRings", projectId, e);
         }
         return keyRings;
     }
@@ -857,7 +879,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Secrets for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Secrets", projectId, e);
         }
         return secrets;
     }
@@ -879,7 +901,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Pub/Sub Topics for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Pub/Sub Topics", projectId, e);
         }
         return topics;
     }
@@ -900,7 +922,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Pub/Sub Subscriptions for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Pub/Sub Subscriptions", projectId, e);
         }
         return subscriptions;
     }
@@ -921,7 +943,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.error("Failed to fetch Memorystore Redis instances for project: {}", projectId, e);
+            rethrowUnlessApiDisabled("Memorystore Redis instances", projectId, e);
         }
         return instances;
     }
@@ -1002,7 +1024,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
-            log.warn("Failed to list backend services for health check in project {}: {}", projectId, e.getMessage());
+            rethrowUnlessApiDisabled("Backend services (health check)", projectId, e);
         }
 
         counts.put("healthy", healthy);

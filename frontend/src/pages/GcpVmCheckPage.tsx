@@ -65,6 +65,9 @@ const GcpVmCheckPage: React.FC = () => {
                     break;
                 } else if (status === 'FAILED') {
                     throw new Error('서버에서 감사 보고서 생성에 실패했습니다.');
+                } else if (status === 'UNKNOWN') {
+                    // 서버 재시작 등으로 작업 상태가 사라지면 더 기다려도 끝나지 않음
+                    throw new Error('점검 상태를 찾을 수 없습니다(서버 재시작 등). 다시 실행해 주세요.');
                 }
             }
             
@@ -96,7 +99,7 @@ const GcpVmCheckPage: React.FC = () => {
             link.remove();
         } catch (e) {
             console.error(e);
-            alert('인프라 감사 보고서 생성 실패');
+            alert(`인프라 감사 보고서 생성 실패: ${e instanceof Error ? e.message : e}`);
         } finally {
             setAuditing(false);
         }
