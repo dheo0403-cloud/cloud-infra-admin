@@ -74,7 +74,10 @@ public class MonthlyReportDto {
     private List<Integer> lbTrend;
     private List<Integer> gkeNodeTrend;
     private List<Integer> gkeClusterTrend;
-    private Map<String, Integer> gkeSummary; // nodes / autopilot / standard (수집 전이면 빈 맵)
+    private List<Integer> gkeMemoryPressureTrend; // 월별 MemoryPressure 건수 (1건 = 노드 1대 1분)
+    private List<Integer> gkeDiskPressureTrend;   // 월별 DiskPressure 건수
+    private Double gkeReadyPct;                   // 보고서 달이 속한 분기의 Ready 정상 가용률 (데이터 없으면 null)
+    private String gkeReadyQuarter;               // 예: "26년 3분기"
     private List<Integer> serverlessTrend;
     private List<Integer> diskTrend;
     private List<Integer> snapshotTrend;

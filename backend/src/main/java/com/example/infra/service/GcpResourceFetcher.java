@@ -1089,6 +1089,52 @@ public class GcpResourceFetcher {
     }
 
     /**
+     * GKE 노드 상태(kubernetes.io/node/status_condition) - 지정 구간 [startSeconds, endSeconds)를 한 칸으로 집계 (Cloud Monitoring)
+     * 콘솔 측정항목 탐색기(정렬 함수 참 개수, 그룹화 합계)와 같은 값: 1건 = 노드 1대에서 1분 동안 그 상태가 참.
+     *
+     * @return {MemoryPressure, DiskPressure, Ready=True, Ready 전체(True·False·Unknown)}. 조회 실패 시 예외 (0으로 저장하지 않도록)
+     */
+    public long[] getGkeNodeConditionCounts(GoogleCredentials credentials, String projectId, long startSeconds, long endSeconds) throws java.io.IOException {
+        com.google.cloud.monitoring.v3.MetricServiceSettings settings = com.google.cloud.monitoring.v3.MetricServiceSettings.newBuilder()
+                .setCredentialsProvider(FixedCredentialsProvider.create(credentials))
+                .build();
+        try (com.google.cloud.monitoring.v3.MetricServiceClient client = com.google.cloud.monitoring.v3.MetricServiceClient.create(settings)) {
+            com.google.monitoring.v3.ListTimeSeriesRequest request = com.google.monitoring.v3.ListTimeSeriesRequest.newBuilder()
+                    .setName(com.google.monitoring.v3.ProjectName.of(projectId).toString())
+                    .setFilter("metric.type = \"kubernetes.io/node/status_condition\" AND metric.label.condition = one_of(\"MemoryPressure\", \"DiskPressure\", \"Ready\")")
+                    .setInterval(com.google.monitoring.v3.TimeInterval.newBuilder()
+                            .setStartTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(startSeconds))
+                            .setEndTime(com.google.protobuf.Timestamp.newBuilder().setSeconds(endSeconds)))
+                    .setAggregation(com.google.monitoring.v3.Aggregation.newBuilder()
+                            .setAlignmentPeriod(com.google.protobuf.Duration.newBuilder().setSeconds(endSeconds - startSeconds))
+                            .setPerSeriesAligner(com.google.monitoring.v3.Aggregation.Aligner.ALIGN_COUNT_TRUE)
+                            .setCrossSeriesReducer(com.google.monitoring.v3.Aggregation.Reducer.REDUCE_SUM)
+                            .addGroupByFields("metric.label.condition")
+                            .addGroupByFields("metric.label.status"))
+                    .build();
+            long memory = 0, disk = 0, readyTrue = 0, readyTotal = 0;
+            for (com.google.monitoring.v3.TimeSeries ts : client.listTimeSeries(request).iterateAll()) {
+                long sum = 0;
+                for (com.google.monitoring.v3.Point p : ts.getPointsList()) {
+                    sum += p.getValue().hasInt64Value() ? p.getValue().getInt64Value() : (long) p.getValue().getDoubleValue();
+                }
+                String condition = ts.getMetric().getLabelsOrDefault("condition", "");
+                boolean isTrue = "True".equals(ts.getMetric().getLabelsOrDefault("status", ""));
+                if ("Ready".equals(condition)) {
+                    readyTotal += sum;
+                    if (isTrue) readyTrue += sum;
+                } else if (isTrue && "MemoryPressure".equals(condition)) {
+                    memory += sum;
+                } else if (isTrue && "DiskPressure".equals(condition)) {
+                    disk += sum;
+                }
+            }
+            log.info("GKE node conditions for project {}: memory={}, disk={}, readyTrue={}, readyTotal={}", projectId, memory, disk, readyTrue, readyTotal);
+            return new long[]{memory, disk, readyTrue, readyTotal};
+        }
+    }
+
+    /**
      * AI 서비스 직접 사용 (Direct AI Usage) 관제 지표 수집 결과 DTO
      */
     @lombok.Data

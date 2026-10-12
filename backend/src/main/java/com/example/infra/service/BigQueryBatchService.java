@@ -760,6 +760,12 @@ public class BigQueryBatchService {
                         }
 
                         log.info("GKE: clusters={}, nodes={} for project {}", clusters.size(), totalNodes, projectId);
+
+                        // 노드 상태: 그 달 1일 0시 ~ 수집일 24시(KST) 누적. 지난 달은 월말 행만 남으므로 월 전체 값이 됨
+                        if (!clusters.isEmpty()) {
+                            insertGkeNodeConditions(snapshotDate, projectId, customerName, credentials,
+                                    targetDate.withDayOfMonth(1).atStartOfDay(kst).toEpochSecond(), dayEnd);
+                        }
                     } catch (Exception e) {
                         log.error("Batch failed for GKE Clusters in project {}", projectId, e);
                     }
@@ -1451,6 +1457,24 @@ public class BigQueryBatchService {
             insertDailyAssetBatch(snapshotDate, projectId, customerName, "LB_HTTP_500_30D_Internal", (int) c[3]);
         } catch (Exception e) {
             log.warn("Failed to collect LB HTTP 5XX 30-day error count for project {}: {}", projectId, e.getMessage());
+        }
+    }
+
+    /** GKE 노드 상태(MemoryPressure·DiskPressure·Ready) 적재. 조회 실패 또는 Ready 데이터가 없으면 아무것도 쓰지 않음 */
+    void insertGkeNodeConditions(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials,
+                                 long startSeconds, long endSeconds) {
+        try {
+            long[] c = gcpResourceFetcher.getGkeNodeConditionCounts(credentials, projectId, startSeconds, endSeconds);
+            if (c[3] == 0) {
+                log.warn("GKE node condition: Ready 데이터 없음 - 적재하지 않음 (project {})", projectId);
+                return;
+            }
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "GKE_Node_MemoryPressure", (int) c[0]);
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "GKE_Node_DiskPressure", (int) c[1]);
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "GKE_Node_Ready_True", (int) c[2]);
+            insertDailyAssetBatch(snapshotDate, projectId, customerName, "GKE_Node_Ready_Total", (int) c[3]);
+        } catch (Exception e) {
+            log.warn("Failed to collect GKE node conditions for project {}: {}", projectId, e.getMessage());
         }
     }
 

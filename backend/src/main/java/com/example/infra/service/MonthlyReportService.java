@@ -497,16 +497,21 @@ public class MonthlyReportService {
         List<Integer> vpcSubnetTrend = getTrendList(monthlyAssets, fullYearMonths, "VPC_Subnet_Total");
         List<Integer> lbTrend = getTrendList(monthlyAssets, fullYearMonths, "LoadBalancer");
         List<Integer> gkeNodeTrend = getTrendList(monthlyAssets, fullYearMonths, "GKE_Node_Total");
-        // GKE 핵심 지표: 최근 달에 클러스터 수집 값이 있을 때만 노드 수·Standard/Autopilot 수 (유형 키는 1개 이상일 때만 적재되므로 없으면 0)
-        Map<String, Integer> gkeSummary = new HashMap<>();
-        if (!fullYearMonths.isEmpty()) {
-            Map<String, Integer> latestGke = monthlyAssets.getOrDefault(fullYearMonths.get(fullYearMonths.size() - 1), Collections.emptyMap());
-            if (latestGke.containsKey("GKE_Cluster_Total")) {
-                gkeSummary.put("nodes", latestGke.getOrDefault("GKE_Node_Total", 0));
-                gkeSummary.put("autopilot", latestGke.getOrDefault("GKE_Cluster_Type_Autopilot", 0));
-                gkeSummary.put("standard", latestGke.getOrDefault("GKE_Cluster_Type_Standard", 0));
-            }
+        // GKE 핵심 지표: 월별 노드 비정상 상태 건수(1건 = 노드 1대 1분) + 보고서 달이 속한 분기의 Ready 정상 가용률
+        List<Integer> gkeMemoryPressureTrend = getTrendList(monthlyAssets, fullYearMonths, "GKE_Node_MemoryPressure");
+        List<Integer> gkeDiskPressureTrend = getTrendList(monthlyAssets, fullYearMonths, "GKE_Node_DiskPressure");
+        long readyTrue = 0, readyTotal = 0;
+        int quarterFirstMonth = (targetDate.getMonthValue() - 1) / 3 * 3 + 1;
+        for (String ym : fullYearMonths) {
+            LocalDate m = LocalDate.parse(ym + "-01");
+            if (m.getYear() != targetDate.getYear() || m.getMonthValue() < quarterFirstMonth || m.isAfter(targetDate)) continue;
+            Map<String, Integer> assets = monthlyAssets.getOrDefault(ym, Collections.emptyMap());
+            readyTrue += assets.getOrDefault("GKE_Node_Ready_True", 0);
+            readyTotal += assets.getOrDefault("GKE_Node_Ready_Total", 0);
         }
+        // 소수점 둘째 자리 버림 (99.999%를 100%로 올려 보이지 않게). Ready 데이터가 없으면 null (화면 '-') - 0%는 노드 전체 장애로 읽힐 수 있음
+        Double gkeReadyPct = readyTotal > 0 ? Math.floor(readyTrue * 10000.0 / readyTotal) / 100.0 : null;
+        String gkeReadyQuarter = String.format("%d년 %d분기", targetDate.getYear() % 100, (quarterFirstMonth - 1) / 3 + 1);
         List<Integer> serverlessTrend = getTrendList(monthlyAssets, fullYearMonths, "CloudRun_Svc_Total");
         if (serverlessTrend.stream().allMatch(v -> v == 0)) {
             serverlessTrend = getTrendList(monthlyAssets, fullYearMonths, "CloudRun_Services");
@@ -569,7 +574,10 @@ public class MonthlyReportService {
                 .lbTrend(lbTrend)
                 .gkeNodeTrend(gkeNodeTrend)
                 .gkeClusterTrend(gkeTotalTrend)
-                .gkeSummary(gkeSummary)
+                .gkeMemoryPressureTrend(gkeMemoryPressureTrend)
+                .gkeDiskPressureTrend(gkeDiskPressureTrend)
+                .gkeReadyPct(gkeReadyPct)
+                .gkeReadyQuarter(gkeReadyQuarter)
                 .serverlessTrend(serverlessTrend)
                 .diskTrend(diskTotalTrend)
                 .snapshotTrend(snapshotTrend)

@@ -83,7 +83,10 @@ interface MonthlyReportData {
     lbTrend?: number[];
     gkeNodeTrend?: number[];
     gkeClusterTrend?: number[];
-    gkeSummary?: { nodes?: number; autopilot?: number; standard?: number };
+    gkeMemoryPressureTrend?: number[];
+    gkeDiskPressureTrend?: number[];
+    gkeReadyPct?: number | null;
+    gkeReadyQuarter?: string;
     serverlessTrend?: number[];
     diskTrend?: number[];
     snapshotTrend?: number[];
@@ -1767,52 +1770,47 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
                                 <div className="report-card-title">
                                     <span><i className="fas fa-cubes mr-2" style={{ color: '#4f46e5' }}></i>GKE 핵심 지표</span>
+                                    {/* 노드 정상 가용률: 보고서 달이 속한 분기 평균 (데이터 없으면 '-') */}
+                                    <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>
+                                        노드 정상 가용률(Ready) <b style={{ color: '#059669' }}>{reportData.gkeReadyPct != null ? `${reportData.gkeReadyPct.toFixed(2)}%` : '-'}</b>{reportData.gkeReadyQuarter ? ` · ${reportData.gkeReadyQuarter} 평균` : ''}
+                                    </span>
                                 </div>
-                                <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'center', margin: 'auto 0' }}>
-                                    {(() => {
-                                        const gkeCount = reportData.gkeTotal || 0;
-                                        const isGkeExist = gkeCount > 0;
-                                        const gs = reportData.gkeSummary;
-                                        const collected = gs !== undefined && gs.nodes !== undefined;
-                                        const nodeCount = gs?.nodes || 0;
-                                        const autopilot = gs?.autopilot || 0;
-                                        const standard = gs?.standard || 0;
-                                        const autoPct = isGkeExist && collected ? (autopilot / Math.max(1, autopilot + standard)) * 100 : 0;
+                                <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                    {(reportData.months || get4MonthsArray(selectedYearMonth)).map((m, idx) => {
+                                        // 월별 노드 비정상 상태 건수 (MemoryPressure·DiskPressure)
+                                        const memArr = reportData.gkeMemoryPressureTrend || [];
+                                        const diskArr = reportData.gkeDiskPressureTrend || [];
+                                        const memVal = memArr[idx] || 0;
+                                        const diskVal = diskArr[idx] || 0;
+                                        const maxV = Math.max(1, ...memArr, ...diskArr);
+                                        const memPct = memVal > 0 ? (memVal / maxV) * 85 : 0;
+                                        const diskPct = diskVal > 0 ? (diskVal / maxV) * 85 : 0;
                                         return (
-                                            <>
-                                                <div style={{ marginBottom: '12px' }}>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                        <span style={{ color: '#475569' }}>GKE 클러스터 노드 총량</span>
-                                                        <span style={{ fontWeight: 700, color: isGkeExist && collected ? '#7c3aed' : '#64748b' }}>
-                                                            {!isGkeExist ? '0개 (데이터 없음)' : collected ? `${nodeCount.toLocaleString()}개 노드 가동 중` : '수집 전'}
-                                                        </span>
+                                            <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                    <div style={{ width: '16px', backgroundColor: '#f43f5e', borderRadius: '3px 3px 0 0', height: `${memPct}%`, minHeight: memPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                        {memVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#e11d48' }}>{memVal.toLocaleString()}</span>}
                                                     </div>
-                                                    <div className="progress-bar-bg">
-                                                        <div className="progress-bar-fill" style={{ width: `${isGkeExist && collected && nodeCount > 0 ? 100 : 0}%`, backgroundColor: '#8b5cf6' }}></div>
+                                                    <div style={{ width: '16px', backgroundColor: '#f59e0b', borderRadius: '3px 3px 0 0', height: `${diskPct}%`, minHeight: diskPct > 0 ? '2px' : 0, position: 'relative' }}>
+                                                        {diskVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#d97706' }}>{diskVal.toLocaleString()}</span>}
                                                     </div>
                                                 </div>
-
-                                                <div>
-                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                                        <span style={{ color: '#475569' }}>Standard / Autopilot 구성</span>
-                                                        <span style={{ fontWeight: 700, color: isGkeExist && collected ? '#d97706' : '#64748b' }}>
-                                                            {!isGkeExist ? '0개 (데이터 없음)' : collected ? `Standard ${standard} · Autopilot ${autopilot}` : '수집 전'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="progress-bar-bg">
-                                                        <div className="progress-bar-fill" style={{ width: `${autoPct}%`, backgroundColor: '#f59e0b' }}></div>
-                                                    </div>
-                                                    {/* 용어 설명: 보고서를 받는 고객도 바로 이해할 수 있게 한 줄로 */}
-                                                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: '4px' }}>
-                                                        Standard: 노드를 직접 관리 · Autopilot: Google이 노드를 자동 관리 (막대: Autopilot 비율)
-                                                    </div>
-                                                </div>
-                                            </>
+                                                <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
+                                            </div>
                                         );
-                                    })()}
+                                    })}
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#f43f5e', marginRight: '5px' }}></span>MemoryPressure
+                                    </span>
+                                    <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                        <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#f59e0b', marginRight: '5px' }}></span>DiskPressure
+                                    </span>
+                                    <span style={{ color: '#64748b' }}>(건, 1건 = 노드 1대 1분)</span>
                                 </div>
                             </div>
                         </div>
