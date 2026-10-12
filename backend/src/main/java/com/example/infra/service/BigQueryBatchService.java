@@ -2601,6 +2601,57 @@ public class BigQueryBatchService {
         } catch (Exception e) {
             log.error("Failed to execute Slack notification batch for Azure App Keys expiration", e);
         }
+
+        notifyAzureAppCollectionStopped(LocalDate.now(java.time.ZoneId.of("Asia/Seoul")));
+    }
+
+    /**
+     * 앱 자격 증명 수집이 끊긴 등록 고객사를 Slack으로 1회 알림 (평일 10시 만료 알림과 함께 실행)
+     * - 끊긴 시점 = 고객사의 마지막 수집일 다음 배치 날짜. 그 배치가 직전 알림 이후 적재된 것일 때만 보낸다
+     *   (화~금: 어제 날짜 배치, 월: 금·토·일 날짜 배치) -> 배치가 빠진 날이 있어도 끊긴 건마다 한 번만 알린다
+     * - 배치 행만 사용 (수동 새로고침 행은 snapshot_date에 시각이 붙어 길이가 10이 아님), 삭제된 고객사 제외
+     */
+    void notifyAzureAppCollectionStopped(LocalDate today) {
+        String from = today.minusDays(today.getDayOfWeek() == java.time.DayOfWeek.MONDAY ? 4 : 2).toString(); // 미포함
+        String to = today.minusDays(1).toString(); // 포함
+        String query = String.format(
+            "WITH cust AS (\n" +
+            "  SELECT name FROM (SELECT * FROM `%s.%s.infra_customer` QUALIFY ROW_NUMBER() OVER(PARTITION BY id ORDER BY created_at DESC) = 1)\n" +
+            "  WHERE is_deleted IS NULL OR is_deleted = FALSE\n" +
+            "), d AS (\n" +
+            "  SELECT DISTINCT customer_name, CAST(snapshot_date AS STRING) AS sd FROM `%s.%s.daily_reservation_inventory`\n" +
+            "  WHERE provider = 'AZURE_APP' AND LENGTH(CAST(snapshot_date AS STRING)) = 10 AND customer_name IN (SELECT name FROM cust)\n" +
+            "), b AS (SELECT DISTINCT sd FROM d),\n" +
+            "l AS (SELECT customer_name, MAX(sd) AS last_sd FROM d GROUP BY customer_name),\n" +
+            "nx AS (SELECT l.customer_name, l.last_sd, MIN(b.sd) AS next_sd FROM l JOIN b ON b.sd > l.last_sd GROUP BY l.customer_name, l.last_sd)\n" +
+            "SELECT customer_name, last_sd FROM nx WHERE next_sd > @from AND next_sd <= @to ORDER BY customer_name",
+            targetProjectId, datasetName, targetProjectId, datasetName
+        );
+        try {
+            QueryJobConfiguration config = QueryJobConfiguration.newBuilder(query)
+                .addNamedParameter("from", QueryParameterValue.string(from))
+                .addNamedParameter("to", QueryParameterValue.string(to))
+                .build();
+            StringBuilder sb = new StringBuilder();
+            for (FieldValueList row : bigQuery.query(config).iterateAll()) {
+                if (sb.length() == 0) {
+                    sb.append("⚠️ *[경고] Azure AD App 자격 증명 수집 중단 안내*\n\n");
+                    sb.append("아래 고객사의 앱 자격 증명(키) 정보가 수집되지 않고 있습니다. 키 만료 또는 권한 변경 여부를 확인해 주십시오.\n\n");
+                    sb.append("==================================================\n");
+                }
+                sb.append("• *고객사*: ").append(row.get("customer_name").getStringValue()).append("\n");
+                sb.append("• *마지막 수집일*: ").append(row.get("last_sd").getStringValue()).append("\n");
+                sb.append("==================================================\n");
+            }
+            if (sb.length() > 0) {
+                sb.append("\n※ 조치 방법: Azure Portal에서 앱 키 만료 여부를 확인하고, 새 키를 발급했다면 포털의 고객사 환경 정보에 새 비밀값(Value)을 입력해 주십시오.");
+                sendSlackNotification(sb.toString());
+            } else {
+                log.info("No Azure App credential collection stopped between {} and {}.", from, to);
+            }
+        } catch (Exception e) {
+            log.error("Failed to check Azure App credential collection stop", e);
+        }
     }
 
     /**
