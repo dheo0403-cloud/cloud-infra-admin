@@ -1788,15 +1788,14 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                         const maxV = Math.max(1, ...memArr, ...diskArr);
                                         const memPct = memVal > 0 ? (memVal / maxV) * 85 : 0;
                                         const diskPct = diskVal > 0 ? (diskVal / maxV) * 85 : 0;
-                                        const showLabel = memVal > 0 || diskVal > 0; // 그 달에 하나라도 있으면 0도 표시
                                         return (
                                             <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
                                                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
                                                     <div style={{ width: '16px', backgroundColor: '#f43f5e', borderRadius: '3px 3px 0 0', height: `${memPct}%`, minHeight: memPct > 0 ? '2px' : 0, position: 'relative' }}>
-                                                        {showLabel && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#e11d48' }}>{memVal.toLocaleString()}</span>}
+                                                        {memVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#e11d48' }}>{memVal.toLocaleString()}</span>}
                                                     </div>
                                                     <div style={{ width: '16px', backgroundColor: '#f59e0b', borderRadius: '3px 3px 0 0', height: `${diskPct}%`, minHeight: diskPct > 0 ? '2px' : 0, position: 'relative' }}>
-                                                        {showLabel && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#d97706' }}>{diskVal.toLocaleString()}</span>}
+                                                        {diskVal > 0 && <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '9px', fontWeight: 700, color: '#d97706' }}>{diskVal.toLocaleString()}</span>}
                                                     </div>
                                                 </div>
                                                 <span style={{ fontSize: '11px', marginTop: '8px', color: idx === 3 ? '#2563eb' : '#64748b', fontWeight: idx === 3 ? 700 : 400 }}>{m}</span>
