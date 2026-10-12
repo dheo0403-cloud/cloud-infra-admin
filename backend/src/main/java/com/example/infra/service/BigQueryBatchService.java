@@ -1591,7 +1591,7 @@ public class BigQueryBatchService {
         rowContent.put("recommender_id", recommenderId);
         rowContent.put("target_resource_name", targetResourceName != null ? targetResourceName : "");
         rowContent.put("recommendation_description", description);
-        rowContent.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
+        rowContent.put("created_at", java.time.Instant.now().toString());
 
         try {
             InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId)
@@ -2127,7 +2127,7 @@ public class BigQueryBatchService {
 
         Map<String, Object> row = new HashMap<>();
         row.put("snapshot_date", snapshotDate);
-        row.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        row.put("timestamp", java.time.Instant.now().toString());
         row.put("project_id", projectId);
         row.put("customer_name", customerName);
         row.put("input_tokens", data.getInputTokens());
@@ -2151,7 +2151,7 @@ public class BigQueryBatchService {
         row.put("estimated_api_cost", data.getEstimatedApiCost());
         row.put("estimated_training_cost", data.getEstimatedTrainingCost());
         row.put("total_estimated_daily_cost", data.getTotalEstimatedDailyCost());
-        row.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
+        row.put("created_at", java.time.Instant.now().toString());
 
         try {
             InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId).addRow(row).build();
@@ -2189,7 +2189,7 @@ public class BigQueryBatchService {
         if (usages == null || usages.isEmpty()) return;
 
         InsertAllRequest.Builder req = InsertAllRequest.newBuilder(TableId.of(targetProjectId, datasetName, "daily_ai_model_usage"));
-        String createdAt = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
+        String createdAt = java.time.Instant.now().toString();
         for (GcpResourceFetcher.AiModelUsage u : usages) {
             Map<String, Object> row = new HashMap<>();
             row.put("snapshot_date", snapshotDate);
@@ -2303,7 +2303,7 @@ public class BigQueryBatchService {
         for (GcpResourceFetcher.EndpointServingItemCollectedData ep : endpointList) {
             Map<String, Object> row = new HashMap<>();
             row.put("snapshot_date", snapshotDate);
-            row.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+            row.put("timestamp", java.time.Instant.now().toString());
             row.put("project_id", projectId);
             row.put("customer_name", customerName);
             row.put("endpoint_id", ep.getEndpointId());
@@ -2335,7 +2335,7 @@ public class BigQueryBatchService {
             row.put("hourly_serving_cost", ep.getHourlyCost());
             row.put("monthly_serving_cost", ep.getMonthlyCost());
             row.put("status", ep.getStatus());
-            row.put("created_at", LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME));
+            row.put("created_at", java.time.Instant.now().toString());
 
             try {
                 InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId).addRow(row).build();
