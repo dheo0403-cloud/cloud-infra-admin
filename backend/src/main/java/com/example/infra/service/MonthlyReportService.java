@@ -655,8 +655,10 @@ public class MonthlyReportService {
         Map<String, Map<String, String>> typeSourceDate = new HashMap<>();
 
         String selectFields = "SUBSTR(CAST(snapshot_date AS STRING), 1, 7) as ym, resource_type, resource_count, CAST(snapshot_date AS STRING) as sd";
+        // 월별로 프로젝트의 마지막 수집일 값만 사용 -> 리소스가 있을 때만 저장되는 항목(VM_State_* 등)이 월중에 사라지면 이전 날 값 대신 0으로 표시
         String whereClause = "WHERE project_id = @projectId AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) IN UNNEST(@ymList) " +
-                "QUALIFY ROW_NUMBER() OVER(PARTITION BY SUBSTR(CAST(snapshot_date AS STRING), 1, 7), resource_type ORDER BY snapshot_date DESC, created_at DESC) = 1";
+                "QUALIFY ROW_NUMBER() OVER(PARTITION BY SUBSTR(CAST(snapshot_date AS STRING), 1, 7), resource_type ORDER BY snapshot_date DESC, created_at DESC) = 1 " +
+                "AND snapshot_date = MAX(snapshot_date) OVER(PARTITION BY SUBSTR(CAST(snapshot_date AS STRING), 1, 7))";
 
         Map<String, QueryParameterValue> params = new HashMap<>();
         params.put("projectId", QueryParameterValue.string(projectId));
