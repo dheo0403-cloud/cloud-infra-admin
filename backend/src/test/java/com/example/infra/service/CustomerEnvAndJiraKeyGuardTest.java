@@ -4,6 +4,7 @@ import com.example.infra.entity.InfraCustomer;
 import com.example.infra.entity.InfraEnvironment;
 import com.example.infra.repository.InfraCustomerRepository;
 import com.example.infra.repository.InfraEnvironmentRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
@@ -22,26 +23,24 @@ class CustomerEnvAndJiraKeyGuardTest {
     private final InfraEnvironmentRepository envRepo = mock(InfraEnvironmentRepository.class);
     private final InfraCustomerService service = new InfraCustomerService(customerRepo, envRepo, mock(EncryptionService.class));
 
-    private InfraCustomer existingCustomer(List<InfraEnvironment> envs) {
+    // 실제 요청처럼 JSON을 역직렬화해서 저장
+    private void saveJson(String json) throws Exception {
         InfraEnvironment old = new InfraEnvironment();
         old.setId("env-1");
         when(envRepo.findAllByCustomerId("cust-1")).thenReturn(List.of(old));
         when(customerRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        InfraCustomer c = new InfraCustomer();
-        c.setId("cust-1");
-        c.setEnvironments(envs);
-        return c;
+        service.saveCustomer(new ObjectMapper().readValue(json, InfraCustomer.class));
     }
 
     @Test
-    void 환경_목록이_null이면_기존_환경을_지우지_않음() {
-        service.saveCustomer(existingCustomer(null));
+    void 환경_목록_키가_없으면_기존_환경을_지우지_않음() throws Exception {
+        saveJson("{\"id\":\"cust-1\",\"name\":\"A\"}");
         verify(envRepo, never()).deleteById(anyString());
     }
 
     @Test
-    void 빈_배열이면_기존_환경을_삭제() {
-        service.saveCustomer(existingCustomer(List.of()));
+    void 빈_배열이면_기존_환경을_삭제() throws Exception {
+        saveJson("{\"id\":\"cust-1\",\"name\":\"A\",\"environments\":[]}");
         verify(envRepo).deleteById("env-1");
     }
 
