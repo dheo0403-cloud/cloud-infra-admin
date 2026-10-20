@@ -2,6 +2,8 @@
 
 이 문서는 하나의 유의미한 작업 단위(기능 구현, 버그 수정, 환경 설정, 리팩토링 등)가 완료될 때마다 자동으로 누적 기록되는 파일입니다. (`CLAUDE.md` 규칙 #7에 의해 자동 관리됨)
 
+> ⚠️ **2026-10-05 이후 미사용.** 최신 기록·후속 할 일은 상위 `claude_project/WORK_HISTORY.md`를 볼 것. 아래 항목의 후속 할 일은 갱신되지 않을 수 있음.
+
 ---
 
 ### [2026-10-05] [cloud-infra-admin] 배치 스케줄러를 운영에서만 실행 (로컬/테스트 기본 꺼짐)
@@ -49,7 +51,7 @@
   - UI: Vite(3000) + Puppeteer, API 응답은 위 prd-pasta 실측값으로 가로챔. 모델 표 5행, 표 넘침 없음(-24px), 가짜 문구(65.0%, 학습, 예상 비용, Workbench, GPU/CPU) 0건, 콘솔 오류 0건 → exit 0.
   - 커밋 `105489f` 푸시 → 배포 run 37212521960 `gh run watch --exit-status` exit 0.
   - 가짜 데이터 삭제: 미실행. 자동 권한 검사기가 대량 삭제를 차단함. 삭제 전 대상 행 수: monthly_direct_ai_summary 80(07~09월 60 + 10월 20), daily_direct_ai_metrics 68, daily_endpoint_serving_metrics 249, monthly_endpoint_serving_summary 260.
-* **후속 할 일:** ① 가짜 적재 데이터 삭제(`monthly_direct_ai_summary` 07~09월, `daily_endpoint_serving_metrics`/`monthly_endpoint_serving_summary` 전체, `daily_direct_ai_metrics` 10월 행) ② 커밋·푸시 후 수집 재실행 ③ 9월은 Monitoring 보존 기간(6주) 안이라 실측 백필 가능 ④ 가짜 데이터를 만든 `BigQueryAiDataRecreationAndBackfillTest.java` 정리 ⑤ 수집 상태(권한 없음 등) 저장 여부 결정
+* **후속 할 일:** (✅ ①~④ 2026-10-05 처리 — 상위 기록 "AI 실측 데이터 8/25~10/4 로컬 백필"(`af567e9`). 2026-10-20 BigQuery 재확인: Endpoint 두 테이블 0행, 7월 요약 없음, 학습·비용·Workbench·65/25/10 비중 0건. ⑤는 미결정) ① 가짜 적재 데이터 삭제(`monthly_direct_ai_summary` 07~09월, `daily_endpoint_serving_metrics`/`monthly_endpoint_serving_summary` 전체, `daily_direct_ai_metrics` 10월 행) ② 커밋·푸시 후 수집 재실행 ③ 9월은 Monitoring 보존 기간(6주) 안이라 실측 백필 가능 ④ 가짜 데이터를 만든 `BigQueryAiDataRecreationAndBackfillTest.java` 정리 ⑤ 수집 상태(권한 없음 등) 저장 여부 결정
 
 ---
 
