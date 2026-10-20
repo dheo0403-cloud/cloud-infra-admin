@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getDirectAiMetrics, DirectAiMetricsDto } from '../services/api';
+import { getDirectAiMetrics, DirectAiMetricsDto, AiErrorRateSeriesDto } from '../services/api';
 
 interface DirectAiUsagePanelProps {
     projectId?: string;
@@ -8,6 +8,62 @@ interface DirectAiUsagePanelProps {
     onHideSection?: () => void;
 }
 
+// 토큰/건수 축약 표기 (1.2M, 3.4K)
+const fmt = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : `${n}`;
+
+const MAX_RATIO_ROWS = 5;
+const ERROR_LINE_COLORS = ['#ef4444', '#f59e0b', '#3b82f6'];
+
+const cardTitleIcon = (icon: string, color: string) => <i className={`fas ${icon} mr-1`} style={{ color }}></i>;
+
+/**
+ * 기준월 일별 에러율 꺾은선 (SVG). 값이 없는 날(null)은 선을 끊는다
+ */
+const ErrorRateChart: React.FC<{ dates: string[]; series: AiErrorRateSeriesDto[] }> = ({ dates, series }) => {
+    // 가로로 넓은 viewBox: 카드 폭(약 580px)에서 높이 170px 안팎이 되도록
+    const W = 520, H = 150, PAD_L = 30, PAD_R = 8, PAD_T = 8, PAD_B = 18;
+    const values = series.flatMap(s => s.dailyErrorRates.filter((v): v is number => v !== null));
+    const yMax = Math.max(1, Math.ceil(Math.max(0, ...values)));
+    const x = (i: number) => PAD_L + (dates.length <= 1 ? 0 : (i / (dates.length - 1)) * (W - PAD_L - PAD_R));
+    const y = (v: number) => PAD_T + (1 - v / yMax) * (H - PAD_T - PAD_B);
+    const xLabelIdx = dates.length > 2 ? [0, Math.floor((dates.length - 1) / 2), dates.length - 1] : dates.map((_, i) => i);
+
+    // null로 끊긴 구간별 점 목록
+    const segments = (rates: (number | null)[]) => {
+        const segs: string[] = [];
+        let cur: string[] = [];
+        rates.forEach((v, i) => {
+            if (v === null) {
+                if (cur.length) segs.push(cur.join(' '));
+                cur = [];
+            } else {
+                cur.push(`${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+            }
+        });
+        if (cur.length) segs.push(cur.join(' '));
+        return segs;
+    };
+
+    return (
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="AI 모델 호출 일별 에러율">
+            {[0, yMax / 2, yMax].map(v => (
+                <g key={v}>
+                    <line x1={PAD_L} x2={W - PAD_R} y1={y(v)} y2={y(v)} stroke="#e2e8f0" strokeWidth={1} />
+                    <text x={PAD_L - 4} y={y(v) + 3} textAnchor="end" fontSize="9" fill="#94a3b8">{`${Number(v.toFixed(1))}%`}</text>
+                </g>
+            ))}
+            {xLabelIdx.map(i => (
+                <text key={i} x={x(i)} y={H - 4} textAnchor={i === 0 ? 'start' : i === dates.length - 1 ? 'end' : 'middle'} fontSize="9" fill="#94a3b8">{dates[i]}</text>
+            ))}
+            {series.map((s, si) => segments(s.dailyErrorRates).map((pts, k) => (
+                pts.includes(' ')
+                    ? <polyline key={`${si}-${k}`} points={pts} fill="none" stroke={ERROR_LINE_COLORS[si]} strokeWidth={1.5} strokeLinejoin="round" />
+                    : <circle key={`${si}-${k}`} cx={pts.split(',')[0]} cy={pts.split(',')[1]} r={1.8} fill={ERROR_LINE_COLORS[si]} />
+            )))}
+        </svg>
+    );
+};
+
 const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
     projectId,
     targetYearMonth,
@@ -15,73 +71,33 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
     onHideSection
 }) => {
     const [metrics, setMetrics] = useState<DirectAiMetricsDto | null>(null);
-    const [loading, setLoading] = useState<boolean>(true);
-
-    const fetchMetrics = async () => {
-        try {
-            const res = await getDirectAiMetrics(projectId, targetYearMonth);
-            if (res.data) {
-                setMetrics(res.data);
-            }
-        } catch (err) {
-            console.error('Failed to fetch Direct AI usage metrics:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     useEffect(() => {
-        fetchMetrics();
+        let ignore = false;
+        getDirectAiMetrics(projectId, targetYearMonth)
+            .then(res => { if (!ignore && res.data) setMetrics(res.data); })
+            .catch(err => console.error('Failed to fetch Direct AI usage metrics:', err));
+        return () => { ignore = true; };
     }, [projectId, targetYearMonth]);
 
-    const hasData = Boolean(metrics && metrics.dates && metrics.dates.length > 0);
+    const dates = metrics?.dates || [];
+    const inputTrend = metrics?.inputTokensTrend || [];
+    const outputTrend = metrics?.outputTokensTrend || [];
+    const models = metrics?.models || [];
+    const totalTokens = Number(metrics?.totalTokens || 0);
+    const totalInvocations = Number(metrics?.totalInvocations || 0);
+    const errorDates = metrics?.errorRateDates || [];
+    const errorSeries = metrics?.errorRateSeries || [];
+    const hasErrorData = errorSeries.some(s => s.dailyErrorRates.some(v => v !== null));
 
-    const data: DirectAiMetricsDto = metrics || {
-        projectId: projectId || '',
-        customerName: '고객사 GCP 프로젝트',
-        dates: [],
-        inputTokensTrend: [],
-        outputTokensTrend: [],
-        pretrainedApiCallsTrend: [],
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
-        totalTokens: 0,
-        totalPretrainedApiCalls: 0,
-        visionApiCalls: 0,
-        speechApiCalls: 0,
-        translationApiCalls: 0,
-        nlpApiCalls: 0,
-        trainingNodeHours: 0.0,
-        pipelineRunsCount: 0,
-        workbenchUptimeHours: 0.0,
-        activeWorkbenchCount: 0,
-        currentRpm: 0,
-        maxRpmQuota: 1000,
-        rpmQuotaUsagePercent: 0,
-        currentTpd: 0,
-        maxTpdQuota: 4500000,
-        tpdQuotaUsagePercent: 0,
-        quotaAlert: false,
-        geminiFlashRatio: 0,
-        geminiProRatio: 0,
-        claudeRatio: 0,
-        customModelRatio: 0,
-        estimatedApiCost: 0,
-        estimatedTrainingCost: 0,
-        totalEstimatedDailyCost: 0,
-        totalEstimatedMonthlyCost: 0,
-        lastUpdated: new Date().toLocaleTimeString('ko-KR')
-    };
+    const maxTokenValue = Math.max(...inputTrend, ...outputTrend, 1);
+    const isDirectAiEmpty = dates.length === 0 || (totalTokens === 0 && totalInvocations === 0);
+    const otherModels = models.slice(MAX_RATIO_ROWS);
+    const otherInvocations = otherModels.reduce((sum, m) => sum + Number(m.invocations || 0), 0);
+    const ratio = (inv: number) => totalInvocations > 0 ? (inv / totalInvocations) * 100 : 0;
 
-    // 토큰/건수 축약 표기 (1.2M, 3.4K)
-    const fmt = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : `${n}`;
-    const maxTokenValue = Math.max(...(data.inputTokensTrend || [0]), ...(data.outputTokensTrend || [0]), 1);
-    const models = data.models || [];
-    const MAX_MODEL_ROWS = 6;
-
-    const isDirectAiEmpty = !hasData || (Number(data.totalTokens || 0) === 0 && Number(data.totalPretrainedApiCalls || 0) === 0 && Number(data.totalInvocations || 0) === 0);
-
-    const displayDates: string[] = data.dates || [];
+    const subCard: React.CSSProperties = { marginBottom: 0, display: 'flex', flexDirection: 'column' };
+    const emptyText: React.CSSProperties = { fontSize: '10px', color: '#94a3b8', padding: '6px 0' };
 
     return (
         <div className={`direct-ai-section ${isDirectAiEmpty ? "print-hide-empty" : ""}`} style={{ marginBottom: 0 }}>
@@ -90,7 +106,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ display: 'flex', alignItems: 'center' }}>
                         <i className="fas fa-brain mr-2" style={{ color: '#2563eb' }}></i>
-                        AI API 사용 (Vertex AI 모델 호출)
+                        Direct AI Usage (AI 서비스 직접 사용)
                     </span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {isEditMode && onHideSection && (
@@ -104,183 +120,126 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                 <i className="fas fa-eye-slash mr-1"></i>섹션 숨기기 (PDF 제외)
                             </button>
                         )}
-                        {hasData && !isDirectAiEmpty ? (
-                            <span style={{
-                                fontSize: '10px',
-                                fontWeight: 700,
-                                color: '#10b981',
-                                backgroundColor: '#ecfdf5',
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                border: '1px solid #a7f3d0'
-                            }}>
-                                <i className="fas fa-check-circle mr-1"></i>API 호출형 사용 중
+                        {!isDirectAiEmpty ? (
+                            <span style={{ fontSize: '10px', fontWeight: 700, color: '#10b981', backgroundColor: '#ecfdf5', padding: '2px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                                <i className="fas fa-check-circle mr-1"></i>Direct AI 사용 중
                             </span>
                         ) : (
-                            <span style={{
-                                fontSize: '10px',
-                                fontWeight: 600,
-                                color: '#64748b',
-                                backgroundColor: '#f1f5f9',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                border: '1px solid #e2e8f0'
-                            }}>
-                                AI API 미사용
+                            <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                                Direct AI 미사용
                             </span>
                         )}
                     </div>
                 </div>
 
-                {/* 4 Summary Chips */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '14px' }}>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 누적 토큰</span>
-                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'Pretendard, sans-serif' }}>
-                            {fmt(Number(data.totalTokens || 0))} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Tokens</span>
-                        </strong>
-                    </div>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>모델 호출</span>
-                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#2563eb', fontFamily: 'Pretendard, sans-serif' }}>
-                            {Number(data.totalInvocations || 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Calls</span>
-                        </strong>
-                    </div>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>사용 모델</span>
-                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#7c3aed', fontFamily: 'Pretendard, sans-serif' }}>
-                            {models.length} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Models</span>
-                        </strong>
-                    </div>
-                    <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>Pre-trained API 호출</span>
-                        <strong style={{ fontSize: '14px', fontWeight: 800, color: '#059669', fontFamily: 'Pretendard, sans-serif' }}>
-                            {(data.totalPretrainedApiCalls || 0).toLocaleString()} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Calls</span>
-                        </strong>
-                    </div>
-                </div>
-
-                {/* 2-Column Split Body */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                    {/* Left: Token & API Usage Trend Chart (Standardized IAM Structure & Height 170px) */}
-                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column' }}>
-                        <div className="report-card-title">
-                            <span>
-                                <i className="fas fa-chart-bar mr-1.5" style={{ color: '#2563eb' }}></i>월별 토큰 사용량 트렌드
-                            </span>
-                            <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
+                    {/* 왼쪽: 월간 누적 토큰 + 월별 토큰 사용량 트렌드 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div className="ai-total-tokens" style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
+                            <span style={{ display: 'block', fontSize: '10px', color: '#64748b', fontWeight: 600 }}>월간 누적 토큰</span>
+                            <strong style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', fontFamily: 'Pretendard, sans-serif' }}>
+                                {fmt(totalTokens)} <span style={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8' }}>Tokens</span>
+                            </strong>
                         </div>
 
-                        <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
-                            {displayDates.map((date, idx) => {
-                                const inTok = Number(data.inputTokensTrend?.[idx] || 0);
-                                const outTok = Number(data.outputTokensTrend?.[idx] || 0);
-                                const inHeight = inTok > 0 ? (inTok / maxTokenValue) * 85 : 0;
-                                const outHeight = outTok > 0 ? (outTok / maxTokenValue) * 85 : 0;
+                        <div className="report-card ai-token-trend" style={{ ...subCard, flexGrow: 1 }}>
+                            <div className="report-card-title">
+                                <span>{cardTitleIcon('fa-chart-bar', '#2563eb')}월별 토큰 사용량 트렌드</span>
+                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
+                            </div>
 
-                                return (
-                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
-                                        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
-                                            <div style={{
-                                                width: '16px',
-                                                height: `${inHeight}%`, minHeight: inHeight > 0 ? '2px' : 0,
-                                                backgroundColor: inHeight > 0 ? '#3b82f6' : 'transparent',
-                                                borderRadius: '3px 3px 0 0',
-                                                position: 'relative'
-                                            }}>
-                                                {inTok > 0 && (
-                                                    <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: '#1e3a8a', whiteSpace: 'nowrap' }}>
-                                                        {fmt(inTok)}
-                                                    </span>
-                                                )}
+                            <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>
+                                {dates.map((date, idx) => {
+                                    const inTok = Number(inputTrend[idx] || 0);
+                                    const outTok = Number(outputTrend[idx] || 0);
+                                    const inHeight = inTok > 0 ? (inTok / maxTokenValue) * 85 : 0;
+                                    const outHeight = outTok > 0 ? (outTok / maxTokenValue) * 85 : 0;
+                                    return (
+                                        <div key={date} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '20%', height: '100%', justifyContent: 'flex-end' }}>
+                                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '14px', width: '100%', justifyContent: 'center', height: '100%' }}>
+                                                {[{ v: inTok, h: inHeight, c: '#3b82f6', t: '#1e3a8a' }, { v: outTok, h: outHeight, c: '#10b981', t: '#047857' }].map((b, bi) => (
+                                                    <div key={bi} style={{ width: '16px', height: `${b.h}%`, minHeight: b.h > 0 ? '2px' : 0, backgroundColor: b.h > 0 ? b.c : 'transparent', borderRadius: '3px 3px 0 0', position: 'relative' }}>
+                                                        {b.v > 0 && (
+                                                            <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: b.t, whiteSpace: 'nowrap' }}>
+                                                                {fmt(b.v)}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
-                                            <div style={{
-                                                width: '16px',
-                                                height: `${outHeight}%`, minHeight: outHeight > 0 ? '2px' : 0,
-                                                backgroundColor: outHeight > 0 ? '#10b981' : 'transparent',
-                                                borderRadius: '3px 3px 0 0',
-                                                position: 'relative'
-                                            }}>
-                                                {outTok > 0 && (
-                                                    <span style={{ position: 'absolute', top: '-16px', left: '50%', transform: 'translateX(-50%)', fontSize: '8px', fontWeight: 700, color: '#047857', whiteSpace: 'nowrap' }}>
-                                                        {fmt(outTok)}
-                                                    </span>
-                                                )}
-                                            </div>
+                                            <span style={{ fontSize: '11px', marginTop: '8px', color: idx === dates.length - 1 ? '#2563eb' : '#64748b', fontWeight: idx === dates.length - 1 ? 700 : 400 }}>{date}</span>
                                         </div>
-                                        <span style={{ fontSize: '11px', marginTop: '8px', color: idx === displayDates.length - 1 ? '#2563eb' : '#64748b', fontWeight: idx === displayDates.length - 1 ? 700 : 400 }}>{date}</span>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                })}
+                            </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
-                            <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6', marginRight: '5px' }}></span>Input 토큰
-                            </span>
-                            <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                                <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>Output 토큰
-                            </span>
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '11px', marginTop: '6px' }}>
+                                <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                    <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3b82f6', marginRight: '5px' }}></span>Input 토큰
+                                </span>
+                                <span style={{ color: '#1e293b', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                                    <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#10b981', marginRight: '5px' }}></span>Output 토큰
+                                </span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Right: 모델별 호출 현황 & Pre-trained API */}
-                    <div className="report-card" style={{ marginBottom: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {/* 1. 모델별 호출 (실측, 호출 수 내림차순) */}
-                        <div className="ai-model-usage" style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-                                <i className="fas fa-layer-group mr-1" style={{ color: '#8b5cf6' }}></i>모델별 호출 현황
-                            </span>
+                    {/* 오른쪽: AI 모델별 호출 비중 + AI 모델 호출 에러율 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div className="report-card ai-model-ratio" style={subCard}>
+                            <div className="report-card-title">
+                                <span>{cardTitleIcon('fa-layer-group', '#8b5cf6')}AI 모델별 호출 비중</span>
+                                <span style={{ fontSize: '10px', color: '#64748b' }}>총 {totalInvocations.toLocaleString()}회</span>
+                            </div>
                             {models.length > 0 ? (
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10px' }}>
-                                    <thead>
-                                        <tr style={{ color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
-                                            <th style={{ textAlign: 'left', padding: '3px 4px', fontWeight: 700 }}>모델</th>
-                                            <th style={{ textAlign: 'right', padding: '3px 4px', fontWeight: 700 }}>호출</th>
-                                            <th style={{ textAlign: 'right', padding: '3px 4px', fontWeight: 700 }}>Input</th>
-                                            <th style={{ textAlign: 'right', padding: '3px 4px', fontWeight: 700 }}>Output</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {models.slice(0, MAX_MODEL_ROWS).map(m => (
-                                            <tr key={`${m.publisher}/${m.model}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                                <td style={{ padding: '3px 4px', color: '#0f172a', fontWeight: 600 }}>
-                                                    {m.model || '(알 수 없음)'} <span style={{ color: '#94a3b8', fontWeight: 400 }}>{m.publisher}</span>
-                                                </td>
-                                                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#2563eb', fontWeight: 700 }}>{Number(m.invocations || 0).toLocaleString()}</td>
-                                                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#334155' }}>{fmt(Number(m.inputTokens || 0))}</td>
-                                                <td style={{ padding: '3px 4px', textAlign: 'right', color: '#334155' }}>{fmt(Number(m.outputTokens || 0))}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    {[...models.slice(0, MAX_RATIO_ROWS).map(m => ({ key: `${m.publisher}/${m.model}`, label: m.model || '(알 수 없음)', sub: m.publisher, inv: Number(m.invocations || 0) })),
+                                      ...(otherModels.length > 0 ? [{ key: 'other', label: `기타 ${otherModels.length}개 모델`, sub: '', inv: otherInvocations }] : [])
+                                    ].map(r => {
+                                        const pct = ratio(r.inv);
+                                        return (
+                                            <div key={r.key} style={{ fontSize: '10px' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '2px' }}>
+                                                    <span style={{ color: '#334155', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }} title={`${r.label} ${r.sub}`}>
+                                                        {r.label} <span style={{ color: '#94a3b8', fontWeight: 400 }}>{r.sub}</span>
+                                                    </span>
+                                                    <span style={{ color: '#7c3aed', fontWeight: 700, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                                                </div>
+                                                <div style={{ height: '6px', backgroundColor: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                                                    <div style={{ width: `${pct}%`, height: '100%', backgroundColor: '#8b5cf6' }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             ) : (
-                                <div style={{ fontSize: '10px', color: '#94a3b8', padding: '6px 0' }}>기준월 모델 호출 기록이 없습니다.</div>
-                            )}
-                            {models.length > MAX_MODEL_ROWS && (
-                                <div style={{ fontSize: '9px', color: '#94a3b8', marginTop: '4px' }}>외 {models.length - MAX_MODEL_ROWS}개 모델</div>
+                                <div style={emptyText}>기준월 모델 호출 기록이 없습니다.</div>
                             )}
                         </div>
 
-                        {/* 2. Pretrained APIs */}
-                        <div style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
-                                <i className="fas fa-microchip mr-1" style={{ color: '#059669' }}></i>Pre-trained API 호출
-                            </span>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '10px' }}>
-                                <div style={{ backgroundColor: '#f8fafc', padding: '5px 8px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
-                                    <span style={{ color: '#64748b' }}>Vision API:</span> <strong style={{ color: '#0f172a' }}>{(data.visionApiCalls || 0).toLocaleString()}건</strong>
-                                </div>
-                                <div style={{ backgroundColor: '#f8fafc', padding: '5px 8px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
-                                    <span style={{ color: '#64748b' }}>Speech API:</span> <strong style={{ color: '#0f172a' }}>{(data.speechApiCalls || 0).toLocaleString()}건</strong>
-                                </div>
-                                <div style={{ backgroundColor: '#f8fafc', padding: '5px 8px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
-                                    <span style={{ color: '#64748b' }}>Translation:</span> <strong style={{ color: '#0f172a' }}>{(data.translationApiCalls || 0).toLocaleString()}건</strong>
-                                </div>
-                                <div style={{ backgroundColor: '#f8fafc', padding: '5px 8px', borderRadius: '4px', border: '1px solid #f1f5f9' }}>
-                                    <span style={{ color: '#64748b' }}>Natural Language:</span> <strong style={{ color: '#0f172a' }}>{(data.nlpApiCalls || 0).toLocaleString()}건</strong>
-                                </div>
+                        <div className="report-card ai-error-rate" style={{ ...subCard, flexGrow: 1 }}>
+                            <div className="report-card-title">
+                                <span>{cardTitleIcon('fa-exclamation-triangle', '#ef4444')}AI 모델 호출 에러율</span>
+                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>기준월 일별 · 2xx 외 응답</span>
                             </div>
+                            {hasErrorData ? (
+                                <>
+                                    <ErrorRateChart dates={errorDates} series={errorSeries} />
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: '10px', marginTop: '4px' }}>
+                                        {errorSeries.map((s, si) => (
+                                            <span key={`${s.publisher}/${s.model}`} style={{ display: 'flex', alignItems: 'center', color: '#334155', fontWeight: 600, minWidth: 0 }}>
+                                                <span style={{ display: 'inline-block', width: '10px', height: '3px', backgroundColor: ERROR_LINE_COLORS[si], marginRight: '4px', flexShrink: 0 }}></span>
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.model}</span>
+                                                <span style={{ color: '#ef4444', marginLeft: '4px', fontVariantNumeric: 'tabular-nums' }}>
+                                                    {s.monthlyErrorRate !== null && s.monthlyErrorRate !== undefined ? `${s.monthlyErrorRate.toFixed(2)}%` : '—'}
+                                                </span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={emptyText}>기준월 에러율 수집 기록이 없습니다.</div>
+                            )}
                         </div>
                     </div>
                 </div>

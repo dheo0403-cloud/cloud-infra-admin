@@ -142,6 +142,9 @@ export interface DirectAiMetricsDto {
     // 기준월 모델별 호출 (Vertex AI 관리형 모델 API 호출)
     totalInvocations?: number;
     models?: AiModelUsageDto[];
+    // 기준월 일별 에러율 (호출 많은 상위 3개 모델)
+    errorRateDates?: string[];
+    errorRateSeries?: AiErrorRateSeriesDto[];
     lastUpdated: string;
 }
 
@@ -151,68 +154,19 @@ export interface AiModelUsageDto {
     invocations: number;
     inputTokens: number;
     outputTokens: number;
+    errorInvocations?: number | null;
+    errorRate?: number | null;
+}
+
+export interface AiErrorRateSeriesDto {
+    publisher: string;
+    model: string;
+    monthlyErrorRate: number | null;
+    dailyErrorRates: (number | null)[]; // errorRateDates와 같은 순서, 호출 없음·미수집은 null
 }
 
 export const getDirectAiMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>
     axios.get<DirectAiMetricsDto>(`${API_BASE_URL}/metrics/gcp/direct-ai`, { params: { projectId, targetYearMonth, period } });
-
-// 2. Endpoint Serving (AI 엔드포인트 서빙) Metrics
-export interface EndpointDetailDto {
-    endpointId: string;
-    endpointName: string;
-    deployedModelId: string;
-    deployedModelName: string;
-    machineType: string;
-    acceleratorType: string;
-    acceleratorCount: number;
-    minReplicas: number;
-    maxReplicas: number;
-    currentReplicas: number;
-    totalRequests: number;
-    qps: number;
-    avgLatencyMs: number;
-    p95LatencyMs: number;
-    p99LatencyMs: number;
-    errorCount4xx: number;
-    errorCount5xx: number;
-    errorRate4xx: number;
-    errorRate5xx: number;
-    gpuUtilizationPercent: number;
-    cpuUtilizationPercent: number;
-    nodeUptimeHours: number;
-    endpointNodeHours: number;
-    hourlyCost: number;
-    monthlyCost: number;
-    status: string;
-}
-
-export interface EndpointServingMetricsDto {
-    projectId?: string;
-    customerName?: string;
-    totalRequests7d: number;
-    currentQps: number;
-    avgLatencyMs: number;
-    p95LatencyMs: number;
-    p99LatencyMs: number;
-    errorRate4xxPercent: number;
-    errorRate5xxPercent: number;
-    successRatePercent: number;
-    vectorSearchQueries?: number;
-    vectorSearchUpdates?: number;
-    totalEndpoints: number;
-    activeEndpoints: number;
-    totalAllocatedGpus: number;
-    totalEstimatedHourlyCost: number;
-    totalEstimatedMonthlyCost: number;
-    dates: string[];
-    dailyRequestsTrend: number[];
-    dailyLatencyTrend: number[];
-    dailyQpsTrend: number[];
-    endpoints: EndpointDetailDto[];
-}
-
-export const getEndpointServingMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>
-    axios.get<EndpointServingMetricsDto>(`${API_BASE_URL}/metrics/gcp/endpoint-serving`, { params: { projectId, targetYearMonth, period } });
 
 // 3. BigQuery Optimization (BigQuery 성능 및 비용 최적화 분석) Metrics
 export interface BigQueryJobItemDto {
@@ -260,8 +214,6 @@ export const getBigQueryOptimizationMetrics = (projectId?: string, targetYearMon
 // Legacy Aliases for Backward Compatibility
 export type VertexAiMetricsDto = DirectAiMetricsDto;
 export const getVertexAiMetrics = getDirectAiMetrics;
-export type VertexEndpointMetricsDto = EndpointServingMetricsDto;
-export const getVertexEndpointMetrics = getEndpointServingMetrics;
 
 
 

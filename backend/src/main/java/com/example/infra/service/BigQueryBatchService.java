@@ -858,14 +858,6 @@ public class BigQueryBatchService {
                         log.error("Batch failed for Direct AI Metrics in project {}", projectId, e);
                     }
 
-                    // 21-2. GCP AI 엔드포인트 서빙 (Endpoint Serving) 메트릭 수집 (전체 고객사 프로젝트 순회)
-                    try {
-                        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials, dayStart, dayEnd, null);
-                        log.info("GCP Endpoint Serving Metrics: successfully collected for project {}", projectId);
-                    } catch (Exception e) {
-                        log.error("Batch failed for Endpoint Serving Metrics in project {}", projectId, e);
-                    }
-
                     // 22. GCP BigQuery 성능 및 비용 최적화 분석 메트릭 Upsert 수집 (전체 고객사 프로젝트 순회)
                     try {
                         bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapshotDate, projectId, customerName, credentials);
@@ -1057,173 +1049,17 @@ public class BigQueryBatchService {
     }
 
     /**
-     * [1회성 데이터 보정] AI 데이터 교차 오염 해결 및 BQ 데이터 전량 삭제 후 프로젝트별 재적재 (토큰 & 엔드포인트 동시)
-     */
-    public void cleanAndResyncAllVertexAiMetrics() {
-        cleanAndResyncAllVertexAiAndEndpointMetrics();
-    }
-
-    /**
-     * [1회성 데이터 보정 및 전면 재구축] 기존 레거시 Vertex AI 테이블 삭제 후 듀얼 체계(Direct AI & Endpoint Serving) BQ 초기화 및 고객사별 독립 재적재
-     */
-    public void cleanAndResyncAllDualAiMetrics() {
-        log.info("=== 🚀 [전면 재구축] 듀얼 체계 (Direct AI & Endpoint Serving) BigQuery 초기화 및 전체 고객사 실데이터 수집 시작 ===");
-        ensureDailyDirectAiMetricsTableExists();
-        ensureDailyEndpointServingMetricsTableExists();
-        String snapshotDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-
-        // 1. 기존 레거시 테이블 삭제 (Wipe-out)
-        try {
-            bigQuery.query(QueryJobConfiguration.newBuilder(String.format("DROP TABLE IF EXISTS `%s.%s.daily_vertex_ai_metrics`", targetProjectId, datasetName)).build());
-            bigQuery.query(QueryJobConfiguration.newBuilder(String.format("DROP TABLE IF EXISTS `%s.%s.daily_vertex_endpoint_metrics`", targetProjectId, datasetName)).build());
-            log.info("Successfully dropped legacy daily_vertex_ai_metrics & daily_vertex_endpoint_metrics tables");
-        } catch (Exception e) {
-            log.warn("Drop legacy tables notice: {}", e.getMessage());
-        }
-
-        // 2. 신규 daily_direct_ai_metrics 테이블 초기화 (CREATE OR REPLACE TABLE)
-        try {
-            String truncateDirectSql = String.format(
-                "CREATE OR REPLACE TABLE `%s.%s.daily_direct_ai_metrics` (" +
-                "  snapshot_date DATE," +
-                "  timestamp TIMESTAMP," +
-                "  project_id STRING," +
-                "  customer_name STRING," +
-                "  input_tokens INT64," +
-                "  output_tokens INT64," +
-                "  total_tokens INT64," +
-                "  pretrained_api_calls INT64," +
-                "  vision_api_calls INT64," +
-                "  speech_api_calls INT64," +
-                "  translation_api_calls INT64," +
-                "  nlp_api_calls INT64," +
-                "  training_node_hours FLOAT64," +
-                "  pipeline_runs_count INT64," +
-                "  workbench_uptime_hours FLOAT64," +
-                "  active_workbench_count INT64," +
-                "  current_rpm INT64," +
-                "  max_rpm_quota INT64," +
-                "  gemini_flash_ratio FLOAT64," +
-                "  gemini_pro_ratio FLOAT64," +
-                "  claude_ratio FLOAT64," +
-                "  custom_model_ratio FLOAT64," +
-                "  estimated_api_cost FLOAT64," +
-                "  estimated_training_cost FLOAT64," +
-                "  total_estimated_daily_cost FLOAT64," +
-                "  created_at TIMESTAMP" +
-                ")", targetProjectId, datasetName
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(truncateDirectSql).build());
-            log.info("Successfully initialized daily_direct_ai_metrics in BigQuery");
-        } catch (Exception e) {
-            log.warn("Initialize daily_direct_ai_metrics table notice: {}", e.getMessage());
-        }
-
-        // 3. 신규 daily_endpoint_serving_metrics 테이블 초기화 (CREATE OR REPLACE TABLE)
-        try {
-            String truncateServingSql = String.format(
-                "CREATE OR REPLACE TABLE `%s.%s.daily_endpoint_serving_metrics` (" +
-                "  snapshot_date DATE," +
-                "  timestamp TIMESTAMP," +
-                "  project_id STRING," +
-                "  customer_name STRING," +
-                "  endpoint_id STRING," +
-                "  endpoint_name STRING," +
-                "  deployed_model_id STRING," +
-                "  deployed_model_name STRING," +
-                "  machine_type STRING," +
-                "  accelerator_type STRING," +
-                "  accelerator_count INT64," +
-                "  min_replicas INT64," +
-                "  max_replicas INT64," +
-                "  current_replicas INT64," +
-                "  total_requests INT64," +
-                "  qps FLOAT64," +
-                "  avg_latency_ms INT64," +
-                "  p95_latency_ms INT64," +
-                "  p99_latency_ms INT64," +
-                "  error_count_4xx INT64," +
-                "  error_count_5xx INT64," +
-                "  error_rate_4xx_percent FLOAT64," +
-                "  error_rate_5xx_percent FLOAT64," +
-                "  success_rate_percent FLOAT64," +
-                "  vector_search_queries INT64," +
-                "  vector_search_updates INT64," +
-                "  gpu_utilization_percent FLOAT64," +
-                "  cpu_utilization_percent FLOAT64," +
-                "  node_uptime_hours FLOAT64," +
-                "  endpoint_node_hours FLOAT64," +
-                "  hourly_serving_cost FLOAT64," +
-                "  monthly_serving_cost FLOAT64," +
-                "  status STRING," +
-                "  created_at TIMESTAMP" +
-                ")", targetProjectId, datasetName
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(truncateServingSql).build());
-            log.info("Successfully initialized daily_endpoint_serving_metrics in BigQuery");
-        } catch (Exception e) {
-            log.warn("Initialize daily_endpoint_serving_metrics table notice: {}", e.getMessage());
-        }
-
-        // 4. 전체 고객사 환경을 순회하며 프로젝트별 독립 실데이터 수집 및 적재
-        List<InfraEnvironment> environments = environmentService.getAllEnvironments();
-        int directSuccessCount = 0;
-        int servingSuccessCount = 0;
-        for (InfraEnvironment env : environments) {
-            if (!"GCP".equalsIgnoreCase(env.getProviderType())) continue;
-            String decryptedSecret = environmentService.getDecryptedSecret(env.getId());
-            if (decryptedSecret == null || decryptedSecret.isEmpty()) continue;
-
-            try {
-                GoogleCredentials credentials = GoogleCredentials.fromStream(new ByteArrayInputStream(decryptedSecret.getBytes()))
-                        .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
-
-                for (CloudProject project : env.getProjects()) {
-                    String projectId = project.getProjectId();
-                    String customerName = env.getCustomer() != null && env.getCustomer().getName() != null ? env.getCustomer().getName() : "Unknown";
-
-                    // 4-1. Direct AI Usage 수집
-                    try {
-                        log.info("Syncing Direct AI Usage metrics for project: {} ({})", projectId, customerName);
-                        collectAndInsertDailyDirectAiMetrics(snapshotDate, projectId, customerName, credentials);
-                        directSuccessCount++;
-                    } catch (Exception ex) {
-                        log.error("Failed to sync Direct AI Usage metrics for project {}: {}", projectId, ex.getMessage());
-                    }
-
-                    // 4-2. Endpoint Serving 수집
-                    try {
-                        log.info("Syncing Endpoint Serving metrics for project: {} ({})", projectId, customerName);
-                        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials);
-                        servingSuccessCount++;
-                    } catch (Exception ex) {
-                        log.error("Failed to sync Endpoint Serving metrics for project {}: {}", projectId, ex.getMessage());
-                    }
-                }
-            } catch (Exception e) {
-                log.error("Failed to sync AI metrics for environment: {}", env.getEnvironmentName(), e);
-            }
-        }
-        log.info("=== 🏁 [전면 재구축 완료] AI 듀얼 데이터 재수집 완료 (Direct AI: {}개 프로젝트, Endpoint Serving: {}개 프로젝트 처리) ===",
-                directSuccessCount, servingSuccessCount);
-    }
-
-    public void cleanAndResyncAllVertexAiAndEndpointMetrics() {
-        cleanAndResyncAllDualAiMetrics();
-    }
-
-    /**
-     * [과거 일자 백필] from~to 각 날짜를 KST 하루(00:00~24:00) 구간으로 Direct AI·Endpoint Serving 실측 재적재 후 월 요약 롤업.
+     * [과거 일자 백필] from~to 각 날짜를 KST 하루(00:00~24:00) 구간으로 Direct AI 실측(모델별 호출·에러·토큰 포함) 재적재 후 월 요약 롤업.
      * 시작 전에 기간 전체 행을 한 번에 지우고, 삭제가 실패하면(스트리밍 버퍼 등) 중복 적재를 막기 위해 적재 없이 중단한다.
      * Cloud Monitoring 보존(6주) 밖 날짜는 0으로 수집되므로 호출하는 쪽에서 보존 기간 안의 날짜만 넘긴다.
      * cutoff(nullable)를 넘기면 그 시각 이후는 수집하지 않는다 (일 배치가 이미 수집한 구간과 겹치지 않게 마지막 날을 자를 때 사용).
      */
     public void backfillAiMetrics(LocalDate from, LocalDate to, java.time.Instant cutoff) {
         java.time.ZoneId kst = java.time.ZoneId.of("Asia/Seoul");
-        log.info("=== 🚀 [AI 백필] {} ~ {} Direct AI·Endpoint Serving 재적재 시작 ===", from, to);
+        log.info("=== 🚀 [AI 백필] {} ~ {} Direct AI 재적재 시작 ===", from, to);
         ensureDailyDirectAiMetricsTableExists();
-        ensureDailyEndpointServingMetricsTableExists();
-        for (String table : Arrays.asList("daily_direct_ai_metrics", "daily_endpoint_serving_metrics", "daily_ai_model_usage")) {
+        ensureDailyAiModelUsageTable(); // error_invocations 컬럼이 없으면 추가된 뒤 적재
+        for (String table : Arrays.asList("daily_direct_ai_metrics", "daily_ai_model_usage")) {
             String deleteSql = String.format("DELETE FROM `%s.%s.%s` WHERE snapshot_date BETWEEN '%s' AND '%s'",
                     targetProjectId, datasetName, table, from, to);
             try {
@@ -1247,7 +1083,6 @@ public class BigQueryBatchService {
                         .createScoped(Arrays.asList("https://www.googleapis.com/auth/cloud-platform"));
                 for (CloudProject project : env.getProjects()) {
                     String projectId = project.getProjectId();
-                    Map<String, List<JsonNode>> endpointCache = new HashMap<>(); // 프로젝트당 endpoints.list 1회
                     for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
                         long start = d.atStartOfDay(kst).toEpochSecond();
                         long end = d.plusDays(1).atStartOfDay(kst).toEpochSecond();
@@ -1255,7 +1090,6 @@ public class BigQueryBatchService {
                         if (end <= start) continue;
                         try {
                             collectAndInsertDailyDirectAiMetrics(d.toString(), projectId, customerName, credentials, start, end);
-                            collectAndInsertDailyEndpointServingMetrics(d.toString(), projectId, customerName, credentials, start, end, endpointCache);
                         } catch (Exception ex) {
                             log.error("[AI 백필] {} / {} 실패: {}", projectId, d, ex.getMessage());
                         }
@@ -1632,54 +1466,6 @@ public class BigQueryBatchService {
         }
     }
 
-    private void ensureDailyEndpointServingMetricsTableExists() {
-        try {
-            String createTableDdl = String.format(
-                "CREATE TABLE IF NOT EXISTS `%s.%s.daily_endpoint_serving_metrics` (" +
-                "  snapshot_date DATE," +
-                "  timestamp TIMESTAMP," +
-                "  project_id STRING," +
-                "  customer_name STRING," +
-                "  endpoint_id STRING," +
-                "  endpoint_name STRING," +
-                "  deployed_model_id STRING," +
-                "  deployed_model_name STRING," +
-                "  machine_type STRING," +
-                "  accelerator_type STRING," +
-                "  accelerator_count INT64," +
-                "  min_replicas INT64," +
-                "  max_replicas INT64," +
-                "  current_replicas INT64," +
-                "  total_requests INT64," +
-                "  qps FLOAT64," +
-                "  avg_latency_ms INT64," +
-                "  p95_latency_ms INT64," +
-                "  p99_latency_ms INT64," +
-                "  error_count_4xx INT64," +
-                "  error_count_5xx INT64," +
-                "  error_rate_4xx_percent FLOAT64," +
-                "  error_rate_5xx_percent FLOAT64," +
-                "  success_rate_percent FLOAT64," +
-                "  vector_search_queries INT64," +
-                "  vector_search_updates INT64," +
-                "  gpu_utilization_percent FLOAT64," +
-                "  cpu_utilization_percent FLOAT64," +
-                "  node_uptime_hours FLOAT64," +
-                "  endpoint_node_hours FLOAT64," +
-                "  hourly_serving_cost FLOAT64," +
-                "  monthly_serving_cost FLOAT64," +
-                "  status STRING," +
-                "  created_at TIMESTAMP" +
-                ") " +
-                "PARTITION BY snapshot_date " +
-                "OPTIONS (partition_expiration_days = 180)", targetProjectId, datasetName
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
-        } catch (Exception e) {
-            log.debug("Check/Create daily_endpoint_serving_metrics table skipped: {}", e.getMessage());
-        }
-    }
-
     private void ensureDailyDirectAiMetricsTableExists() {
         try {
             String createTableDdl = String.format(
@@ -1758,55 +1544,12 @@ public class BigQueryBatchService {
         }
     }
 
-    public void ensureMonthlyEndpointServingSummaryTableExists() {
-        try {
-            String createTableDdl = String.format(
-                "CREATE TABLE IF NOT EXISTS `%s.%s.monthly_endpoint_serving_summary` (" +
-                "  report_year_month STRING," +
-                "  project_id STRING," +
-                "  customer_name STRING," +
-                "  endpoint_id STRING," +
-                "  endpoint_name STRING," +
-                "  deployed_model_id STRING," +
-                "  deployed_model_name STRING," +
-                "  machine_type STRING," +
-                "  accelerator_type STRING," +
-                "  accelerator_count INT64," +
-                "  min_replicas INT64," +
-                "  max_replicas INT64," +
-                "  current_replicas INT64," +
-                "  monthly_total_requests INT64," +
-                "  avg_qps FLOAT64," +
-                "  avg_latency_ms INT64," +
-                "  p95_latency_ms INT64," +
-                "  p99_latency_ms INT64," +
-                "  monthly_error_count_4xx INT64," +
-                "  monthly_error_count_5xx INT64," +
-                "  error_rate_4xx_percent FLOAT64," +
-                "  error_rate_5xx_percent FLOAT64," +
-                "  success_rate_percent FLOAT64," +
-                "  monthly_vector_search_queries INT64," +
-                "  monthly_vector_search_updates INT64," +
-                "  gpu_utilization_percent FLOAT64," +
-                "  cpu_utilization_percent FLOAT64," +
-                "  monthly_serving_cost FLOAT64," +
-                "  status STRING," +
-                "  updated_at TIMESTAMP" +
-                ")", targetProjectId, datasetName
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
-        } catch (Exception e) {
-            log.debug("Check/Create monthly_endpoint_serving_summary table skipped: {}", e.getMessage());
-        }
-    }
-
     /**
      * 월별 집계 롤업(Roll-up) 배치 실행: 일일 Raw 테이블에서 프로젝트별/월별 합산 계산 후 월별 집계 테이블에 1줄 요약 MERGE
      */
     public void rollupAllMonthlyAiSummaries() {
         log.info("=== 🚀 [BigQuery 롤업 배치] AI 데이터 월별 집계 요약 테이블 롤업 시작 ===");
         ensureMonthlyDirectAiSummaryTableExists();
-        ensureMonthlyEndpointServingSummaryTableExists();
 
         // 1. Direct AI 월별 롤업 (VI 데이터 vision_api_calls 포함 SUM 합산)
         try {
@@ -1881,85 +1624,6 @@ public class BigQueryBatchService {
             log.error("Failed to rollup Direct AI summary", e);
         }
 
-        // 2. Endpoint Serving 월별 롤업
-        try {
-            String servingRollupSql = String.format(
-                "MERGE INTO `%s.%s.monthly_endpoint_serving_summary` T " +
-                "USING (" +
-                "  SELECT " +
-                "    SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS report_year_month, " +
-                "    project_id, " +
-                "    MAX(customer_name) AS customer_name, " +
-                "    endpoint_id, " +
-                "    MAX(endpoint_name) AS endpoint_name, " +
-                "    MAX(deployed_model_id) AS deployed_model_id, " +
-                "    MAX(deployed_model_name) AS deployed_model_name, " +
-                "    MAX(machine_type) AS machine_type, " +
-                "    MAX(accelerator_type) AS accelerator_type, " +
-                "    MAX(accelerator_count) AS accelerator_count, " +
-                "    MAX(min_replicas) AS min_replicas, " +
-                "    MAX(max_replicas) AS max_replicas, " +
-                "    MAX(current_replicas) AS current_replicas, " +
-                "    SUM(total_requests) AS monthly_total_requests, " +
-                "    AVG(qps) AS avg_qps, " +
-                "    CAST(AVG(avg_latency_ms) AS INT64) AS avg_latency_ms, " +
-                "    CAST(AVG(p95_latency_ms) AS INT64) AS p95_latency_ms, " +
-                "    CAST(AVG(p99_latency_ms) AS INT64) AS p99_latency_ms, " +
-                "    SUM(error_count_4xx) AS monthly_error_count_4xx, " +
-                "    SUM(error_count_5xx) AS monthly_error_count_5xx, " +
-                "    AVG(error_rate_4xx_percent) AS error_rate_4xx_percent, " +
-                "    AVG(error_rate_5xx_percent) AS error_rate_5xx_percent, " +
-                "    AVG(success_rate_percent) AS success_rate_percent, " +
-                "    SUM(vector_search_queries) AS monthly_vector_search_queries, " +
-                "    SUM(vector_search_updates) AS monthly_vector_search_updates, " +
-                "    AVG(gpu_utilization_percent) AS gpu_utilization_percent, " +
-                "    AVG(cpu_utilization_percent) AS cpu_utilization_percent, " +
-                "    MAX(monthly_serving_cost) AS monthly_serving_cost, " +
-                "    MAX(status) AS status, " +
-                "    CURRENT_TIMESTAMP() AS updated_at " +
-                "  FROM `%s.%s.daily_endpoint_serving_metrics` " +
-                "  GROUP BY report_year_month, project_id, endpoint_id " +
-                ") S " +
-                "ON T.report_year_month = S.report_year_month AND T.project_id = S.project_id AND T.endpoint_id = S.endpoint_id " +
-                "WHEN MATCHED THEN " +
-                "  UPDATE SET " +
-                "    customer_name = S.customer_name, " +
-                "    endpoint_name = S.endpoint_name, " +
-                "    deployed_model_id = S.deployed_model_id, " +
-                "    deployed_model_name = S.deployed_model_name, " +
-                "    machine_type = S.machine_type, " +
-                "    accelerator_type = S.accelerator_type, " +
-                "    accelerator_count = S.accelerator_count, " +
-                "    min_replicas = S.min_replicas, " +
-                "    max_replicas = S.max_replicas, " +
-                "    current_replicas = S.current_replicas, " +
-                "    monthly_total_requests = S.monthly_total_requests, " +
-                "    avg_qps = S.avg_qps, " +
-                "    avg_latency_ms = S.avg_latency_ms, " +
-                "    p95_latency_ms = S.p95_latency_ms, " +
-                "    p99_latency_ms = S.p99_latency_ms, " +
-                "    monthly_error_count_4xx = S.monthly_error_count_4xx, " +
-                "    monthly_error_count_5xx = S.monthly_error_count_5xx, " +
-                "    error_rate_4xx_percent = S.error_rate_4xx_percent, " +
-                "    error_rate_5xx_percent = S.error_rate_5xx_percent, " +
-                "    success_rate_percent = S.success_rate_percent, " +
-                "    monthly_vector_search_queries = S.monthly_vector_search_queries, " +
-                "    monthly_vector_search_updates = S.monthly_vector_search_updates, " +
-                "    gpu_utilization_percent = S.gpu_utilization_percent, " +
-                "    cpu_utilization_percent = S.cpu_utilization_percent, " +
-                "    monthly_serving_cost = S.monthly_serving_cost, " +
-                "    status = S.status, " +
-                "    updated_at = S.updated_at " +
-                "WHEN NOT MATCHED THEN " +
-                "  INSERT ROW",
-                targetProjectId, datasetName,
-                targetProjectId, datasetName
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(servingRollupSql).build());
-            log.info("Successfully rolled up Endpoint Serving metrics into monthly_endpoint_serving_summary");
-        } catch (Exception e) {
-            log.error("Failed to rollup Endpoint Serving summary", e);
-        }
         log.info("=== 🏁 [BigQuery 롤업 배치] AI 데이터 월별 집계 요약 롤업 완료 ===");
     }
 
@@ -2129,7 +1793,7 @@ public class BigQueryBatchService {
     /**
      * 특정 고객사 프로젝트의 Direct AI Usage 일일 운영 지표 적재 (실제 Cloud Monitoring 메트릭 기반)
      * [참고: BigQuery 메타데이터 특성 안내]
-     * 본 테이블(daily_direct_ai_metrics, daily_endpoint_serving_metrics 등)은 CREATE TABLE IF NOT EXISTS로 파티션 생성 후
+     * 본 테이블(daily_direct_ai_metrics, daily_ai_model_usage)은 CREATE TABLE IF NOT EXISTS로 파티션 생성 후
      * DELETE(DML) + insertAll(Streaming API) 방식으로 매일 레코드를 업데이트합니다.
      * 따라서 빅쿼리 콘솔 UI상의 '생성 시간(Creation Time)'은 메타데이터상 최초 테이블 DDL 생성 시점으로 고정되며,
      * 실제 snapshot_date 레코드는 테이블 내부에 정상 적재됩니다. (CREATE OR REPLACE TABLE DDL을 수행하는 daily_asset_inventory와 구분됨)
@@ -2194,15 +1858,29 @@ public class BigQueryBatchService {
     }
 
     /**
-     * 모델별(Gemini, Claude 등) 일일 호출·토큰 적재. 당일·프로젝트 기존 행을 지우고 다시 넣는다 (멱등)
+     * daily_ai_model_usage 테이블 생성, 기존 테이블에는 error_invocations(2xx가 아닌 호출 수) 컬럼 추가
      */
-    private void insertDailyAiModelUsage(String snapshotDate, String projectId, String customerName, List<GcpResourceFetcher.AiModelUsage> usages) {
+    private void ensureDailyAiModelUsageTable() {
         try {
             bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
                 "CREATE TABLE IF NOT EXISTS `%s.%s.daily_ai_model_usage` (" +
                 "  snapshot_date DATE, project_id STRING, customer_name STRING, publisher STRING, model STRING," +
-                "  invocations INT64, input_tokens INT64, output_tokens INT64, created_at TIMESTAMP" +
+                "  invocations INT64, input_tokens INT64, output_tokens INT64, error_invocations INT64, created_at TIMESTAMP" +
                 ") PARTITION BY snapshot_date", targetProjectId, datasetName)).build());
+            bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                "ALTER TABLE `%s.%s.daily_ai_model_usage` ADD COLUMN IF NOT EXISTS error_invocations INT64",
+                targetProjectId, datasetName)).build());
+        } catch (Exception e) {
+            throw new IllegalStateException("daily_ai_model_usage 테이블 준비 실패: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 모델별(Gemini, Claude 등) 일일 호출·토큰 적재. 당일·프로젝트 기존 행을 지우고 다시 넣는다 (멱등)
+     */
+    private void insertDailyAiModelUsage(String snapshotDate, String projectId, String customerName, List<GcpResourceFetcher.AiModelUsage> usages) {
+        try {
+            ensureDailyAiModelUsageTable();
             bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
                 "DELETE FROM `%s.%s.daily_ai_model_usage` WHERE snapshot_date = '%s' AND project_id = '%s'",
                 targetProjectId, datasetName, snapshotDate, projectId)).build());
@@ -2224,6 +1902,7 @@ public class BigQueryBatchService {
             row.put("invocations", u.getInvocations());
             row.put("input_tokens", u.getInputTokens());
             row.put("output_tokens", u.getOutputTokens());
+            row.put("error_invocations", u.getErrorInvocations());
             row.put("created_at", createdAt);
             req.addRow(row);
         }
@@ -2239,145 +1918,6 @@ public class BigQueryBatchService {
 
     public void collectAndInsertDailyVertexAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
         collectAndInsertDailyDirectAiMetrics(snapshotDate, projectId, customerName, credentials);
-    }
-
-    /**
-     * 과거 월(Month) Endpoint Serving 데이터 정리 (스냅샷 정책)
-     * - 당월(Current Month) 데이터: 일별로 계속 누적 보존
-     * - 이전 달(Past Months) 데이터: 각 프로젝트/엔드포인트/월별 가장 늦은 날짜(MAX snapshot_date) 1건만 남기고 나머지 일자 데이터는 모두 삭제
-     */
-    public void cleanPastMonthlyEndpointServingSnapshots(String snapshotDate) {
-        ensureDailyEndpointServingMetricsTableExists();
-        if (snapshotDate == null || snapshotDate.length() < 7) return;
-        String currentYearMonth = snapshotDate.substring(0, 7); // "YYYY-MM"
-        try {
-            String ctasSql = String.format(
-                "CREATE OR REPLACE TABLE `%s.%s.daily_endpoint_serving_metrics` AS " +
-                "SELECT * FROM `%s.%s.daily_endpoint_serving_metrics` " +
-                "WHERE ( " +
-                "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) >= '%s' " +
-                "  OR " +
-                "  CONCAT(project_id, '#', endpoint_id, '#', CAST(snapshot_date AS STRING)) IN ( " +
-                "    SELECT CONCAT(project_id, '#', endpoint_id, '#', CAST(MAX(snapshot_date) AS STRING)) " +
-                "    FROM `%s.%s.daily_endpoint_serving_metrics` " +
-                "    WHERE SUBSTR(CAST(snapshot_date AS STRING), 1, 7) < '%s' " +
-                "    GROUP BY project_id, endpoint_id, SUBSTR(CAST(snapshot_date AS STRING), 1, 7) " +
-                "  ) " +
-                ")",
-                targetProjectId, datasetName,
-                targetProjectId, datasetName,
-                currentYearMonth,
-                targetProjectId, datasetName,
-                currentYearMonth
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(ctasSql).build());
-            log.info("Successfully cleaned past monthly Endpoint Serving records before '{}' in {}.{}.daily_endpoint_serving_metrics",
-                    currentYearMonth, targetProjectId, datasetName);
-        } catch (Exception e) {
-            log.warn("Past monthly Endpoint Serving cleanup notice for '{}': {}", currentYearMonth, e.getMessage());
-        }
-    }
-
-    public void cleanPastMonthlyVertexEndpointSnapshots(String snapshotDate) {
-        cleanPastMonthlyEndpointServingSnapshots(snapshotDate);
-    }
-
-    /**
-     * 당일(snapshotDate) 특정 프로젝트의 기존 Endpoint Serving 지표 선행 삭제 (멱등성 Idempotency 보장)
-     */
-    public void deleteDailyEndpointServingMetrics(String snapshotDate, String projectId) {
-        ensureDailyEndpointServingMetricsTableExists();
-        if (snapshotDate == null || projectId == null) return;
-        try {
-            String deleteSql = String.format(
-                "DELETE FROM `%s.%s.daily_endpoint_serving_metrics` " +
-                "WHERE snapshot_date = '%s' AND project_id = '%s'",
-                targetProjectId, datasetName, snapshotDate, projectId
-            );
-            bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
-            log.debug("Cleaned existing daily_endpoint_serving_metrics record for {} / {}", snapshotDate, projectId);
-        } catch (Exception e) {
-            log.debug("deleteDailyEndpointServingMetrics notice: {}", e.getMessage());
-        }
-    }
-
-    public void deleteDailyVertexEndpointMetrics(String snapshotDate, String projectId) {
-        deleteDailyEndpointServingMetrics(snapshotDate, projectId);
-    }
-
-    /**
-     * 특정 고객사 프로젝트의 Endpoint Serving 일일 운영 지표 적재 (실제 Cloud Monitoring 메트릭 기반)
-     */
-    public void collectAndInsertDailyEndpointServingMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
-        long nowSeconds = java.time.Instant.now().getEpochSecond();
-        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials, nowSeconds - 24L * 3600, nowSeconds, null);
-    }
-
-    public void collectAndInsertDailyEndpointServingMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials,
-                                                            long startSeconds, long endSeconds,
-                                                            Map<String, List<JsonNode>> endpointCache) {
-        ensureDailyEndpointServingMetricsTableExists();
-        deleteDailyEndpointServingMetrics(snapshotDate, projectId); // 멱등성 보장 (배치 재실행 시 중복 방지)
-
-        TableId tableId = TableId.of(targetProjectId, datasetName, "daily_endpoint_serving_metrics");
-
-        // GcpResourceFetcher를 통해 Cloud Monitoring 및 엔드포인트 실데이터 수집
-        List<GcpResourceFetcher.EndpointServingItemCollectedData> endpointList = gcpResourceFetcher.getEndpointServingMetricsData(credentials, projectId, startSeconds, endSeconds, endpointCache);
-
-        for (GcpResourceFetcher.EndpointServingItemCollectedData ep : endpointList) {
-            Map<String, Object> row = new HashMap<>();
-            row.put("snapshot_date", snapshotDate);
-            row.put("timestamp", java.time.Instant.now().toString());
-            row.put("project_id", projectId);
-            row.put("customer_name", customerName);
-            row.put("endpoint_id", ep.getEndpointId());
-            row.put("endpoint_name", ep.getEndpointName());
-            row.put("deployed_model_id", ep.getDeployedModelId());
-            row.put("deployed_model_name", ep.getDeployedModelName());
-            row.put("machine_type", ep.getMachineType());
-            row.put("accelerator_type", ep.getAcceleratorType());
-            row.put("accelerator_count", ep.getAcceleratorCount());
-            row.put("min_replicas", ep.getMinReplicas());
-            row.put("max_replicas", ep.getMaxReplicas());
-            row.put("current_replicas", ep.getCurrentReplicas());
-            row.put("total_requests", ep.getTotalRequests());
-            row.put("qps", ep.getQps());
-            row.put("avg_latency_ms", ep.getAvgLatencyMs());
-            row.put("p95_latency_ms", ep.getP95LatencyMs());
-            row.put("p99_latency_ms", ep.getP99LatencyMs());
-            row.put("error_count_4xx", ep.getErrorCount4xx());
-            row.put("error_count_5xx", ep.getErrorCount5xx());
-            row.put("error_rate_4xx_percent", ep.getErrorRate4xxPercent());
-            row.put("error_rate_5xx_percent", ep.getErrorRate5xxPercent());
-            row.put("success_rate_percent", ep.getSuccessRatePercent());
-            row.put("vector_search_queries", ep.getVectorSearchQueries());
-            row.put("vector_search_updates", ep.getVectorSearchUpdates());
-            row.put("gpu_utilization_percent", ep.getGpuUtilizationPercent());
-            row.put("cpu_utilization_percent", ep.getCpuUtilizationPercent());
-            row.put("node_uptime_hours", ep.getNodeUptimeHours());
-            row.put("endpoint_node_hours", ep.getEndpointNodeHours());
-            row.put("hourly_serving_cost", ep.getHourlyCost());
-            row.put("monthly_serving_cost", ep.getMonthlyCost());
-            row.put("status", ep.getStatus());
-            row.put("created_at", java.time.Instant.now().toString());
-
-            try {
-                InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId).addRow(row).build();
-                InsertAllResponse response = bigQuery.insertAll(insertRequest);
-                if (response.hasErrors()) {
-                    log.error("BigQuery insert error for daily_endpoint_serving_metrics (endpoint={}): {}", ep.getEndpointId(), response.getInsertErrors());
-                } else {
-                    log.info("Successfully inserted daily_endpoint_serving_metrics for {} / {} into {}.{}",
-                            projectId, ep.getEndpointId(), targetProjectId, datasetName);
-                }
-            } catch (Exception e) {
-                log.error("BigQuery insert failed for daily_endpoint_serving_metrics in project {} / {}", projectId, ep.getEndpointId(), e);
-            }
-        }
-    }
-
-    public void collectAndInsertDailyVertexEndpointMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials) {
-        collectAndInsertDailyEndpointServingMetrics(snapshotDate, projectId, customerName, credentials);
     }
 
     private void collectAzureAppCredentials(InfraEnvironment env, String snapshotDate, String tenantId, String clientId, String clientSecret) {

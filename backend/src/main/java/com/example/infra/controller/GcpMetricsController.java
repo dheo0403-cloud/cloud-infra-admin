@@ -2,9 +2,7 @@ package com.example.infra.controller;
 
 import com.example.infra.dto.BigQueryOptimizationDto;
 import com.example.infra.dto.DirectAiMetricsDto;
-import com.example.infra.dto.EndpointServingMetricsDto;
 import com.example.infra.dto.VertexAiMetricsDto;
-import com.example.infra.dto.VertexEndpointMetricsDto;
 import com.example.infra.service.BigQueryOptimizationService;
 import com.example.infra.service.GcpVertexAiMetricsService;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * GCP 클라우드 지표 및 Direct AI Usage & Endpoint Serving & BigQuery 성능 최적화 관제 컨트롤러 API
+ * GCP 클라우드 지표 및 Direct AI Usage & BigQuery 성능 최적화 관제 컨트롤러 API
  */
 @Slf4j
 @RestController
@@ -59,37 +57,12 @@ public class GcpMetricsController {
         return ResponseEntity.ok(metrics);
     }
 
-    /**
-     * GCP AI 엔드포인트 서빙 (Endpoint Serving) 온라인 예측 및 인프라 관제 메트릭 조회
-     * @param projectId 타겟 고객사 GCP 프로젝트 ID (선택 사항)
-     * @param targetYearMonth 조회 대상 연월 (예: 2026-08, 2026-09)
-     * @param period 조회 주기 (monthly: 월간 30일, quarterly: 분기 90일)
-     * @return EndpointServingMetricsDto
-     */
-    @GetMapping("/endpoint-serving")
-    public ResponseEntity<EndpointServingMetricsDto> getEndpointServingMetrics(
-            @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String targetYearMonth,
-            @RequestParam(required = false, defaultValue = "monthly") String period) {
-        log.info("[API] Requesting GCP AI Endpoint Serving metrics for target projectId: {}, targetYearMonth: {}, period: {}", projectId, targetYearMonth, period);
-        EndpointServingMetricsDto metrics = gcpVertexAiMetricsService.getEndpointServingOperationsMetrics(projectId, targetYearMonth, period);
-        return ResponseEntity.ok(metrics);
-    }
-
     // Legacy Fallback Endpoints
     @GetMapping("/vertex-ai")
     public ResponseEntity<VertexAiMetricsDto> getVertexAiMetrics(
             @RequestParam(required = false) String projectId,
             @RequestParam(required = false) String targetYearMonth) {
         VertexAiMetricsDto metrics = gcpVertexAiMetricsService.getVertexAiOperationsMetrics(projectId, targetYearMonth);
-        return ResponseEntity.ok(metrics);
-    }
-
-    @GetMapping("/vertex-endpoints")
-    public ResponseEntity<VertexEndpointMetricsDto> getVertexEndpointMetrics(
-            @RequestParam(required = false) String projectId,
-            @RequestParam(required = false) String targetYearMonth) {
-        VertexEndpointMetricsDto metrics = gcpVertexAiMetricsService.getVertexEndpointOperationsMetrics(projectId, targetYearMonth);
         return ResponseEntity.ok(metrics);
     }
 }

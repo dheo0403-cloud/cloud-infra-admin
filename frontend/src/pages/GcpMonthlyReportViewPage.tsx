@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getCustomers, InfraCustomer } from '../services/api';
 import DirectAiUsagePanel from '../components/DirectAiUsagePanel';
-import EndpointServingPanel from '../components/EndpointServingPanel';
 import BigQueryOptimizationPanel from '../components/BigQueryOptimizationPanel';
 
 interface CudCommitment {
@@ -160,7 +159,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
     const [isEditMode, setIsEditMode] = useState<boolean>(false);
     const [isBqSectionVisible, setIsBqSectionVisible] = useState<boolean>(true);
     const [isDirectAiSectionVisible, setIsDirectAiSectionVisible] = useState<boolean>(true);
-    const [isEndpointSectionVisible, setIsEndpointSectionVisible] = useState<boolean>(true);
     const [reportDuration, setReportDuration] = useState<number | null>(null);
 
     // Editable text states
@@ -2385,44 +2383,6 @@ const GcpMonthlyReportViewPage: React.FC = () => {
                                     className="btn btn-sm btn-outline-primary font-weight-bold"
                                     style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px' }}
                                     onClick={() => setIsDirectAiSectionVisible(true)}
-                                >
-                                    <i className="fas fa-eye mr-1"></i>섹션 다시 표시 (복원)
-                                </button>
-                            </div>
-                        )
-                    )}
-
-                    {/* Section 6-2: GCP AI 엔드포인트 서빙 (Endpoint Serving) 관제 */}
-                    {isEndpointSectionVisible ? (
-                        <div>
-                            <EndpointServingPanel
-                                projectId={selectedProject || reportData?.projectId || ''}
-                                targetYearMonth={selectedYearMonth}
-                                isEditMode={isEditMode}
-                                onHideSection={() => setIsEndpointSectionVisible(false)}
-                            />
-                        </div>
-                    ) : (
-                        isEditMode && (
-                            <div style={{
-                                marginTop: '16px',
-                                padding: '12px 16px',
-                                backgroundColor: '#f8fafc',
-                                border: '1px dashed #94a3b8',
-                                borderRadius: '8px',
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center'
-                            }}>
-                                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>
-                                    <i className="fas fa-eye-slash mr-2" style={{ color: '#94a3b8' }}></i>
-                                    [숨김 처리됨] AI 엔드포인트 서빙 (Endpoint Serving) 관제 섹션 (PDF 및 화면 출력 제외)
-                                </span>
-                                <button
-                                    type="button"
-                                    className="btn btn-sm btn-outline-primary font-weight-bold"
-                                    style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px' }}
-                                    onClick={() => setIsEndpointSectionVisible(true)}
                                 >
                                     <i className="fas fa-eye mr-1"></i>섹션 다시 표시 (복원)
                                 </button>
