@@ -2575,6 +2575,7 @@ public class BigQueryBatchService {
                 "      SELECT MAX(snapshot_date) " +
                 "      FROM `%s.%s.daily_reservation_inventory` " +
                 "      WHERE provider = 'AZURE_APP'" +
+                "        AND LENGTH(snapshot_date) = 10" + // 배치 행만 (수동 새로고침 행은 시각이 붙어 문자열 MAX가 됨)
                 "  ) " +
                 "  AND DATE_DIFF(PARSE_DATE('%%Y-%%m-%%d', expiry_date), CURRENT_DATE(), DAY) <= 10 " +
                 "  AND DATE_DIFF(PARSE_DATE('%%Y-%%m-%%d', expiry_date), CURRENT_DATE(), DAY) >= 0",
