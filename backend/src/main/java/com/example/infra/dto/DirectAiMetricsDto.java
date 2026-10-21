@@ -70,6 +70,9 @@ public class DirectAiMetricsDto {
     private List<String> errorRateDates;
     private List<ErrorRateSeriesDto> errorRateSeries;
 
+    // 7. 기준월 중 권한 없음(PERMISSION_DENIED)으로 수집하지 못한 일수
+    private Long permissionDeniedDays;
+
     private String lastUpdated;
 
     @Data

@@ -1164,6 +1164,21 @@ public class GcpResourceFetcher {
         private double estimatedTrainingCost;
         private double totalEstimatedDailyCost;
         private List<AiModelUsage> modelUsages;
+        // 수집 상태: OK 또는 PERMISSION_DENIED(권한 없음). 권한 없음이면 수치는 사용량이 아님
+        @lombok.Builder.Default
+        private String collectStatus = AI_COLLECT_OK;
+    }
+
+    public static final String AI_COLLECT_OK = "OK";
+    public static final String AI_COLLECT_PERMISSION_DENIED = "PERMISSION_DENIED";
+
+    // 예외 원인 체인에 gRPC PERMISSION_DENIED(권한 없음)가 있는지
+    static boolean isPermissionDenied(Throwable t) {
+        for (Throwable c = t; c != null; c = c.getCause()) {
+            if (c instanceof com.google.api.gax.rpc.PermissionDeniedException) return true;
+            if (c.getMessage() != null && c.getMessage().contains("PERMISSION_DENIED")) return true;
+        }
+        return false;
     }
 
     /**
@@ -1215,6 +1230,7 @@ public class GcpResourceFetcher {
         long translationCalls = 0L;
         long nlpCalls = 0L;
         Map<String, AiModelUsage> models = new java.util.TreeMap<>();
+        boolean permissionDenied = false;
 
         try {
             com.google.cloud.monitoring.v3.MetricServiceSettings settings = com.google.cloud.monitoring.v3.MetricServiceSettings.newBuilder()
@@ -1264,7 +1280,8 @@ public class GcpResourceFetcher {
                             }
                         }
                     } catch (Exception ex) {
-                        // 권한 부족과 사용량 0을 구분할 수 있도록 WARN으로 남김
+                        // 권한 부족과 사용량 0을 구분할 수 있도록 WARN으로 남기고 권한 없음 상태로 표시
+                        if (isPermissionDenied(ex)) permissionDenied = true;
                         log.warn("AI metric [{}] query failed for project {}: {}", metricType, projectId, ex.getMessage());
                     }
                 }
@@ -1310,6 +1327,7 @@ public class GcpResourceFetcher {
                 }
             }
         } catch (Exception e) {
+            if (isPermissionDenied(e)) permissionDenied = true;
             log.warn("Cloud Monitoring client init or query notice for Direct AI in project {}: {}", projectId, e.getMessage());
         }
 
@@ -1353,6 +1371,7 @@ public class GcpResourceFetcher {
                 .claudeRatio(ratio.applyAsDouble(claudeTokens))
                 .customModelRatio(ratio.applyAsDouble(otherTokens))
                 .modelUsages(new ArrayList<>(models.values()))
+                .collectStatus(permissionDenied ? AI_COLLECT_PERMISSION_DENIED : AI_COLLECT_OK)
                 .build();
     }
 }

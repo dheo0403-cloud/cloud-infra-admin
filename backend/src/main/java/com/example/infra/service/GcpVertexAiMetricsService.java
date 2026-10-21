@@ -235,6 +235,22 @@ public class GcpVertexAiMetricsService {
                 log.debug("Daily error rate query skipped: {}", ex.getMessage());
             }
 
+            // 4. 기준월 중 권한 없음으로 수집하지 못한 일수 (컬럼이 아직 없으면 0)
+            long permissionDeniedDays = 0L;
+            try {
+                String deniedSql = String.format(
+                    "SELECT COUNT(DISTINCT snapshot_date) AS n FROM `%s.%s.%s` " +
+                    "WHERE project_id = @pid AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN @fromYm AND @toYm " +
+                    "AND collect_status = 'PERMISSION_DENIED'",
+                    hostProjectId, datasetName, DIRECT_AI_TABLE
+                );
+                for (FieldValueList row : query(deniedSql, effectiveProjectId, effectiveYearMonth, effectiveYearMonth).iterateAll()) {
+                    permissionDeniedDays = row.get("n").getLongValue();
+                }
+            } catch (Exception ex) {
+                log.debug("Permission denied days query skipped: {}", ex.getMessage());
+            }
+
             // 학습/Workbench/Quota/비용은 수집 근거가 없어 0으로 반환 (화면에서 표시하지 않음)
             return DirectAiMetricsDto.builder()
                     .projectId(effectiveProjectId)
@@ -274,6 +290,7 @@ public class GcpVertexAiMetricsService {
                     .models(models)
                     .errorRateDates(errorRateDates)
                     .errorRateSeries(errorRateSeries)
+                    .permissionDeniedDays(permissionDeniedDays)
                     .lastUpdated(LocalDateTime.now().format(timeFormatter))
                     .build();
 

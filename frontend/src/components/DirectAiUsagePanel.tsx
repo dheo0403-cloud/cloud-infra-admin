@@ -89,9 +89,12 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
     const errorDates = metrics?.errorRateDates || [];
     const errorSeries = metrics?.errorRateSeries || [];
     const hasErrorData = errorSeries.some(s => s.dailyErrorRates.some(v => v !== null));
+    const deniedDays = Number(metrics?.permissionDeniedDays || 0);
 
     const maxTokenValue = Math.max(...inputTrend, ...outputTrend, 1);
     const isDirectAiEmpty = dates.length === 0 || (totalTokens === 0 && totalInvocations === 0);
+    // 권한 없음이면 미사용과 구분해 PDF에서도 숨기지 않는다
+    const hidePrint = isDirectAiEmpty && deniedDays === 0;
     const otherModels = models.slice(MAX_RATIO_ROWS);
     const otherInvocations = otherModels.reduce((sum, m) => sum + Number(m.invocations || 0), 0);
     const ratio = (inv: number) => totalInvocations > 0 ? (inv / totalInvocations) * 100 : 0;
@@ -100,7 +103,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
     const emptyText: React.CSSProperties = { fontSize: '10px', color: '#94a3b8', padding: '6px 0' };
 
     return (
-        <div className={`direct-ai-section ${isDirectAiEmpty ? "print-hide-empty" : ""}`} style={{ marginBottom: 0 }}>
+        <div className={`direct-ai-section ${hidePrint ? "print-hide-empty" : ""}`} style={{ marginBottom: 0 }}>
             <div className="report-card" style={{ marginBottom: 0, borderTop: '4px solid #2563eb' }}>
                 {/* Header */}
                 <div className="report-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -124,6 +127,10 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                             <span style={{ fontSize: '10px', fontWeight: 700, color: '#10b981', backgroundColor: '#ecfdf5', padding: '2px 8px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
                                 <i className="fas fa-check-circle mr-1"></i>Direct AI 사용 중
                             </span>
+                        ) : deniedDays > 0 ? (
+                            <span className="ai-permission-badge" style={{ fontSize: '10px', fontWeight: 700, color: '#b45309', backgroundColor: '#fffbeb', padding: '2px 8px', borderRadius: '12px', border: '1px solid #fde68a' }}>
+                                <i className="fas fa-lock mr-1"></i>권한 없음
+                            </span>
                         ) : (
                             <span style={{ fontSize: '10px', fontWeight: 600, color: '#64748b', backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                                 Direct AI 미사용
@@ -131,6 +138,13 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                         )}
                     </div>
                 </div>
+
+                {deniedDays > 0 && (
+                    <div className="ai-permission-notice" style={{ fontSize: '10px', color: '#b45309', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', padding: '6px 10px', marginBottom: '12px' }}>
+                        <i className="fas fa-lock mr-1"></i>
+                        기준월 중 {deniedDays}일은 AI 사용량 조회 권한이 없어 수집하지 못했습니다. 아래 수치에서 해당 일은 빠져 있습니다.
+                    </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     {/* 왼쪽: 월간 누적 토큰 + 월별 토큰 사용량 트렌드 */}

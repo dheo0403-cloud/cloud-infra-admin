@@ -145,6 +145,8 @@ export interface DirectAiMetricsDto {
     // 기준월 일별 에러율 (호출 많은 상위 3개 모델)
     errorRateDates?: string[];
     errorRateSeries?: AiErrorRateSeriesDto[];
+    // 기준월 중 권한 없음으로 수집하지 못한 일수
+    permissionDeniedDays?: number;
     lastUpdated: string;
 }
 

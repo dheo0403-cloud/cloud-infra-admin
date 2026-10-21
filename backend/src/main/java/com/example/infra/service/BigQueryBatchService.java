@@ -1466,6 +1466,8 @@ public class BigQueryBatchService {
         }
     }
 
+    private volatile boolean directAiStatusColumnReady = false;
+
     private void ensureDailyDirectAiMetricsTableExists() {
         try {
             String createTableDdl = String.format(
@@ -1495,12 +1497,20 @@ public class BigQueryBatchService {
                 "  estimated_api_cost FLOAT64," +
                 "  estimated_training_cost FLOAT64," +
                 "  total_estimated_daily_cost FLOAT64," +
-                "  created_at TIMESTAMP" +
+                "  created_at TIMESTAMP," +
+                "  collect_status STRING" +
                 ") " +
                 "PARTITION BY snapshot_date " +
                 "OPTIONS (partition_expiration_days = 180)", targetProjectId, datasetName
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(createTableDdl).build());
+            // 기존 테이블에는 수집 상태(OK / PERMISSION_DENIED) 컬럼 추가. 테이블 메타데이터 변경 한도를 피하려고 기동 후 한 번만
+            if (!directAiStatusColumnReady) {
+                bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
+                    "ALTER TABLE `%s.%s.daily_direct_ai_metrics` ADD COLUMN IF NOT EXISTS collect_status STRING",
+                    targetProjectId, datasetName)).build());
+                directAiStatusColumnReady = true;
+            }
         } catch (Exception e) {
             log.debug("Check/Create daily_direct_ai_metrics table skipped: {}", e.getMessage());
         }
@@ -1812,12 +1822,37 @@ public class BigQueryBatchService {
 
         // GcpResourceFetcher를 통해 Cloud Monitoring 및 리소스 실데이터 수집
         GcpResourceFetcher.DirectAiCollectedData data = gcpResourceFetcher.getDirectAiMetricsData(credentials, projectId, startSeconds, endSeconds);
+        Map<String, Object> row = directAiRow(snapshotDate, projectId, customerName, data);
 
+        try {
+            InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId).addRow(row).build();
+            InsertAllResponse response = bigQuery.insertAll(insertRequest);
+            if (response.hasErrors()) {
+                log.error("BigQuery insert error for daily_direct_ai_metrics: {}", response.getInsertErrors());
+            } else {
+                log.info("Successfully inserted real daily_direct_ai_metrics for {} (Status: {}, Tokens: {}, Pretrained: {}) into {}.{}",
+                        projectId, data.getCollectStatus(), data.getTotalTokens(), data.getPretrainedApiCalls(), targetProjectId, datasetName);
+            }
+        } catch (Exception e) {
+            log.error("BigQuery insert failed for daily_direct_ai_metrics in project {}", projectId, e);
+        }
+
+        insertDailyAiModelUsage(snapshotDate, projectId, customerName, data.getModelUsages());
+    }
+
+    /**
+     * daily_direct_ai_metrics 한 행. 권한 없음이면 수치 컬럼을 비워(NULL) 사용량 0과 구분한다
+     */
+    static Map<String, Object> directAiRow(String snapshotDate, String projectId, String customerName,
+                                           GcpResourceFetcher.DirectAiCollectedData data) {
         Map<String, Object> row = new HashMap<>();
         row.put("snapshot_date", snapshotDate);
         row.put("timestamp", java.time.Instant.now().toString());
         row.put("project_id", projectId);
         row.put("customer_name", customerName);
+        row.put("collect_status", data.getCollectStatus());
+        row.put("created_at", java.time.Instant.now().toString());
+        if (GcpResourceFetcher.AI_COLLECT_PERMISSION_DENIED.equals(data.getCollectStatus())) return row;
         row.put("input_tokens", data.getInputTokens());
         row.put("output_tokens", data.getOutputTokens());
         row.put("total_tokens", data.getTotalTokens());
@@ -1839,22 +1874,7 @@ public class BigQueryBatchService {
         row.put("estimated_api_cost", data.getEstimatedApiCost());
         row.put("estimated_training_cost", data.getEstimatedTrainingCost());
         row.put("total_estimated_daily_cost", data.getTotalEstimatedDailyCost());
-        row.put("created_at", java.time.Instant.now().toString());
-
-        try {
-            InsertAllRequest insertRequest = InsertAllRequest.newBuilder(tableId).addRow(row).build();
-            InsertAllResponse response = bigQuery.insertAll(insertRequest);
-            if (response.hasErrors()) {
-                log.error("BigQuery insert error for daily_direct_ai_metrics: {}", response.getInsertErrors());
-            } else {
-                log.info("Successfully inserted real daily_direct_ai_metrics for {} (Tokens: {}, Pretrained: {}) into {}.{}",
-                        projectId, data.getTotalTokens(), data.getPretrainedApiCalls(), targetProjectId, datasetName);
-            }
-        } catch (Exception e) {
-            log.error("BigQuery insert failed for daily_direct_ai_metrics in project {}", projectId, e);
-        }
-
-        insertDailyAiModelUsage(snapshotDate, projectId, customerName, data.getModelUsages());
+        return row;
     }
 
     /**
