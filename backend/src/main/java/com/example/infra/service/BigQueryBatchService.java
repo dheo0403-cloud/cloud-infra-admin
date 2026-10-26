@@ -1788,11 +1788,12 @@ public class BigQueryBatchService {
     }
 
     /**
-     * 당일(snapshotDate) 특정 프로젝트의 기존 Direct AI 지표 선행 삭제 (멱등성 Idempotency 보장)
+     * 당일(snapshotDate) 특정 프로젝트의 기존 Direct AI 지표 선행 삭제 (멱등성 Idempotency 보장).
+     * 삭제하지 못하면 false (스트리밍으로 방금 넣은 행은 약 90분간 DELETE 불가)
      */
-    public void deleteDailyDirectAiMetrics(String snapshotDate, String projectId) {
+    public boolean deleteDailyDirectAiMetrics(String snapshotDate, String projectId) {
         ensureDailyDirectAiMetricsTableExists();
-        if (snapshotDate == null || projectId == null) return;
+        if (snapshotDate == null || projectId == null) return false;
         try {
             String deleteSql = String.format(
                 "DELETE FROM `%s.%s.daily_direct_ai_metrics` " +
@@ -1801,8 +1802,10 @@ public class BigQueryBatchService {
             );
             bigQuery.query(QueryJobConfiguration.newBuilder(deleteSql).build());
             log.debug("Cleaned existing daily_direct_ai_metrics record for {} / {}", snapshotDate, projectId);
+            return true;
         } catch (Exception e) {
-            log.debug("deleteDailyDirectAiMetrics notice: {}", e.getMessage());
+            log.error("deleteDailyDirectAiMetrics failed for {} / {}: {}", snapshotDate, projectId, e.getMessage());
+            return false;
         }
     }
 
@@ -1826,7 +1829,11 @@ public class BigQueryBatchService {
     public void collectAndInsertDailyDirectAiMetrics(String snapshotDate, String projectId, String customerName, GoogleCredentials credentials,
                                                      long startSeconds, long endSeconds) {
         ensureDailyDirectAiMetricsTableExists();
-        deleteDailyDirectAiMetrics(snapshotDate, projectId); // 멱등성 보장 (배치 재실행 시 중복 방지)
+        // 멱등성 보장: 기존 행을 지우지 못하면 넣지 않는다 (넣으면 같은 날짜 행이 중복됨, 기존 값은 그대로 유지)
+        if (!deleteDailyDirectAiMetrics(snapshotDate, projectId)) {
+            log.error("Direct AI re-collect skipped for {} / {}: existing row could not be deleted", snapshotDate, projectId);
+            return;
+        }
 
         TableId tableId = TableId.of(targetProjectId, datasetName, "daily_direct_ai_metrics");
 
@@ -1887,10 +1894,14 @@ public class BigQueryBatchService {
         return row;
     }
 
+    private volatile boolean modelUsageTableReady = false;
+
     /**
-     * daily_ai_model_usage 테이블 생성, 기존 테이블에는 error_invocations(2xx가 아닌 호출 수) 컬럼 추가
+     * daily_ai_model_usage 테이블 생성, 기존 테이블에는 error_invocations(2xx가 아닌 호출 수) 컬럼 추가.
+     * ALTER는 표당 하루 변경 한도에 들어가므로 기동 후 성공할 때까지만 실행한다 (적재마다 실행하면 백필 중 한도 초과로 적재가 빠짐)
      */
     private void ensureDailyAiModelUsageTable() {
+        if (modelUsageTableReady) return;
         try {
             bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
                 "CREATE TABLE IF NOT EXISTS `%s.%s.daily_ai_model_usage` (" +
@@ -1900,8 +1911,10 @@ public class BigQueryBatchService {
             bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
                 "ALTER TABLE `%s.%s.daily_ai_model_usage` ADD COLUMN IF NOT EXISTS error_invocations INT64",
                 targetProjectId, datasetName)).build());
+            modelUsageTableReady = true;
         } catch (Exception e) {
-            throw new IllegalStateException("daily_ai_model_usage 테이블 준비 실패: " + e.getMessage(), e);
+            // 표는 이미 있으므로 준비 실패(한도 초과 등)는 적재를 막지 않는다
+            log.warn("daily_ai_model_usage table check failed (continuing): {}", e.getMessage());
         }
     }
 
@@ -1909,13 +1922,13 @@ public class BigQueryBatchService {
      * 모델별(Gemini, Claude 등) 일일 호출·토큰 적재. 당일·프로젝트 기존 행을 지우고 다시 넣는다 (멱등)
      */
     private void insertDailyAiModelUsage(String snapshotDate, String projectId, String customerName, List<GcpResourceFetcher.AiModelUsage> usages) {
+        ensureDailyAiModelUsageTable();
         try {
-            ensureDailyAiModelUsageTable();
             bigQuery.query(QueryJobConfiguration.newBuilder(String.format(
                 "DELETE FROM `%s.%s.daily_ai_model_usage` WHERE snapshot_date = '%s' AND project_id = '%s'",
                 targetProjectId, datasetName, snapshotDate, projectId)).build());
         } catch (Exception e) {
-            log.warn("daily_ai_model_usage prepare failed for {} / {}: {}", snapshotDate, projectId, e.getMessage());
+            log.error("daily_ai_model_usage delete failed for {} / {} (insert skipped): {}", snapshotDate, projectId, e.getMessage());
             return;
         }
         if (usages == null || usages.isEmpty()) return;
