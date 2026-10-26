@@ -858,6 +858,16 @@ public class BigQueryBatchService {
                         log.error("Batch failed for Direct AI Metrics in project {}", projectId, e);
                     }
 
+                    // 21-1. 이틀 전 날짜 Direct AI 재적재: 하루 단위 집계(ALIGN_SUM)는 하루가 끝난 직후 원시 값보다 크게 나오고
+                    //       하루쯤 지나야 원시 값과 같아지므로, 값이 맞춰진 이틀 전 날짜로 덮어쓴다 (월 요약 롤업은 배치 끝에서 수행)
+                    try {
+                        LocalDate settledDate = targetDate.minusDays(1);
+                        collectAndInsertDailyDirectAiMetrics(settledDate.toString(), projectId, customerName, credentials,
+                                settledDate.atStartOfDay(kst).toEpochSecond(), dayStart);
+                    } catch (Exception e) {
+                        log.error("Batch failed for Direct AI Metrics re-collect (D-2) in project {}", projectId, e);
+                    }
+
                     // 22. GCP BigQuery 성능 및 비용 최적화 분석 메트릭 Upsert 수집 (전체 고객사 프로젝트 순회)
                     try {
                         bigQueryOptimizationService.collectAndUpsertBigQueryOptimizationData(snapshotDate, projectId, customerName, credentials);
