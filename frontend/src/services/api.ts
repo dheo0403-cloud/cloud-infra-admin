@@ -142,7 +142,7 @@ export interface DirectAiMetricsDto {
     // 기준월 모델별 호출 (Vertex AI 관리형 모델 API 호출)
     totalInvocations?: number;
     models?: AiModelUsageDto[];
-    // 기준월 일별 에러율 (호출 많은 상위 3개 모델)
+    // 최근 4개월 월별 에러율 (기준월 호출 많은 상위 3개 모델), errorRateDates는 월 라벨(YY.MM)
     errorRateDates?: string[];
     errorRateSeries?: AiErrorRateSeriesDto[];
     // 기준월 중 권한 없음으로 수집하지 못한 일수
@@ -164,7 +164,7 @@ export interface AiErrorRateSeriesDto {
     publisher: string;
     model: string;
     monthlyErrorRate: number | null;
-    dailyErrorRates: (number | null)[]; // errorRateDates와 같은 순서, 호출 없음·미수집은 null
+    errorRates: (number | null)[]; // errorRateDates와 같은 순서(월별), 호출 없음·미수집은 null
 }
 
 export const getDirectAiMetrics = (projectId?: string, targetYearMonth?: string, period?: string) =>

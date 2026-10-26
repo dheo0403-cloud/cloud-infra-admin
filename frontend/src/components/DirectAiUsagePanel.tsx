@@ -17,16 +17,16 @@ const ERROR_LINE_COLORS = ['#ef4444', '#f59e0b', '#3b82f6'];
 const cardTitleIcon = (icon: string, color: string) => <i className={`fas ${icon} mr-1`} style={{ color }}></i>;
 
 /**
- * 기준월 일별 에러율 꺾은선 (SVG). 값이 없는 날(null)은 선을 끊는다
+ * 최근 4개월 월별 에러율 꺾은선 (SVG). 값이 없는 달(null)은 선을 끊고, 점마다 값을 표시한다
  */
 const ErrorRateChart: React.FC<{ dates: string[]; series: AiErrorRateSeriesDto[] }> = ({ dates, series }) => {
     // 가로로 넓은 viewBox: 카드 폭(약 580px)에서 높이 170px 안팎이 되도록
-    const W = 520, H = 150, PAD_L = 30, PAD_R = 8, PAD_T = 8, PAD_B = 18;
-    const values = series.flatMap(s => s.dailyErrorRates.filter((v): v is number => v !== null));
+    const W = 520, H = 150, PAD_L = 30, PAD_R = 8, PAD_T = 16, PAD_B = 18;
+    const values = series.flatMap(s => s.errorRates.filter((v): v is number => v !== null));
     const yMax = Math.max(1, Math.ceil(Math.max(0, ...values)));
-    const x = (i: number) => PAD_L + (dates.length <= 1 ? 0 : (i / (dates.length - 1)) * (W - PAD_L - PAD_R));
+    // 월마다 같은 폭의 칸 가운데에 점을 둔다 (토큰 트렌드 막대와 같은 배치)
+    const x = (i: number) => PAD_L + ((i + 0.5) / Math.max(1, dates.length)) * (W - PAD_L - PAD_R);
     const y = (v: number) => PAD_T + (1 - v / yMax) * (H - PAD_T - PAD_B);
-    const xLabelIdx = dates.length > 2 ? [0, Math.floor((dates.length - 1) / 2), dates.length - 1] : dates.map((_, i) => i);
 
     // null로 끊긴 구간별 점 목록
     const segments = (rates: (number | null)[]) => {
@@ -45,21 +45,34 @@ const ErrorRateChart: React.FC<{ dates: string[]; series: AiErrorRateSeriesDto[]
     };
 
     return (
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="AI 모델 호출 일별 에러율">
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="AI 모델 호출 월별 에러율">
             {[0, yMax / 2, yMax].map(v => (
                 <g key={v}>
                     <line x1={PAD_L} x2={W - PAD_R} y1={y(v)} y2={y(v)} stroke="#e2e8f0" strokeWidth={1} />
                     <text x={PAD_L - 4} y={y(v) + 3} textAnchor="end" fontSize="9" fill="#94a3b8">{`${Number(v.toFixed(1))}%`}</text>
                 </g>
             ))}
-            {xLabelIdx.map(i => (
-                <text key={i} x={x(i)} y={H - 4} textAnchor={i === 0 ? 'start' : i === dates.length - 1 ? 'end' : 'middle'} fontSize="9" fill="#94a3b8">{dates[i]}</text>
+            {dates.map((d, i) => (
+                <text key={d} x={x(i)} y={H - 4} textAnchor="middle" fontSize="9" fill={i === dates.length - 1 ? '#2563eb' : '#94a3b8'} fontWeight={i === dates.length - 1 ? 700 : 400}>{d}</text>
             ))}
-            {series.map((s, si) => segments(s.dailyErrorRates).map((pts, k) => (
-                pts.includes(' ')
-                    ? <polyline key={`${si}-${k}`} points={pts} fill="none" stroke={ERROR_LINE_COLORS[si]} strokeWidth={1.5} strokeLinejoin="round" />
-                    : <circle key={`${si}-${k}`} cx={pts.split(',')[0]} cy={pts.split(',')[1]} r={1.8} fill={ERROR_LINE_COLORS[si]} />
+            {series.map((s, si) => segments(s.errorRates).filter(pts => pts.includes(' ')).map((pts, k) => (
+                <polyline key={`${si}-${k}`} points={pts} fill="none" stroke={ERROR_LINE_COLORS[si]} strokeWidth={1.5} strokeLinejoin="round" />
             )))}
+            {series.map((s, si) => s.errorRates.map((v, i) => {
+                if (v === null) return null;
+                // 같은 달에 더 아래쪽 점(값이 같으면 뒤 순번)이 10px 안에 있으면 라벨을 한 줄 더 올려 겹치지 않게 한다
+                const lift = series.some((o, oi) => {
+                    const ov = o.errorRates[i];
+                    return oi !== si && ov != null && Math.abs(y(ov) - y(v)) < 10 && (ov < v || (ov === v && oi > si));
+                });
+                return (
+                    <g key={`${si}-p${i}`}>
+                        <circle cx={x(i)} cy={y(v)} r={2.5} fill={ERROR_LINE_COLORS[si]} />
+                        <text x={x(i)} y={Math.max(8, y(v) - (lift ? 14 : 5))} textAnchor="middle" fontSize="8" fontWeight={700} fill={ERROR_LINE_COLORS[si]}
+                            stroke="#fff" strokeWidth={3} paintOrder="stroke">{`${v.toFixed(2)}%`}</text>
+                    </g>
+                );
+            }))}
         </svg>
     );
 };
@@ -88,7 +101,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
     const totalInvocations = Number(metrics?.totalInvocations || 0);
     const errorDates = metrics?.errorRateDates || [];
     const errorSeries = metrics?.errorRateSeries || [];
-    const hasErrorData = errorSeries.some(s => s.dailyErrorRates.some(v => v !== null));
+    const hasErrorData = errorSeries.some(s => s.errorRates.some(v => v !== null));
     const deniedDays = Number(metrics?.permissionDeniedDays || 0);
 
     const maxTokenValue = Math.max(...inputTrend, ...outputTrend, 1);
@@ -234,7 +247,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                         <div className="report-card ai-error-rate" style={{ ...subCard, flexGrow: 1 }}>
                             <div className="report-card-title">
                                 <span>{cardTitleIcon('fa-exclamation-triangle', '#ef4444')}AI 모델 호출 에러율</span>
-                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>기준월 일별 · 2xx 외 응답</span>
+                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월 · 2xx 외 응답</span>
                             </div>
                             {hasErrorData ? (
                                 <>
@@ -252,7 +265,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                     </div>
                                 </>
                             ) : (
-                                <div style={emptyText}>기준월 에러율 수집 기록이 없습니다.</div>
+                                <div style={emptyText}>최근 4개월 에러율 수집 기록이 없습니다.</div>
                             )}
                         </div>
                     </div>

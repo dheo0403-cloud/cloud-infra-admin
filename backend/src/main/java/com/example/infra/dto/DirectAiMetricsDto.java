@@ -66,7 +66,7 @@ public class DirectAiMetricsDto {
     private Long totalInvocations;
     private List<ModelUsageDto> models;
 
-    // 6. 기준월 일별 에러율 (호출 많은 상위 3개 모델)
+    // 6. 최근 4개월 월별 에러율 (기준월 호출 많은 상위 3개 모델), errorRateDates는 월 라벨(YY.MM)
     private List<String> errorRateDates;
     private List<ErrorRateSeriesDto> errorRateSeries;
 
@@ -97,6 +97,6 @@ public class DirectAiMetricsDto {
         private String publisher;
         private String model;
         private Double monthlyErrorRate;      // 기준월 에러율(%) = ModelUsageDto.errorRate, 계산할 수 없으면 null
-        private List<Double> dailyErrorRates; // errorRateDates와 같은 순서, 호출 없음·미수집은 null
+        private List<Double> errorRates;      // errorRateDates와 같은 순서(월별), 호출 없음·미수집은 null
     }
 }

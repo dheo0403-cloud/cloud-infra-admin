@@ -226,13 +226,13 @@ public class GcpVertexAiMetricsService {
                 log.debug("Model usage query skipped: {}", ex.getMessage());
             }
 
-            // 3. 기준월 일별 에러율 (호출 많은 상위 3개 모델)
+            // 3. 최근 4개월 월별 에러율 (기준월 호출 많은 상위 3개 모델)
             List<String> errorRateDates = new ArrayList<>();
             List<DirectAiMetricsDto.ErrorRateSeriesDto> errorRateSeries = new ArrayList<>();
             try {
-                fillDailyErrorRates(effectiveProjectId, targetYm, models, errorRateDates, errorRateSeries);
+                fillMonthlyErrorRates(effectiveProjectId, yyyyMmList, labelList, models, errorRateDates, errorRateSeries);
             } catch (Exception ex) {
-                log.debug("Daily error rate query skipped: {}", ex.getMessage());
+                log.debug("Monthly error rate query skipped: {}", ex.getMessage());
             }
 
             // 4. 기준월 중 권한 없음으로 수집하지 못한 일수 (컬럼이 아직 없으면 0)
@@ -301,48 +301,41 @@ public class GcpVertexAiMetricsService {
     }
 
     /**
-     * 기준월 1일~말일(당월이면 어제까지) 일별 에러율. 호출이 없거나 에러 수를 수집하기 전 날은 null
+     * 최근 4개월 월별 에러율 = 그 달 에러 수 / 에러 수를 수집한 날의 호출 수 (기준월 에러율과 같은 계산). 계산할 수 없는 달은 null
      */
-    private void fillDailyErrorRates(String projectId, YearMonth ym, List<DirectAiMetricsDto.ModelUsageDto> models,
-                                     List<String> dates, List<DirectAiMetricsDto.ErrorRateSeriesDto> series) throws InterruptedException {
-        java.time.LocalDate first = ym.atDay(1);
-        java.time.LocalDate last = ym.atEndOfMonth();
-        java.time.LocalDate yesterday = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")).minusDays(1);
-        if (last.isAfter(yesterday)) last = yesterday;
-        if (last.isBefore(first) || models.isEmpty()) return;
+    private void fillMonthlyErrorRates(String projectId, List<String> yyyyMmList, List<String> labels,
+                                       List<DirectAiMetricsDto.ModelUsageDto> models,
+                                       List<String> dates, List<DirectAiMetricsDto.ErrorRateSeriesDto> series) throws InterruptedException {
+        if (models.isEmpty()) return;
 
-        List<DirectAiMetricsDto.ModelUsageDto> top = models.subList(0, Math.min(3, models.size())); // 호출 수 내림차순
-        Map<String, Map<String, Double>> rates = new HashMap<>(); // publisher/model -> 날짜 -> 에러율(%)
+        List<DirectAiMetricsDto.ModelUsageDto> top = models.subList(0, Math.min(3, models.size())); // 기준월 호출 수 내림차순
+        Map<String, Map<String, Double>> rates = new HashMap<>(); // publisher/model -> YYYY-MM -> 에러율(%)
         String sql = String.format(
-            "SELECT CAST(snapshot_date AS STRING) AS d, publisher, model, SUM(invocations) AS inv, SUM(error_invocations) AS err " +
+            "SELECT SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, publisher, model, " +
+            "  SUM(error_invocations) AS err, SUM(IF(error_invocations IS NULL, 0, invocations)) AS inv_with_err " +
             "FROM `%s.%s.%s` " +
             "WHERE project_id = @pid AND SUBSTR(CAST(snapshot_date AS STRING), 1, 7) BETWEEN @fromYm AND @toYm " +
-            "GROUP BY d, publisher, model",
+            "GROUP BY ym, publisher, model",
             hostProjectId, datasetName, MODEL_USAGE_TABLE
         );
-        String ymStr = ym.toString();
-        for (FieldValueList row : query(sql, projectId, ymStr, ymStr).iterateAll()) {
-            long inv = row.get("inv").isNull() ? 0L : row.get("inv").getLongValue();
+        for (FieldValueList row : query(sql, projectId, yyyyMmList.get(0), yyyyMmList.get(yyyyMmList.size() - 1)).iterateAll()) {
+            long inv = row.get("inv_with_err").isNull() ? 0L : row.get("inv_with_err").getLongValue();
             if (inv <= 0 || row.get("err").isNull()) continue;
             String key = row.get("publisher").getStringValue() + "/" + row.get("model").getStringValue();
             rates.computeIfAbsent(key, k -> new HashMap<>())
-                 .put(row.get("d").getStringValue(), Math.round(row.get("err").getLongValue() * 10000.0 / inv) / 100.0);
+                 .put(row.get("ym").getStringValue(), Math.round(row.get("err").getLongValue() * 10000.0 / inv) / 100.0);
         }
 
-        for (java.time.LocalDate d = first; !d.isAfter(last); d = d.plusDays(1)) {
-            dates.add(d.format(DateTimeFormatter.ofPattern("MM.dd")));
-        }
+        dates.addAll(labels);
         for (DirectAiMetricsDto.ModelUsageDto m : top) {
-            Map<String, Double> byDate = rates.getOrDefault(m.getPublisher() + "/" + m.getModel(), Map.of());
-            List<Double> daily = new ArrayList<>();
-            for (java.time.LocalDate d = first; !d.isAfter(last); d = d.plusDays(1)) {
-                daily.add(byDate.get(d.toString()));
-            }
+            Map<String, Double> byMonth = rates.getOrDefault(m.getPublisher() + "/" + m.getModel(), Map.of());
+            List<Double> monthly = new ArrayList<>();
+            for (String ym : yyyyMmList) monthly.add(byMonth.get(ym));
             series.add(DirectAiMetricsDto.ErrorRateSeriesDto.builder()
                     .publisher(m.getPublisher())
                     .model(m.getModel())
                     .monthlyErrorRate(m.getErrorRate())
-                    .dailyErrorRates(daily)
+                    .errorRates(monthly)
                     .build());
         }
     }
