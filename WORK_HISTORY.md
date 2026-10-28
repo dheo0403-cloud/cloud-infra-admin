@@ -67,7 +67,7 @@
   - `npx tsc --noEmit -p .` exit 0, `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
   - Puppeteer(JAR 8080, NS Mall / ns-intr-data / 2026-09) exit 0: 초기 5/0/0건 → 편집 모드에서 보안 권고를 모두 지움 → 0/0/0건(textarea 빈 값) → 편집 종료 후 0/0/0건, "해당 카테고리 권고 사항 없음" 3곳, 다른 카테고리 변화 없음, 콘솔 오류 0건(기존 select 중복 key 경고 제외).
   - 검증 후 로컬 백엔드 중지.
-* **후속 할 일:** 권고 편집 내용을 서버에 저장해 다시 불러와도 유지할지 결정
+* **후속 할 일:** ~~권고 편집 내용을 서버에 저장해 다시 불러와도 유지할지 결정~~ (2026-10-28 사용자 결정으로 제외)
 
 
 ---
@@ -77,7 +77,7 @@
 * **작업 내용 (사용자 승인):** 2026-06~10월 `monthly_bq_resource_summary` 45행(job 0)과 `monthly_bq_top_queries` 720행(커밋 `59f6f82`의 가짜 데이터 생성 로직이 적재한 행) 삭제.
 * **검증 결과:** 임시 `TmpOtherCustomersTest.delete` exit 0 → summary before=45 deleted=45 after=0, top before=720 deleted=720 after=0. 이어서 전체 월 기준 `scope` exit 0 → 남은 행 없음. 임시 테스트 삭제.
 * **🔍 리뷰:** 이 고객사들은 보고서 BigQuery 영역이 "데이터 없음"이 되고 PDF에서는 숨겨짐. 일배치는 계속 수집을 시도하지만 권한이 없으면 아무것도 적재하지 않음(요약은 쿼리 1 실패 시 미적재, TOP은 전 리전 실패 시 유지할 기존 행이 없음).
-* **후속 할 일:** 고객사가 메타데이터 뷰어·Job 조회 권한을 주면 `APP_BQ_COLLECT_API_ENABLED=true`로 로컬 기동 후 `/bigquery-optimization/collect`로 프로젝트별 재적재.
+* **후속 할 일:** ~~고객사가 메타데이터 뷰어·Job 조회 권한을 주면 `APP_BQ_COLLECT_API_ENABLED=true`로 로컬 기동 후 `/bigquery-optimization/collect`로 프로젝트별 재적재.~~ (2026-10-28 사용자 결정으로 제외)
 
 
 ---
@@ -101,7 +101,7 @@
   - `npx tsc --noEmit -p .` exit 0, `deploy.ps1 -Rebuild` BUILD SUCCESSFUL.
   - Puppeteer(JAR 8080, NS Mall / ns-mart-data / 2026-09) exit 0: 막대 4쌍, 공통 기준 높이 비례(3,266.51GB=115px, 406.47GB=15px 등), 바닥선 일치, 라벨 겹침 없음, 범례 표시, 왼쪽 카드와 같은 줄·높이, 콘솔 오류 0건. 스크린샷 확인.
   - 검증 후 로컬 백엔드 중지.
-* **후속 할 일:** ① 9개 프로젝트의 가짜 TOP 720행·0 요약 45행 삭제(승인 대기) ② 권한 받은 뒤 해당 프로젝트 재적재
+* **후속 할 일:** ① 9개 프로젝트의 가짜 TOP 720행·0 요약 45행 삭제(승인 대기) ~~② 권한 받은 뒤 해당 프로젝트 재적재~~ (2026-10-28 사용자 결정으로 제외)
 
 
 ---
