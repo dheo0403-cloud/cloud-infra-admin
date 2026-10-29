@@ -14,7 +14,8 @@ server:
   tomcat:
     accesslog:
       enabled: true
-      pattern: "%h %l %u %t \"%r\" %s %b %Dms"
+      # 쿼리 문자열 제외 (알람 수신기 ?token= 값이 접근 로그에 남지 않게)
+      pattern: "%h %l %u %t \"%m %U %H\" %s %b %Dms"
 
 logging:
   level:
@@ -32,6 +33,15 @@ app:
   bq:
     # BigQuery 성능 보고서 수집 시 제외할 사내 계정 도메인 (수집 서비스 계정은 자격증명에서 자동 제외)
     exclude-email-domain: ${APP_BQ_EXCLUDE_EMAIL_DOMAIN:mz.co.kr}
+  # 클라우드 알람 수신기 → MARK 전달. 수신기·MARK 전송 모두 기본 꺼짐(로컬), 운영 Dockerfile에서 true
+  alert:
+    receiver:
+      enabled: ${APP_ALERT_RECEIVER_ENABLED:false}
+      token: ${ALERT_RECEIVER_TOKEN:}
+    mark:
+      enabled: ${APP_ALERT_MARK_ENABLED:false}
+      url: ${MARK_API_URL:https://webhook.mzcapi.net/v1/sendalert}
+      api-key: ${MARK_API_KEY:}
 
 jira:
   base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}
