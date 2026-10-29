@@ -87,11 +87,18 @@ public class AlertRelayService {
             markStatus = "DUPLICATE";
         } else {
             try {
-                HttpResponse<String> res = sendToMark(alert, customer);
+                String type = markType(alert.signalType());
+                HttpResponse<String> res = sendToMark(alert, customer, type);
+                // MARK 명세에는 type=etc만 있어, 새 type이 4xx로 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
+                if (res.statusCode() / 100 == 4) {
+                    error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
+                    log.warn("MARK {}", error);
+                    res = sendToMark(alert, customer, "etc");
+                }
                 httpCode = res.statusCode();
                 markStatus = httpCode / 100 == 2 ? "SENT" : "FAILED";
                 if (!"SENT".equals(markStatus)) {
-                    error = truncate(res.body(), 1000);
+                    error = truncate((error == null ? "" : error + " / ") + res.body(), 1000);
                     log.error("MARK 전송 실패 HTTP {}: {} / {}", httpCode, alert.alertName(), error);
                 }
             } catch (Exception e) {
@@ -106,7 +113,16 @@ public class AlertRelayService {
         return markStatus;
     }
 
-    private HttpResponse<String> sendToMark(AzureAlertMapper.MarkAlert a, String customer) throws Exception {
+    /** MARK(Slack)에 표시되는 알람 종류 */
+    static String markType(String signalType) {
+        return switch (signalType) {
+            case "Resource Health" -> "Azure Resource Health";
+            case "ServiceHealth" -> "Azure Service Health";
+            default -> "Azure Monitor"; // 메트릭, 커스텀 로그, 활동 로그 등
+        };
+    }
+
+    private HttpResponse<String> sendToMark(AzureAlertMapper.MarkAlert a, String customer, String type) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("service_id", a.serviceId());
         body.put("customer_name", customer);
@@ -124,7 +140,7 @@ public class AlertRelayService {
             .timeout(Duration.ofSeconds(5))
             .header("Content-Type", "application/json")
             .header("x-api-key", markApiKey)
-            .header("type", "etc")
+            .header("type", type)
             .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
             .build();
         return httpClient.send(req, HttpResponse.BodyHandlers.ofString());
