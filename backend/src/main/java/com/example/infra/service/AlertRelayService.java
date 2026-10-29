@@ -79,6 +79,8 @@ public class AlertRelayService {
         if (customer == null) {
             markStatus = "UNMAPPED";
             log.warn("고객사 미등록 구독의 알람 (저장만): {} / {}", alert.serviceId(), alert.alertName());
+        } else if (alert.skip()) {
+            markStatus = "SKIPPED"; // 상태 변화 없는 리소스 헬스 이벤트 (저장만)
         } else if (!markEnabled) {
             markStatus = "MARK_DISABLED";
         } else if (isDuplicate(alert.alertId() + "|" + alert.status())) {

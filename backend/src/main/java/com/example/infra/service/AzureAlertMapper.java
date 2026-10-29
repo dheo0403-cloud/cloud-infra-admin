@@ -29,7 +29,7 @@ public final class AzureAlertMapper {
 
     public record MarkAlert(String signalType, String serviceId, String alertId, String severity, String status,
                             String alertName, String serviceName, String targetName, long timestamp,
-                            String description, String currentValue) {}
+                            String description, String currentValue, boolean skip) {}
 
     public static Optional<MarkAlert> map(JsonNode payload) {
         if (payload == null || !"azureMonitorCommonAlertSchema".equals(payload.path("schemaId").asText())) {
@@ -50,6 +50,10 @@ public final class AzureAlertMapper {
         String alertName = alertRule;
         String serviceName = lastSegment(essentials.path("targetResourceType").asText());
         String targetName = firstNonBlank(essentials.path("configurationItems").path(0).asText(), lastSegment(targetId));
+        // VMSS 인스턴스는 이름 칸에 번호(0, 1…)만 오므로 상위 리소스 이름을 붙인다 (예: aks-pool-vmss/0)
+        String[] seg = targetId.split("/");
+        if (targetName.matches("\\d+") && seg.length >= 3) targetName = seg[seg.length - 3] + "/" + targetName;
+        boolean skip = false;
         String description = essentials.path("description").asText();
         String currentValue = ctx.path("condition").path("allOf").path(0).path("metricValue").asText();
 
@@ -58,8 +62,14 @@ public final class AzureAlertMapper {
                 // Azure 등급은 고정값이라 상태값으로 등급을 정하고, 같은 규칙·리소스는 같은 alert_id로 묶는다
                 JsonNode p = ctx.path("properties");
                 String health = p.path("currentHealthStatus").asText();
-                severity = "Unavailable".equals(health) ? "Critical" : "High";
-                status = "Available".equals(health) ? "closed" : "open";
+                String prev = p.path("previousHealthStatus").asText();
+                // 장애 진행 중 "Updated" 이벤트도 Available/Available로 오므로, 실제 복구(Resolved 또는 비정상→Available)만 closed
+                boolean recovered = "Resolved".equals(ctx.path("status").asText())
+                    || ("Available".equals(health) && !prev.isBlank() && !"Available".equals(prev));
+                severity = "Unavailable".equals(health) ? "Critical" : "High"; // Degraded·Unknown
+                status = recovered ? "closed" : "open";
+                // 상태 변화 없는 Available 이벤트는 가짜 복구가 되지 않게 MARK로 보내지 않는다
+                skip = !recovered && "Available".equals(health);
                 alertId = sha1(alertRule + "|" + targetId.toLowerCase());
                 description = firstNonBlank(join(p.path("title").asText(), p.path("details").asText()), description);
                 currentValue = health;
@@ -97,7 +107,7 @@ public final class AzureAlertMapper {
         return Optional.of(new MarkAlert(
             monitoringService, serviceId.toLowerCase(), alertId, severity, status,
             alertName, firstNonBlank(serviceName, monitoringService), firstNonBlank(targetName, serviceId),
-            timestamp, truncate(description), currentValue));
+            timestamp, truncate(description), currentValue, skip));
     }
 
     private static String subscriptionOf(String resourceId) {

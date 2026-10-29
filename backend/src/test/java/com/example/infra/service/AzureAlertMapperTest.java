@@ -75,26 +75,59 @@ class AzureAlertMapperTest {
         assertEquals("Log Alerts V2", a.signalType());
     }
 
+    /** 리소스 헬스 alertContext: 이벤트 상태(Active/Updated/In Progress/Resolved), 현재·이전 상태 */
+    private static String rhCtx(String eventStatus, String cur, String prev, String title) {
+        return "{\"status\":\"" + eventStatus + "\",\"properties\":{\"title\":\"" + title + "\",\"details\":\"\","
+            + "\"currentHealthStatus\":\"" + cur + "\",\"previousHealthStatus\":\"" + prev + "\"}}";
+    }
+
+    private static AzureAlertMapper.MarkAlert rh(String eventStatus, String cur, String prev) throws Exception {
+        return AzureAlertMapper.map(payload(essentials("Resource Health", "Sev4", "Fired", VM_ID, "vm-web-01",
+            "microsoft.compute/virtualmachines"), rhCtx(eventStatus, cur, prev, "Stopping and deallocating"))).orElseThrow();
+    }
+
     @Test
     void 리소스_헬스_발생과_해결은_같은_alert_id() throws Exception {
-        String ctx = "{\"properties\":{\"title\":\"가상 머신 사용 불가\",\"details\":\"플랫폼 문제\",\"currentHealthStatus\":\"%s\"}}";
-        var down = AzureAlertMapper.map(payload(essentials("Resource Health", "Sev4", "Fired", VM_ID, "vm-web-01",
-            "microsoft.compute/virtualmachines"), String.format(ctx, "Unavailable"))).orElseThrow();
+        var down = rh("Active", "Unavailable", "Available");
         assertEquals("Critical", down.severity());
         assertEquals("open", down.status());
+        assertFalse(down.skip());
         assertEquals("Unavailable", down.currentValue());
-        assertEquals("가상 머신 사용 불가 플랫폼 문제", down.description());
+        assertEquals("Stopping and deallocating", down.description());
 
         // 해결 알림은 Azure에서 별도 알람(alertId 다름)으로 오지만 같은 alert_id로 묶여야 함
         String up = essentials("Resource Health", "Sev4", "Fired", VM_ID, "vm-web-01", "microsoft.compute/virtualmachines")
             .replace("alerts/abc-123", "alerts/zzz-999");
-        var recovered = AzureAlertMapper.map(payload(up, String.format(ctx, "Available"))).orElseThrow();
+        var recovered = AzureAlertMapper.map(payload(up, rhCtx("Resolved", "Available", "Unavailable", "Available"))).orElseThrow();
         assertEquals("closed", recovered.status());
+        assertFalse(recovered.skip());
         assertEquals(down.alertId(), recovered.alertId());
 
-        var degraded = AzureAlertMapper.map(payload(essentials("Resource Health", "Sev4", "Fired", VM_ID, "vm", "t"),
-            String.format(ctx, "Degraded"))).orElseThrow();
-        assertEquals("High", degraded.severity());
+        // 이벤트 상태 없이 비정상 → Available 로 바뀐 경우도 복구
+        assertEquals("closed", rh("Updated", "Available", "Degraded").status());
+    }
+
+    @Test
+    void 리소스_헬스_상태_변화_없는_Updated는_복구가_아님() throws Exception {
+        // 2026-10-29 실제 수신: VM 중지 진행 중 Updated 이벤트가 Available/Available로 옴 → closed로 보내면 가짜 복구
+        var updated = rh("Updated", "Available", "Available");
+        assertEquals("open", updated.status());
+        assertTrue(updated.skip());
+
+        var stillDown = rh("Updated", "Unavailable", "Unavailable");
+        assertEquals("open", stillDown.status());
+        assertFalse(stillDown.skip());
+
+        assertEquals("High", rh("In Progress", "Degraded", "Available").severity());
+        assertEquals("High", rh("Active", "Unknown", "Available").severity());
+    }
+
+    @Test
+    void VMSS_인스턴스_이름에_상위_리소스_이름을_붙임() throws Exception {
+        String inst = "/subscriptions/" + SUB + "/resourcegroups/rg/providers/microsoft.compute/virtualmachinescalesets/aks-svcpool-vmss/virtualmachines/0";
+        var a = AzureAlertMapper.map(payload(essentials("Resource Health", "Sev4", "Fired", inst, "0",
+            "microsoft.compute/virtualmachinescalesets/virtualmachines"), rhCtx("Active", "Unavailable", "Available", "t"))).orElseThrow();
+        assertEquals("aks-svcpool-vmss/0", a.targetName());
     }
 
     @Test
