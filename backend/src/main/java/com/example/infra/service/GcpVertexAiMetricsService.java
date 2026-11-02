@@ -226,7 +226,7 @@ public class GcpVertexAiMetricsService {
                 log.debug("Model usage query skipped: {}", ex.getMessage());
             }
 
-            // 3. 최근 4개월 월별 에러율 (4개월 최고 에러율 상위 3개 모델)
+            // 3. 최근 4개월 월별 에러율 (기준월 호출 많은 상위 3개 모델)
             List<String> errorRateDates = new ArrayList<>();
             List<DirectAiMetricsDto.ErrorRateSeriesDto> errorRateSeries = new ArrayList<>();
             try {
@@ -306,8 +306,10 @@ public class GcpVertexAiMetricsService {
     private void fillMonthlyErrorRates(String projectId, List<String> yyyyMmList, List<String> labels,
                                        List<DirectAiMetricsDto.ModelUsageDto> models,
                                        List<String> dates, List<DirectAiMetricsDto.ErrorRateSeriesDto> series) throws InterruptedException {
+        if (models.isEmpty()) return;
+
+        List<DirectAiMetricsDto.ModelUsageDto> top = models.subList(0, Math.min(3, models.size())); // 기준월 호출 수 내림차순
         Map<String, Map<String, Double>> rates = new HashMap<>(); // publisher/model -> YYYY-MM -> 에러율(%)
-        Map<String, String[]> names = new HashMap<>(); // publisher/model -> {publisher, model}
         String sql = String.format(
             "SELECT SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, publisher, model, " +
             "  SUM(error_invocations) AS err, SUM(IF(error_invocations IS NULL, 0, invocations)) AS inv_with_err " +
@@ -319,45 +321,20 @@ public class GcpVertexAiMetricsService {
         for (FieldValueList row : query(sql, projectId, yyyyMmList.get(0), yyyyMmList.get(yyyyMmList.size() - 1)).iterateAll()) {
             long inv = row.get("inv_with_err").isNull() ? 0L : row.get("inv_with_err").getLongValue();
             if (inv <= 0 || row.get("err").isNull()) continue;
-            String publisher = row.get("publisher").getStringValue(), model = row.get("model").getStringValue();
-            String key = publisher + "/" + model;
-            names.putIfAbsent(key, new String[]{publisher, model});
+            String key = row.get("publisher").getStringValue() + "/" + row.get("model").getStringValue();
             rates.computeIfAbsent(key, k -> new HashMap<>())
                  .put(row.get("ym").getStringValue(), Math.round(row.get("err").getLongValue() * 10000.0 / inv) / 100.0);
         }
 
-        // 4개월 중 최고 에러율이 높은 3개 모델 (에러가 한 번도 없는 모델은 제외)
-        Map<String, Double> maxRate = new HashMap<>();
-        rates.forEach((k, byMonth) -> maxRate.put(k, byMonth.values().stream().mapToDouble(Double::doubleValue).max().orElse(0)));
-        List<String> top = maxRate.entrySet().stream()
-                .filter(e -> e.getValue() > 0)
-                .sorted(Map.Entry.<String, Double>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
-                .limit(3).map(Map.Entry::getKey).collect(java.util.stream.Collectors.toList());
-        // 에러가 있는 모델이 없으면 기준월 호출 수 상위 3개 (모두 0%)
-        if (top.isEmpty()) {
-            for (DirectAiMetricsDto.ModelUsageDto m : models.subList(0, Math.min(3, models.size()))) {
-                String key = m.getPublisher() + "/" + m.getModel();
-                names.putIfAbsent(key, new String[]{m.getPublisher(), m.getModel()});
-                top.add(key);
-            }
-        }
-        if (top.isEmpty()) return;
-
-        // 범례 값 = 기준월 에러율 (기준월 호출이 없는 모델은 null)
-        Map<String, Double> baseRate = new HashMap<>();
-        for (DirectAiMetricsDto.ModelUsageDto m : models) {
-            if (m.getErrorRate() != null) baseRate.put(m.getPublisher() + "/" + m.getModel(), m.getErrorRate());
-        }
-
         dates.addAll(labels);
-        for (String key : top) {
-            Map<String, Double> byMonth = rates.getOrDefault(key, Map.of());
+        for (DirectAiMetricsDto.ModelUsageDto m : top) {
+            Map<String, Double> byMonth = rates.getOrDefault(m.getPublisher() + "/" + m.getModel(), Map.of());
             List<Double> monthly = new ArrayList<>();
             for (String ym : yyyyMmList) monthly.add(byMonth.get(ym));
             series.add(DirectAiMetricsDto.ErrorRateSeriesDto.builder()
-                    .publisher(names.get(key)[0])
-                    .model(names.get(key)[1])
-                    .monthlyErrorRate(baseRate.get(key))
+                    .publisher(m.getPublisher())
+                    .model(m.getModel())
+                    .monthlyErrorRate(m.getErrorRate())
                     .errorRates(monthly)
                     .build());
         }
