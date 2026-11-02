@@ -172,7 +172,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                         <div className="report-card ai-token-trend" style={{ ...subCard, flexGrow: 1 }}>
                             <div className="report-card-title">
                                 <span>{cardTitleIcon('fa-chart-bar', '#2563eb')}월별 토큰 사용량 트렌드</span>
-                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월</span>
+                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 3개월</span>
                             </div>
 
                             <div style={{ flexGrow: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '170px', paddingTop: '24px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', marginLeft: '16px' }}>

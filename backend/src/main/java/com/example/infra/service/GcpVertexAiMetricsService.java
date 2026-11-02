@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 집계 서비스 (토큰 4개월 추이 + 기준월 모델별 호출 + 에러율 3개월 추이)
+ * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 집계 서비스 (토큰·에러율 최근 3개월 추이 + 기준월 모델별 호출)
  */
 @Slf4j
 @Service
@@ -39,6 +39,8 @@ public class GcpVertexAiMetricsService {
     private static final String DIRECT_AI_TABLE = "daily_direct_ai_metrics";
     private static final String MONTHLY_DIRECT_AI_SUMMARY_TABLE = "monthly_direct_ai_summary";
     private static final String MODEL_USAGE_TABLE = "daily_ai_model_usage";
+    // 추이 개월 수 (기준월 포함). Vertex AI 메트릭은 Monitoring 보관이 6주라 길게 보여주지 않음
+    private static final int TREND_MONTHS = 3;
 
     /** 요청으로 받은 프로젝트 ID·연월은 SQL 문자열에 넣지 않고 이름 붙은 파라미터(@pid, @fromYm, @toYm)로 전달 (SQL 인젝션 방지) */
     private TableResult query(String sql, String projectId, String fromYm, String toYm) throws InterruptedException {
@@ -50,14 +52,14 @@ public class GcpVertexAiMetricsService {
     }
 
     /**
-     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회 (기본 4개월 추이)
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage (직접 사용) 관제 메트릭 조회 (기본 3개월 추이)
      */
     public DirectAiMetricsDto getDirectAiOperationsMetrics(String targetProjectId, String targetYearMonth) {
         return getDirectAiOperationsMetrics(targetProjectId, targetYearMonth, "monthly");
     }
 
     /**
-     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage 관제 메트릭 조회 (4개월 월별 집계)
+     * 타겟 고객사 프로젝트 및 지정 연월 기준의 Direct AI Usage 관제 메트릭 조회 (3개월 월별 집계)
      */
     public DirectAiMetricsDto getDirectAiOperationsMetrics(String targetProjectId, String targetYearMonth, String period) {
         if (targetProjectId == null || targetProjectId.trim().isEmpty()) {
@@ -69,26 +71,26 @@ public class GcpVertexAiMetricsService {
                 ? targetYearMonth.trim()
                 : YearMonth.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-        log.info("[DIRECT-AI-METRICS] Fetching Direct AI 4-month metrics for project `{}` and target month `{}`",
+        log.info("[DIRECT-AI-METRICS] Fetching Direct AI 3-month metrics for project `{}` and target month `{}`",
                 effectiveProjectId, effectiveYearMonth);
 
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-        // 4개월(YY.MM) 및 YYYY-MM 배열 생성 (예: 2026-09 -> 2026-06, 2026-07, 2026-08, 2026-09)
+        // 3개월(YY.MM) 및 YYYY-MM 배열 생성 (예: 2026-09 -> 2026-07, 2026-08, 2026-09)
         YearMonth targetYm = YearMonth.parse(effectiveYearMonth);
         List<String> yyyyMmList = new ArrayList<>();
         List<String> labelList = new ArrayList<>();
-        for (int i = 3; i >= 0; i--) {
+        for (int i = TREND_MONTHS - 1; i >= 0; i--) {
             YearMonth ym = targetYm.minusMonths(i);
             yyyyMmList.add(ym.format(DateTimeFormatter.ofPattern("yyyy-MM")));
             labelList.add(ym.format(DateTimeFormatter.ofPattern("yy.MM")));
         }
 
         String startYm = yyyyMmList.get(0);
-        String endYm = yyyyMmList.get(3);
+        String endYm = yyyyMmList.get(TREND_MONTHS - 1);
 
         try {
-            // 1. 4개월 월별 요약 테이블(Summary) 우선 조회 쿼리 (없을 경우 일일 Raw 테이블 Fallback)
+            // 1. 3개월 월별 요약 테이블(Summary) 우선 조회 쿼리 (없을 경우 일일 Raw 테이블 Fallback)
             Map<String, FieldValueList> monthDataMap = new HashMap<>();
             String customerName = "고객사 GCP 프로젝트";
 
@@ -123,7 +125,7 @@ public class GcpVertexAiMetricsService {
             }
 
             // 요약 테이블에 데이터가 없는 월은 일일 Raw 테이블에서 실시간 집계 Fallback
-            if (monthDataMap.size() < 4) {
+            if (monthDataMap.size() < TREND_MONTHS) {
                 String monthlySql = String.format(
                     "SELECT " +
                     "  SUBSTR(CAST(snapshot_date AS STRING), 1, 7) AS ym, " +
@@ -165,7 +167,7 @@ public class GcpVertexAiMetricsService {
             long targetMonthTrans = 0;
             long targetMonthNlp = 0;
 
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < TREND_MONTHS; i++) {
                 String ym = yyyyMmList.get(i);
                 if (monthDataMap.containsKey(ym)) {
                     FieldValueList r = monthDataMap.get(ym);
@@ -177,7 +179,7 @@ public class GcpVertexAiMetricsService {
                     outputTokensTrend.add(outTok);
                     pretrainedCallsTrend.add(preCalls);
 
-                    if (i == 3) { // 기준월(당월)
+                    if (i == TREND_MONTHS - 1) { // 기준월(당월)
                         targetMonthInTok = inTok;
                         targetMonthOutTok = outTok;
                         // 월간 누적 토큰 = 모든 type 합계 (캐시 등 포함)
@@ -226,11 +228,11 @@ public class GcpVertexAiMetricsService {
                 log.debug("Model usage query skipped: {}", ex.getMessage());
             }
 
-            // 3. 최근 3개월 월별 에러율 (기준월 호출 많은 상위 3개 모델). Monitoring 보관(6주)이 짧아 토큰 추이(4개월)보다 짧게 표시
+            // 3. 최근 3개월 월별 에러율 (기준월 호출 많은 상위 3개 모델)
             List<String> errorRateDates = new ArrayList<>();
             List<DirectAiMetricsDto.ErrorRateSeriesDto> errorRateSeries = new ArrayList<>();
             try {
-                fillMonthlyErrorRates(effectiveProjectId, yyyyMmList.subList(1, 4), labelList.subList(1, 4), models, errorRateDates, errorRateSeries);
+                fillMonthlyErrorRates(effectiveProjectId, yyyyMmList, labelList, models, errorRateDates, errorRateSeries);
             } catch (Exception ex) {
                 log.debug("Monthly error rate query skipped: {}", ex.getMessage());
             }
