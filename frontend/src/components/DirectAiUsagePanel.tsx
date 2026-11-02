@@ -17,7 +17,7 @@ const ERROR_LINE_COLORS = ['#ef4444', '#f59e0b', '#3b82f6'];
 const cardTitleIcon = (icon: string, color: string) => <i className={`fas ${icon} mr-1`} style={{ color }}></i>;
 
 /**
- * 최근 4개월 월별 에러율 꺾은선 (SVG). 값이 없는 달(null)은 선을 끊고, 점마다 값을 표시한다
+ * 최근 3개월 월별 에러율 꺾은선 (SVG). 값이 없는 달(null)은 선을 끊고, 점마다 값을 표시한다
  */
 const ErrorRateChart: React.FC<{ dates: string[]; series: AiErrorRateSeriesDto[] }> = ({ dates, series }) => {
     // 가로로 넓은 viewBox: 카드 폭(약 580px)에서 높이 170px 안팎이 되도록
@@ -247,7 +247,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                         <div className="report-card ai-error-rate" style={{ ...subCard, flexGrow: 1 }}>
                             <div className="report-card-title">
                                 <span>{cardTitleIcon('fa-exclamation-triangle', '#ef4444')}AI 모델 호출 에러율</span>
-                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 4개월 · 2xx 외 응답</span>
+                                <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#64748b' }}>최근 3개월 · 2xx 외 응답</span>
                             </div>
                             {hasErrorData ? (
                                 <>
@@ -265,7 +265,7 @@ const DirectAiUsagePanel: React.FC<DirectAiUsagePanelProps> = ({
                                     </div>
                                 </>
                             ) : (
-                                <div style={emptyText}>최근 4개월 에러율 수집 기록이 없습니다.</div>
+                                <div style={emptyText}>최근 3개월 에러율 수집 기록이 없습니다.</div>
                             )}
                         </div>
                     </div>

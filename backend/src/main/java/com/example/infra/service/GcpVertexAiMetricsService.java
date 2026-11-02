@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 집계 서비스 (4개월 추이 + 기준월 모델별 호출·에러율)
+ * GCP AI 서비스 직접 사용 (Direct AI Usage) 관제 메트릭 집계 서비스 (토큰 4개월 추이 + 기준월 모델별 호출 + 에러율 3개월 추이)
  */
 @Slf4j
 @Service
@@ -226,11 +226,11 @@ public class GcpVertexAiMetricsService {
                 log.debug("Model usage query skipped: {}", ex.getMessage());
             }
 
-            // 3. 최근 4개월 월별 에러율 (기준월 호출 많은 상위 3개 모델)
+            // 3. 최근 3개월 월별 에러율 (기준월 호출 많은 상위 3개 모델). Monitoring 보관(6주)이 짧아 토큰 추이(4개월)보다 짧게 표시
             List<String> errorRateDates = new ArrayList<>();
             List<DirectAiMetricsDto.ErrorRateSeriesDto> errorRateSeries = new ArrayList<>();
             try {
-                fillMonthlyErrorRates(effectiveProjectId, yyyyMmList, labelList, models, errorRateDates, errorRateSeries);
+                fillMonthlyErrorRates(effectiveProjectId, yyyyMmList.subList(1, 4), labelList.subList(1, 4), models, errorRateDates, errorRateSeries);
             } catch (Exception ex) {
                 log.debug("Monthly error rate query skipped: {}", ex.getMessage());
             }
@@ -301,7 +301,7 @@ public class GcpVertexAiMetricsService {
     }
 
     /**
-     * 최근 4개월 월별 에러율 = 그 달 에러 수 / 에러 수를 수집한 날의 호출 수 (기준월 에러율과 같은 계산). 계산할 수 없는 달은 null
+     * 최근 3개월 월별 에러율 = 그 달 에러 수 / 에러 수를 수집한 날의 호출 수 (기준월 에러율과 같은 계산). 계산할 수 없는 달은 null
      */
     private void fillMonthlyErrorRates(String projectId, List<String> yyyyMmList, List<String> labels,
                                        List<DirectAiMetricsDto.ModelUsageDto> models,
