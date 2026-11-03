@@ -44,6 +44,8 @@ app:
       api-key: ${MARK_API_KEY:}
       # 테스트 기간에 MARK로 보내는 service_id를 고정할 구독 ID (비우면 실제 구독 ID)
       override-service-id: ${MARK_OVERRIDE_SERVICE_ID:}
+      # 테스트 기간에 MARK로 보내는 customer_name을 고정할 이름 (비우면 실제 고객사명)
+      override-customer-name: ${MARK_OVERRIDE_CUSTOMER_NAME:}
 
 jira:
   base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}

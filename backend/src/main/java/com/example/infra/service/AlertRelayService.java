@@ -60,6 +60,10 @@ public class AlertRelayService {
     @Value("${app.alert.mark.override-service-id:}")
     private String overrideServiceId;
 
+    // 테스트 기간: 값이 있으면 MARK에 보내는 customer_name만 이 이름으로 바꾼다 (DB customer_name은 실제 고객사 유지)
+    @Value("${app.alert.mark.override-customer-name:}")
+    private String overrideCustomerName;
+
     private volatile Map<String, String> customerById = Map.of();
     private volatile long customerLoadedAt = 0;
     private volatile boolean tableReady = false;
@@ -101,14 +105,15 @@ public class AlertRelayService {
             markStatus = "DUPLICATE";
         } else {
             sentServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
+            String sentCustomer = overrideCustomerName.isBlank() ? customer : overrideCustomerName;
             try {
                 String type = markType(alert.signalType());
-                HttpResponse<String> res = sendToMark(alert, sentServiceId, customer, type);
+                HttpResponse<String> res = sendToMark(alert, sentServiceId, sentCustomer, type);
                 // MARK 명세에는 type=etc만 있어, 새 type이 4xx로 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
                 if (res.statusCode() / 100 == 4) {
                     error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
                     log.warn("MARK {}", error);
-                    res = sendToMark(alert, sentServiceId, customer, "etc");
+                    res = sendToMark(alert, sentServiceId, sentCustomer, "etc");
                 }
                 httpCode = res.statusCode();
                 markStatus = httpCode / 100 == 2 ? "SENT" : "FAILED";

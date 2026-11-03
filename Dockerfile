@@ -16,8 +16,9 @@ ENV APP_SCHEDULING_ENABLED=true
 # 운영 이미지에서만 알람 수신기·MARK 전송 활성화 (토큰·키는 k8s Secret으로 주입, 없으면 수신기가 모두 거부)
 ENV APP_ALERT_RECEIVER_ENABLED=true
 ENV APP_ALERT_MARK_ENABLED=true
-# 알람 테스트 기간: MARK로 보내는 service_id를 테스트 구독(alert Test)으로 고정. 테스트가 끝나면 이 줄 삭제
+# 알람 테스트 기간: MARK로 보내는 service_id·customer_name을 테스트 값으로 고정. 테스트가 끝나면 이 두 줄 삭제
 ENV MARK_OVERRIDE_SERVICE_ID=564eca9f-1150-4354-a09e-1a72ccd82c0d
+ENV MARK_OVERRIDE_CUSTOMER_NAME=Azure-test
 
 # 보안용 일반 사용자 생성
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
