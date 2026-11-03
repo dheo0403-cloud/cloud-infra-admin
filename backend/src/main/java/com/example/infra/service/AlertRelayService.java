@@ -56,6 +56,10 @@ public class AlertRelayService {
     @Value("${app.alert.mark.api-key:}")
     private String markApiKey;
 
+    // 테스트 기간: 값이 있으면 MARK에 보내는 service_id만 이 구독 ID로 바꾼다 (고객사 확인·DB service_id는 실제 값 유지)
+    @Value("${app.alert.mark.override-service-id:}")
+    private String overrideServiceId;
+
     private volatile Map<String, String> customerById = Map.of();
     private volatile long customerLoadedAt = 0;
     private volatile boolean tableReady = false;
@@ -64,10 +68,19 @@ public class AlertRelayService {
 
     /** 처리 결과(mark_status)를 반환한다. MARK 실패도 예외 없이 결과로 돌려준다 */
     public String relayAzure(JsonNode payload) {
+        return relay(payload, false);
+    }
+
+    /** 저장된 원본 알람을 MARK로 다시 보낸다 (테스트용). 중복 차단 없이 보내고 RESENT / RESENT_FAILED로 저장 */
+    public String resendAzure(JsonNode payload) {
+        return relay(payload, true);
+    }
+
+    private String relay(JsonNode payload, boolean resend) {
         Optional<AzureAlertMapper.MarkAlert> mapped = AzureAlertMapper.map(payload);
         if (mapped.isEmpty()) {
             log.warn("Azure 알람 변환 불가 (공통 알람 형식 아님 또는 필수 값 없음), 원본만 저장");
-            insert("AZURE", null, null, "UNPARSED", null, null, payload);
+            insert("AZURE", null, null, "UNPARSED", null, null, null, payload);
             return "UNPARSED";
         }
         AzureAlertMapper.MarkAlert alert = mapped.get();
@@ -76,6 +89,7 @@ public class AlertRelayService {
         String markStatus;
         Integer httpCode = null;
         String error = null;
+        String sentServiceId = null; // MARK에 실제로 보낸 구독 ID (보내지 않으면 null)
         if (customer == null) {
             markStatus = "UNMAPPED";
             log.warn("고객사 미등록 구독의 알람 (저장만): {} / {}", alert.serviceId(), alert.alertName());
@@ -83,17 +97,18 @@ public class AlertRelayService {
             markStatus = "SKIPPED"; // 상태 변화 없는 리소스 헬스 이벤트 (저장만)
         } else if (!markEnabled) {
             markStatus = "MARK_DISABLED";
-        } else if (isDuplicate(alert.alertId() + "|" + alert.status())) {
+        } else if (!resend && isDuplicate(alert.alertId() + "|" + alert.status())) {
             markStatus = "DUPLICATE";
         } else {
+            sentServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
             try {
                 String type = markType(alert.signalType());
-                HttpResponse<String> res = sendToMark(alert, customer, type);
+                HttpResponse<String> res = sendToMark(alert, sentServiceId, customer, type);
                 // MARK 명세에는 type=etc만 있어, 새 type이 4xx로 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
                 if (res.statusCode() / 100 == 4) {
                     error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
                     log.warn("MARK {}", error);
-                    res = sendToMark(alert, customer, "etc");
+                    res = sendToMark(alert, sentServiceId, customer, "etc");
                 }
                 httpCode = res.statusCode();
                 markStatus = httpCode / 100 == 2 ? "SENT" : "FAILED";
@@ -107,9 +122,10 @@ public class AlertRelayService {
                 log.error("MARK 전송 실패: {} / {}", alert.alertName(), error);
             }
             // 실패 건은 같은 알람이 다시 들어오면 재시도되도록 중복 기록에서 뺀다
-            if ("FAILED".equals(markStatus)) recentlySent.remove(alert.alertId() + "|" + alert.status());
+            if ("FAILED".equals(markStatus) && !resend) recentlySent.remove(alert.alertId() + "|" + alert.status());
+            if (resend) markStatus = "SENT".equals(markStatus) ? "RESENT" : "RESENT_FAILED";
         }
-        insert("AZURE", alert, customer, markStatus, httpCode, error, payload);
+        insert("AZURE", alert, customer, markStatus, httpCode, error, sentServiceId, payload);
         return markStatus;
     }
 
@@ -122,9 +138,9 @@ public class AlertRelayService {
         };
     }
 
-    private HttpResponse<String> sendToMark(AzureAlertMapper.MarkAlert a, String customer, String type) throws Exception {
+    private HttpResponse<String> sendToMark(AzureAlertMapper.MarkAlert a, String serviceId, String customer, String type) throws Exception {
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("service_id", a.serviceId());
+        body.put("service_id", serviceId);
         body.put("customer_name", customer);
         body.put("alert_id", a.alertId());
         body.put("severity", a.severity());
@@ -190,7 +206,7 @@ public class AlertRelayService {
                 "  received_at TIMESTAMP, provider STRING, signal_type STRING, service_id STRING, customer_name STRING," +
                 "  alert_id STRING, severity STRING, status STRING, alert_name STRING, service_name STRING, target_name STRING," +
                 "  alert_time TIMESTAMP, description STRING, current_value STRING," +
-                "  mark_status STRING, mark_http_code INT64, mark_error STRING, raw_payload STRING" +
+                "  mark_status STRING, mark_http_code INT64, mark_error STRING, raw_payload STRING, mark_service_id STRING" +
                 ") PARTITION BY DATE(received_at)", targetProjectId, datasetName, TABLE)).build());
             tableReady = true;
         } catch (Exception e) {
@@ -199,13 +215,14 @@ public class AlertRelayService {
     }
 
     private void insert(String provider, AzureAlertMapper.MarkAlert a, String customer, String markStatus,
-                        Integer httpCode, String error, JsonNode payload) {
+                        Integer httpCode, String error, String markServiceId, JsonNode payload) {
         ensureTable();
         Map<String, Object> row = new HashMap<>();
         row.put("received_at", Instant.now().toString());
         row.put("provider", provider);
         row.put("customer_name", customer);
         row.put("mark_status", markStatus);
+        row.put("mark_service_id", markServiceId);
         row.put("mark_http_code", httpCode);
         row.put("mark_error", error);
         row.put("raw_payload", payload == null ? null : payload.toString());

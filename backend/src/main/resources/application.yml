@@ -42,6 +42,8 @@ app:
       enabled: ${APP_ALERT_MARK_ENABLED:false}
       url: ${MARK_API_URL:https://webhook.mzcapi.net/v1/sendalert}
       api-key: ${MARK_API_KEY:}
+      # 테스트 기간에 MARK로 보내는 service_id를 고정할 구독 ID (비우면 실제 구독 ID)
+      override-service-id: ${MARK_OVERRIDE_SERVICE_ID:}
 
 jira:
   base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}
