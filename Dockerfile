@@ -19,8 +19,6 @@ ENV APP_ALERT_MARK_ENABLED=true
 # 알람 테스트 기간: MARK로 보내는 service_id·customer_name을 테스트 값으로 고정. 테스트가 끝나면 이 두 줄 삭제
 ENV MARK_OVERRIDE_SERVICE_ID=564eca9f-1150-4354-a09e-1a72ccd82c0d
 ENV MARK_OVERRIDE_CUSTOMER_NAME=Azure-test
-# MARK에 Azure Monitor / Resource Health / Service Health type이 등록되기 전까지 etc로만 전송. 등록되면 이 줄 삭제
-ENV MARK_FORCE_TYPE=etc
 
 # 보안용 일반 사용자 생성
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser

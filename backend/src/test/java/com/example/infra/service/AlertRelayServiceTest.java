@@ -11,11 +11,11 @@ class AlertRelayServiceTest {
 
     @Test
     void 알람_종류별_MARK_type() {
-        assertEquals("Azure Monitor", AlertRelayService.markType("Platform"));
-        assertEquals("Azure Monitor", AlertRelayService.markType("Log Alerts V2"));
-        assertEquals("Azure Monitor", AlertRelayService.markType("Activity Log - Administrative"));
-        assertEquals("Azure Resource Health", AlertRelayService.markType("Resource Health"));
-        assertEquals("Azure Service Health", AlertRelayService.markType("ServiceHealth"));
+        assertEquals("azure_monitor", AlertRelayService.markType("Platform"));
+        assertEquals("azure_monitor", AlertRelayService.markType("Log Alerts V2"));
+        assertEquals("azure_monitor", AlertRelayService.markType("Activity Log - Administrative"));
+        assertEquals("azure_resource_health", AlertRelayService.markType("Resource Health"));
+        assertEquals("azure_service_health", AlertRelayService.markType("ServiceHealth"));
     }
 
     @Test

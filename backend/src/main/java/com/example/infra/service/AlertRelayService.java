@@ -152,12 +152,12 @@ public class AlertRelayService {
         }
     }
 
-    /** MARK(Slack)에 표시되는 알람 종류 */
+    /** MARK type (MARK 등록 값, Slack에는 Azure Monitor / Azure Resource Health / Azure Service Health로 표시) */
     static String markType(String signalType) {
         return switch (signalType) {
-            case "Resource Health" -> "Azure Resource Health";
-            case "ServiceHealth" -> "Azure Service Health";
-            default -> "Azure Monitor"; // 메트릭, 커스텀 로그, 활동 로그 등
+            case "Resource Health" -> "azure_resource_health";
+            case "ServiceHealth" -> "azure_service_health";
+            default -> "azure_monitor"; // 메트릭, 커스텀 로그, 활동 로그 등
         };
     }
 
