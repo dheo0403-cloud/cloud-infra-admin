@@ -35,6 +35,7 @@ public class AlertRelayService {
     private static final String TABLE = "alert_event";
     private static final long CUSTOMER_CACHE_MS = Duration.ofMinutes(10).toMillis();
     private static final long DEDUP_WINDOW_MS = Duration.ofMinutes(10).toMillis();
+    private static final long KST_OFFSET_MS = Duration.ofHours(9).toMillis();
 
     private final BigQuery bigQuery;
     private final InfraEnvironmentRepository environmentRepository;
@@ -67,6 +68,10 @@ public class AlertRelayService {
     // 값이 있으면 알람 종류와 상관없이 이 type으로 보낸다 (MARK에 새 type 등록 전까지 etc)
     @Value("${app.alert.mark.force-type:}")
     private String forceType;
+
+    // 값이 있으면 MARK로 보내는 alert_name(Slack "항목") 앞에 붙인다 (예: [Infra Admin])
+    @Value("${app.alert.mark.source-tag:}")
+    private String sourceTag;
 
     private volatile Map<String, String> customerById = Map.of();
     private volatile long customerLoadedAt = 0;
@@ -168,10 +173,12 @@ public class AlertRelayService {
         body.put("alert_id", a.alertId());
         body.put("severity", a.severity());
         body.put("status", a.status());
-        body.put("alert_name", a.alertName());
+        // Slack "항목"에 이 시스템이 보낸 알람임을 표시 (포탈 경로 알람과 구분)
+        body.put("alert_name", sourceTag.isBlank() ? a.alertName() : sourceTag + " " + a.alertName());
         body.put("service_name", a.serviceName());
         body.put("target_name", a.targetName());
-        body.put("timestamp", a.timestamp());
+        // MARK는 받은 epoch를 UTC 시각으로 표시하면서 "(UTC+9)"를 붙인다 → KST로 보이도록 9시간을 더해 보낸다 (DB alert_time은 실제 시각)
+        body.put("timestamp", a.timestamp() + KST_OFFSET_MS);
         if (!a.description().isBlank()) body.put("description", a.description());
         if (!a.currentValue().isBlank()) body.put("current_value", a.currentValue());
 

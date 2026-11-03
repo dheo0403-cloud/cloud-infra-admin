@@ -48,6 +48,8 @@ app:
       override-customer-name: ${MARK_OVERRIDE_CUSTOMER_NAME:}
       # 모든 알람을 이 type으로 보냄 (비우면 알람 종류별 type, 거부되면 etc로 재전송)
       force-type: ${MARK_FORCE_TYPE:}
+      # MARK로 보내는 알람 이름 앞 표시 (포탈 경로 알람과 구분용, 비우면 표시 없음)
+      source-tag: ${MARK_SOURCE_TAG:}
 
 jira:
   base-url: ${JIRA_BASE_URL:https://mzdevs.atlassian.net}
