@@ -21,7 +21,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 클라우드 알람 수신 → MARK 전송 → BigQuery alert_event 저장.
@@ -36,9 +38,11 @@ public class AlertRelayService {
     private static final long CUSTOMER_CACHE_MS = Duration.ofMinutes(10).toMillis();
     private static final long DEDUP_WINDOW_MS = Duration.ofMinutes(10).toMillis();
     private static final long KST_OFFSET_MS = Duration.ofHours(9).toMillis();
+    private static final long TRANSLATE_TIMEOUT_SEC = 20;
 
     private final BigQuery bigQuery;
     private final InfraEnvironmentRepository environmentRepository;
+    private final VertexAiGeminiService geminiService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
 
@@ -116,15 +120,16 @@ public class AlertRelayService {
         } else {
             sentServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
             String sentCustomer = overrideCustomerName.isBlank() ? customer : overrideCustomerName;
+            AzureAlertMapper.MarkAlert toSend = translated(alert);
             try {
                 String type = forceType.isBlank() ? markType(alert.signalType()) : forceType;
-                HttpResponse<String> res = sendToMark(alert, sentServiceId, sentCustomer, type);
+                HttpResponse<String> res = sendToMark(toSend, sentServiceId, sentCustomer, type);
                 // 등록되지 않은 type은 거부된다 (MARK는 HTTP 200 + 본문 "type value is Not Found or Invalid"로 거부).
                 // 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
                 if (!"etc".equals(type) && (res.statusCode() / 100 == 4 || res.body().contains("type value"))) {
                     error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
                     log.warn("MARK {}", error);
-                    res = sendToMark(alert, sentServiceId, sentCustomer, "etc");
+                    res = sendToMark(toSend, sentServiceId, sentCustomer, "etc");
                 }
                 httpCode = res.statusCode();
                 response = truncate(res.body(), 1000);
@@ -144,6 +149,24 @@ public class AlertRelayService {
         }
         insert("AZURE", alert, customer, markStatus, httpCode, error, sentServiceId, response, payload);
         return markStatus;
+    }
+
+    /** 서비스 헬스만 제목·설명을 한국어로 바꿔 MARK로 보낸다. 실패·시간 초과면 원문으로 보낸다 (DB에는 항상 원문 저장) */
+    AzureAlertMapper.MarkAlert translated(AzureAlertMapper.MarkAlert a) {
+        if (!"ServiceHealth".equals(a.signalType())) return a;
+        try {
+            Map<String, String> ko = CompletableFuture
+                .supplyAsync(() -> geminiService.translateAlertToKorean(a.alertName(), a.description()))
+                .get(TRANSLATE_TIMEOUT_SEC, TimeUnit.SECONDS);
+            if (ko != null) {
+                log.info("서비스 헬스 알람 번역 완료: {}", a.alertId());
+                return a.withText(ko.get("title"), ko.get("description"));
+            }
+            log.warn("서비스 헬스 알람 번역 실패, 원문 전송: {}", a.alertId());
+        } catch (Exception e) {
+            log.warn("서비스 헬스 알람 번역 실패, 원문 전송: {} / {}", a.alertId(), e.toString());
+        }
+        return a;
     }
 
     /** MARK는 실패도 HTTP 200으로 주고 본문 code에 결과를 담으므로, 본문 code가 있으면 그것도 2xx여야 성공 */

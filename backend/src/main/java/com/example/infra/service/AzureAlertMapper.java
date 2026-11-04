@@ -29,7 +29,13 @@ public final class AzureAlertMapper {
 
     public record MarkAlert(String signalType, String serviceId, String alertId, String severity, String status,
                             String alertName, String serviceName, String targetName, long timestamp,
-                            String description, String currentValue, boolean skip) {}
+                            String description, String currentValue, boolean skip) {
+        /** 제목·설명만 바꾼 복사본 (번역문을 MARK 본문에만 쓰기 위함) */
+        public MarkAlert withText(String name, String desc) {
+            return new MarkAlert(signalType, serviceId, alertId, severity, status, name, serviceName, targetName,
+                timestamp, truncate(desc), currentValue, skip);
+        }
+    }
 
     public static Optional<MarkAlert> map(JsonNode payload) {
         if (payload == null || !"azureMonitorCommonAlertSchema".equals(payload.path("schemaId").asText())) {
@@ -66,7 +72,7 @@ public final class AzureAlertMapper {
                 // 장애 진행 중 "Updated" 이벤트도 Available/Available로 오므로, 실제 복구(Resolved 또는 비정상→Available)만 closed
                 boolean recovered = "Resolved".equals(ctx.path("status").asText())
                     || ("Available".equals(health) && !prev.isBlank() && !"Available".equals(prev));
-                severity = "Unavailable".equals(health) ? "Critical" : "High"; // Degraded·Unknown
+                severity = "Critical"; // 리소스 헬스는 상태와 상관없이 Critical
                 status = recovered ? "closed" : "open";
                 // 상태 변화 없는 Available 이벤트는 가짜 복구가 되지 않게 MARK로 보내지 않는다
                 skip = !recovered && "Available".equals(health);
@@ -88,11 +94,10 @@ public final class AzureAlertMapper {
             }
             default -> {
                 // 메트릭(Platform), 커스텀 로그(Log Alerts V2), 기타 활동 로그
-                severity = switch (essentials.path("severity").asText()) {
-                    case "Sev0" -> "Disaster";
-                    case "Sev1" -> "Critical";
-                    default -> "High"; // Sev2 및 미사용 Sev3·Sev4 (MARK는 3개 등급만 허용, 누락 방지)
-                };
+                // 메트릭은 Sev0·Sev1만 Critical, 나머지는 High. 커스텀 로그·활동 로그는 Sev와 상관없이 Critical
+                String azureSev = essentials.path("severity").asText();
+                severity = !"Platform".equals(monitoringService) || "Sev0".equals(azureSev) || "Sev1".equals(azureSev)
+                    ? "Critical" : "High";
                 status = "Resolved".equals(essentials.path("monitorCondition").asText()) ? "closed" : "open";
                 alertId = essentials.path("alertId").asText();
                 if (description.isBlank()) description = ctx.path("condition").path("allOf").path(0).path("searchQuery").asText();

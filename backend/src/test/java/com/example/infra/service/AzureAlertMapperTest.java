@@ -56,9 +56,15 @@ class AzureAlertMapperTest {
 
     @Test
     void 메트릭_등급_매핑() throws Exception {
-        assertEquals("Disaster", AzureAlertMapper.map(payload(essentials("Platform", "Sev0", "Fired", VM_ID, "vm", "t"), "{}")).orElseThrow().severity());
+        assertEquals("Critical", AzureAlertMapper.map(payload(essentials("Platform", "Sev0", "Fired", VM_ID, "vm", "t"), "{}")).orElseThrow().severity());
+        assertEquals("Critical", AzureAlertMapper.map(payload(essentials("Platform", "Sev1", "Fired", VM_ID, "vm", "t"), "{}")).orElseThrow().severity());
         assertEquals("High", AzureAlertMapper.map(payload(essentials("Platform", "Sev2", "Fired", VM_ID, "vm", "t"), "{}")).orElseThrow().severity());
         assertEquals("High", AzureAlertMapper.map(payload(essentials("Platform", "Sev4", "Fired", VM_ID, "vm", "t"), "{}")).orElseThrow().severity());
+    }
+
+    @Test
+    void 활동_로그는_Sev와_상관없이_Critical() throws Exception {
+        assertEquals("Critical", AzureAlertMapper.map(payload(essentials("Activity Log - Administrative", "Sev4", "Fired", VM_ID, "vm", "t"), "{}")).orElseThrow().severity());
     }
 
     @Test
@@ -67,7 +73,7 @@ class AzureAlertMapperTest {
         String ctx = "{\"conditionType\":\"LogQueryCriteria\",\"condition\":{\"allOf\":[{\"searchQuery\":\"AppExceptions | count\",\"metricValue\":12}]}}";
         var a = AzureAlertMapper.map(payload(essentials("Log Alerts V2", "Sev2", "Fired", ws, "law-prod",
             "microsoft.operationalinsights/workspaces"), ctx)).orElseThrow();
-        assertEquals("High", a.severity());
+        assertEquals("Critical", a.severity()); // 커스텀 로그는 Sev와 상관없이 Critical
         assertEquals("open", a.status());
         assertEquals("law-prod", a.targetName());
         assertEquals("12", a.currentValue());
@@ -118,8 +124,9 @@ class AzureAlertMapperTest {
         assertEquals("open", stillDown.status());
         assertFalse(stillDown.skip());
 
-        assertEquals("High", rh("In Progress", "Degraded", "Available").severity());
-        assertEquals("High", rh("Active", "Unknown", "Available").severity());
+        assertEquals("Critical", rh("In Progress", "Degraded", "Available").severity());
+        assertEquals("Critical", rh("Active", "Unknown", "Available").severity());
+        assertEquals("Critical", rh("Resolved", "Available", "Unavailable").severity());
     }
 
     @Test
