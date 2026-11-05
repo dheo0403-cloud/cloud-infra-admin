@@ -93,10 +93,19 @@ public class AlertRelayService {
         return relay(payload, true);
     }
 
-    /** GCP 알람 원본만 저장한다 (MARK 전송 없음) */
-    public String storeGcpRaw(JsonNode payload) {
-        insert("GCP", null, null, "RAW_ONLY", null, null, null, null, payload, null);
-        return "RAW_ONLY";
+    /** GCP 알람을 변환해 저장한다. MARK type 등록 전이라 전송하지 않는다 */
+    public String relayGcp(JsonNode payload) {
+        Optional<AzureAlertMapper.MarkAlert> mapped = GcpAlertMapper.map(payload);
+        if (mapped.isEmpty()) {
+            log.warn("GCP 알람 변환 불가 (형식이 다르거나 필수 값 없음), 원본만 저장");
+            insert("GCP", null, null, "UNPARSED", null, null, null, null, payload, null);
+            return "UNPARSED";
+        }
+        AzureAlertMapper.MarkAlert alert = mapped.get();
+        String customer = customerName(alert.serviceId());
+        String markStatus = customer == null ? "UNMAPPED" : "NOT_SENT";
+        insert("GCP", alert, customer, markStatus, null, null, null, null, payload, null);
+        return markStatus;
     }
 
     private String relay(JsonNode payload, boolean resend) {

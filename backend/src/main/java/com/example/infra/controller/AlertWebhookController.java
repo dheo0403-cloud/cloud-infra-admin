@@ -36,12 +36,12 @@ public class AlertWebhookController {
         return ResponseEntity.ok(Map.of("result", relayService.relayAzure(payload)));
     }
 
-    /** GCP Cloud Monitoring 웹훅. 변환기를 만들기 전까지 원본만 저장하고 MARK로 보내지 않는다 */
+    /** GCP Cloud Monitoring 웹훅. 변환해 저장하고, MARK type 등록 전이라 전송하지 않는다 */
     @PostMapping("/gcp")
     public ResponseEntity<Map<String, Object>> gcp(@RequestParam(defaultValue = "") String token,
                                                    @RequestBody JsonNode payload) {
         if (!validToken(token)) return ResponseEntity.status(401).build();
-        return ResponseEntity.ok(Map.of("result", relayService.storeGcpRaw(payload)));
+        return ResponseEntity.ok(Map.of("result", relayService.relayGcp(payload)));
     }
 
     private boolean validToken(String token) {

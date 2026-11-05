@@ -149,11 +149,11 @@ public final class AzureAlertMapper {
         return (a + " " + b).trim();
     }
 
-    private static String firstNonBlank(String a, String b) {
+    static String firstNonBlank(String a, String b) {
         return a != null && !a.isBlank() ? a : b;
     }
 
-    private static String truncate(String s) {
+    static String truncate(String s) {
         return s.length() > MAX_DESCRIPTION ? s.substring(0, MAX_DESCRIPTION) : s;
     }
 
