@@ -24,9 +24,9 @@ public class VertexAiGeminiService {
     @Value("${spring.cloud.gcp.project-id:mzc-gcp-managed}")
     private String defaultProjectId;
 
-    // Gemini 2.5 Flash 사용 설정: us-central1 우선 (검증 완료)
-    private static final String PRIMARY_LOCATION = "us-central1";
-    private static final String PRIMARY_MODEL = "gemini-2.5-flash";
+    // Gemini 3.8 Flash 사용 설정: global 엔드포인트
+    private static final String PRIMARY_LOCATION = "global";
+    private static final String PRIMARY_MODEL = "gemini-3.8-flash";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private GoogleCredentials credentials;
@@ -308,11 +308,8 @@ public class VertexAiGeminiService {
             return null;
         }
 
-        List<String[]> candidates = List.of(
-                new String[]{"us-central1", "gemini-2.5-flash"},
-                new String[]{"us-central1", "gemini-1.5-flash"},
-                new String[]{"asia-northeast3", "gemini-2.5-flash"}
-        );
+        // gemini-3.8-flash는 global 엔드포인트에서만 호출됨 (서울·us-central1은 404)
+        List<String[]> candidates = List.<String[]>of(new String[]{PRIMARY_LOCATION, PRIMARY_MODEL});
 
         for (String[] candidate : candidates) {
             String location = candidate[0];
@@ -322,12 +319,16 @@ public class VertexAiGeminiService {
                 String accessToken = credentials.getAccessToken().getTokenValue();
 
                 String endpoint = String.format(
-                        "https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
-                        location, defaultProjectId, location, model);
+                        "https://aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent",
+                        defaultProjectId, location, model);
 
                 Map<String, Object> part = Map.of("text", promptText);
                 Map<String, Object> content = Map.of("role", "user", "parts", List.of(part));
-                Map<String, Object> genConfig = Map.of("temperature", 0.2, "maxOutputTokens", maxOutputTokens);
+                // 기본 추론 수준은 번역이 15초 제한을 넘기고 출력 한도도 소모하므로 low로 고정
+                Map<String, Object> genConfig = Map.of(
+                        "temperature", 0.2,
+                        "maxOutputTokens", maxOutputTokens,
+                        "thinkingConfig", Map.of("thinkingLevel", "low"));
                 Map<String, Object> requestBody = Map.of(
                         "contents", List.of(content),
                         "generationConfig", genConfig
