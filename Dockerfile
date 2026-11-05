@@ -16,8 +16,6 @@ ENV APP_SCHEDULING_ENABLED=true
 # 운영 이미지에서만 알람 수신기·MARK 전송 활성화 (토큰·키는 k8s Secret으로 주입, 없으면 수신기가 모두 거부)
 ENV APP_ALERT_RECEIVER_ENABLED=true
 ENV APP_ALERT_MARK_ENABLED=true
-# Slack "항목" 앞에 붙여 포탈 경로 알람과 구분. 구분이 필요 없으면 이 줄 삭제
-ENV MARK_SOURCE_TAG="[Infra Admin]"
 
 # 보안용 일반 사용자 생성
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
