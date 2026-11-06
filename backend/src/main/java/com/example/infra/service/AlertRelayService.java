@@ -85,15 +85,20 @@ public class AlertRelayService {
     private volatile Map<String, String> customerById = Map.of();
     private volatile long customerLoadedAt = 0;
     private volatile boolean tableReady = false;
-    // Azure 재전송(응답 지연·실패 시) 중복 차단: "alert_id|status" → 처리 시각 (운영 파드 1개 기준)
-    private final Map<String, Long> recentlySent = new ConcurrentHashMap<>();
+    // 중복 차단: dedupKey → 마지막으로 MARK에 전달한 상태와 시각 (운영 파드 1개 기준)
+    private final Map<String, SentState> recentlySent = new ConcurrentHashMap<>();
+    // 같은 알람은 한 번에 하나만 처리한다. 고정 개수라 메모리가 늘지 않고, 해시가 겹치면 순서대로 처리될 뿐이다
+    private final Object[] sendLocks = java.util.stream.Stream.generate(Object::new).limit(64).toArray();
+
+    private record SentState(String status, long sentAt) {
+    }
 
     /** 처리 결과(mark_status)를 반환한다. MARK 실패도 예외 없이 결과로 돌려준다 */
     public String relayAzure(JsonNode payload) {
         return relay(payload, false);
     }
 
-    /** 저장된 원본 알람을 MARK로 다시 보낸다 (테스트용). 중복 차단 없이 보내고 RESENT / RESENT_FAILED로 저장 */
+    /** 저장된 원본 알람을 MARK로 다시 보낸다 (테스트용). 중복 차단 없이 보내고 RESENT / RESENT_FAILED로 저장. MARK에 직접 보내면 기록이 남지 않으므로 시험 전송은 이 경로를 쓴다 */
     public String resendAzure(JsonNode payload) {
         return relay(payload, true);
     }
@@ -136,39 +141,45 @@ public class AlertRelayService {
             markStatus = "SKIPPED"; // 상태 변화 없는 리소스 헬스 이벤트 (저장만)
         } else if (!markEnabled) {
             markStatus = "MARK_DISABLED";
-        } else if (!resend && isDuplicate(dedupKey(alert, customer))) {
-            markStatus = "DUPLICATE";
         } else {
-            String targetServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
-            sentServiceId = targetServiceId;
-            String sentCustomer = overrideCustomerName.isBlank() ? customer : overrideCustomerName;
-            AzureAlertMapper.MarkAlert toSend = translated(alert);
-            if (toSend != alert) translation = toSend;
-            try {
-                String type = forceType.isBlank() ? markType(alert.signalType()) : forceType;
-                HttpResponse<String> res = retryOnTimeout(() -> sendToMark(toSend, targetServiceId, sentCustomer, type));
-                // 등록되지 않은 type은 거부된다 (MARK는 HTTP 200 + 본문 "type value is Not Found or Invalid"로 거부).
-                // 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
-                if (!"etc".equals(type) && (res.statusCode() / 100 == 4 || res.body().contains("type value"))) {
-                    error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
-                    log.warn("MARK {}", error);
-                    res = retryOnTimeout(() -> sendToMark(toSend, targetServiceId, sentCustomer, "etc"));
+            String key = dedupKey(alert, customer);
+            // 앞선 전송이 끝난 뒤 판단한다. 앞선 전송이 실패했으면 이 알람이 대신 전송된다
+            synchronized (sendLocks[Math.floorMod(key.hashCode(), sendLocks.length)]) {
+                if (!resend && isDuplicate(key, alert.status())) {
+                    markStatus = "DUPLICATE";
+                } else {
+                    String targetServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
+                    sentServiceId = targetServiceId;
+                    String sentCustomer = overrideCustomerName.isBlank() ? customer : overrideCustomerName;
+                    AzureAlertMapper.MarkAlert toSend = translated(alert);
+                    if (toSend != alert) translation = toSend;
+                    try {
+                        String type = forceType.isBlank() ? markType(alert.signalType()) : forceType;
+                        HttpResponse<String> res = retryOnTimeout(() -> sendToMark(toSend, targetServiceId, sentCustomer, type));
+                        // 등록되지 않은 type은 거부된다 (MARK는 HTTP 200 + 본문 "type value is Not Found or Invalid"로 거부).
+                        // 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
+                        if (!"etc".equals(type) && (res.statusCode() / 100 == 4 || res.body().contains("type value"))) {
+                            error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
+                            log.warn("MARK {}", error);
+                            res = retryOnTimeout(() -> sendToMark(toSend, targetServiceId, sentCustomer, "etc"));
+                        }
+                        httpCode = res.statusCode();
+                        response = truncate(res.body(), 1000);
+                        markStatus = markAccepted(httpCode, res.body()) ? "SENT" : "FAILED";
+                        if (!"SENT".equals(markStatus)) {
+                            error = truncate((error == null ? "" : error + " / ") + res.body(), 1000);
+                            log.error("MARK 전송 실패 HTTP {}: {} / {}", httpCode, alert.alertName(), error);
+                        }
+                    } catch (Exception e) {
+                        markStatus = "FAILED";
+                        error = truncate(e.toString(), 1000);
+                        log.error("MARK 전송 실패: {} / {}", alert.alertName(), error);
+                    }
+                    // 성공한 전송만 기록한다. 실패 건은 같은 알람이 다시 들어오면 재시도된다
+                    if ("SENT".equals(markStatus) && !resend) recentlySent.put(key, new SentState(alert.status(), System.currentTimeMillis()));
+                    if (resend) markStatus = "SENT".equals(markStatus) ? "RESENT" : "RESENT_FAILED";
                 }
-                httpCode = res.statusCode();
-                response = truncate(res.body(), 1000);
-                markStatus = markAccepted(httpCode, res.body()) ? "SENT" : "FAILED";
-                if (!"SENT".equals(markStatus)) {
-                    error = truncate((error == null ? "" : error + " / ") + res.body(), 1000);
-                    log.error("MARK 전송 실패 HTTP {}: {} / {}", httpCode, alert.alertName(), error);
-                }
-            } catch (Exception e) {
-                markStatus = "FAILED";
-                error = truncate(e.toString(), 1000);
-                log.error("MARK 전송 실패: {} / {}", alert.alertName(), error);
             }
-            // 실패 건은 같은 알람이 다시 들어오면 재시도되도록 중복 기록에서 뺀다
-            if ("FAILED".equals(markStatus) && !resend) recentlySent.remove(dedupKey(alert, customer));
-            if (resend) markStatus = "SENT".equals(markStatus) ? "RESENT" : "RESENT_FAILED";
         }
         insert("AZURE", alert, customer, markStatus, httpCode, error, sentServiceId, response, payload, translation);
         return markStatus;
@@ -256,14 +267,15 @@ public class AlertRelayService {
 
     /** 서비스 헬스의 alert_id(trackingId)는 모든 고객사에 같으므로 고객사별로 중복을 판단한다. 다른 알람은 alert_id가 리소스별로 다르다 */
     static String dedupKey(AzureAlertMapper.MarkAlert a, String customer) {
-        String key = a.alertId() + "|" + a.status();
-        return "ServiceHealth".equals(a.signalType()) ? key + "|" + customer : key;
+        return "ServiceHealth".equals(a.signalType()) ? a.alertId() + "|" + customer : a.alertId();
     }
 
-    private boolean isDuplicate(String key) {
+    /** 마지막으로 전달한 상태와 같고 10분이 지나지 않았을 때만 중복이다. 상태가 바뀌면 전달한다 */
+    private boolean isDuplicate(String key, String status) {
         long now = System.currentTimeMillis();
-        recentlySent.values().removeIf(t -> now - t > DEDUP_WINDOW_MS);
-        return recentlySent.putIfAbsent(key, now) != null;
+        recentlySent.values().removeIf(s -> now - s.sentAt() > DEDUP_WINDOW_MS);
+        SentState last = recentlySent.get(key);
+        return last != null && last.status().equals(status);
     }
 
     /** 구독 ID·프로젝트 ID(소문자) → 고객사 이름. 10분 캐시, 조회 실패 시 이전 캐시 유지 */

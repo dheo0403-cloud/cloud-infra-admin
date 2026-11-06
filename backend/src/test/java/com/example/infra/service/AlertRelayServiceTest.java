@@ -1,15 +1,32 @@
 package com.example.infra.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.cloud.bigquery.BigQuery;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.net.InetSocketAddress;
 import java.net.http.HttpTimeoutException;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntUnaryOperator;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -36,7 +53,7 @@ class AlertRelayServiceTest {
     @Test
     void 서비스_헬스가_아니면_중복_기준이_그대로() {
         var a = alert("Platform");
-        assertEquals("id|open", AlertRelayService.dedupKey(a, "고객사 A"));
+        assertEquals("id", AlertRelayService.dedupKey(a, "고객사 A"));
         assertEquals(AlertRelayService.dedupKey(a, "고객사 A"), AlertRelayService.dedupKey(a, "고객사 B"));
     }
 
@@ -118,5 +135,107 @@ class AlertRelayServiceTest {
         var a = alert("Platform");
         assertSame(a, new AlertRelayService(null, null, gemini).translated(a));
         verifyNoInteractions(gemini);
+    }
+
+    // ---- 중복 차단: 로컬 가짜 MARK 서버로 실제 전송 흐름을 검증 ----
+
+    private static final String SUB = "11111111-2222-3333-4444-555555555555";
+    private HttpServer mark;
+
+    @AfterEach
+    void stopMark() {
+        if (mark != null) mark.stop(0);
+    }
+
+    /** 호출 순번을 받아 HTTP 코드를 돌려주는 가짜 MARK에 연결된 서비스 */
+    private AlertRelayService relayWithMark(IntUnaryOperator httpCodeByCall) throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        mark = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        mark.setExecutor(Executors.newCachedThreadPool());
+        mark.createContext("/", exchange -> {
+            int code = httpCodeByCall.applyAsInt(calls.incrementAndGet());
+            exchange.sendResponseHeaders(code, -1);
+            exchange.close();
+        });
+        mark.start();
+
+        AlertRelayService service = new AlertRelayService(mock(BigQuery.class), null, null);
+        ReflectionTestUtils.setField(service, "markEnabled", true);
+        ReflectionTestUtils.setField(service, "markUrl", "http://127.0.0.1:" + mark.getAddress().getPort() + "/");
+        ReflectionTestUtils.setField(service, "markApiKey", "test");
+        ReflectionTestUtils.setField(service, "overrideServiceId", "");
+        ReflectionTestUtils.setField(service, "overrideCustomerName", "");
+        ReflectionTestUtils.setField(service, "forceType", "");
+        ReflectionTestUtils.setField(service, "sourceTag", "");
+        ReflectionTestUtils.setField(service, "customerById", Map.of(SUB, "고객사"));
+        ReflectionTestUtils.setField(service, "customerLoadedAt", System.currentTimeMillis());
+        return service;
+    }
+
+    private static JsonNode metricAlert(String condition) throws Exception {
+        String target = "/subscriptions/" + SUB + "/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm";
+        return new ObjectMapper().readTree("{\"schemaId\":\"azureMonitorCommonAlertSchema\",\"data\":{\"essentials\":{"
+            + "\"alertId\":\"/subscriptions/" + SUB + "/providers/Microsoft.AlertsManagement/alerts/abc\","
+            + "\"alertRule\":\"cpu\",\"severity\":\"Sev1\",\"signalType\":\"Metric\",\"monitorCondition\":\"" + condition + "\","
+            + "\"monitoringService\":\"Platform\",\"alertTargetIDs\":[\"" + target + "\"],\"configurationItems\":[\"vm\"],"
+            + "\"targetResourceType\":\"microsoft.compute/virtualmachines\",\"firedDateTime\":\"2026-10-29T01:00:00Z\","
+            + "\"resolvedDateTime\":\"2026-10-29T01:30:00Z\",\"description\":\"\"},\"alertContext\":{}}}");
+    }
+
+    @Test
+    void 같은_상태가_반복되면_차단하고_상태가_바뀌면_전달() throws Exception {
+        AlertRelayService service = relayWithMark(call -> 200);
+        assertEquals("SENT", service.relayAzure(metricAlert("Fired")));
+        assertEquals("DUPLICATE", service.relayAzure(metricAlert("Fired")));
+        assertEquals("SENT", service.relayAzure(metricAlert("Resolved")));
+        assertEquals("DUPLICATE", service.relayAzure(metricAlert("Resolved")));
+        // 복구 뒤 다시 발생하면 10분 안이어도 전달한다
+        assertEquals("SENT", service.relayAzure(metricAlert("Fired")));
+    }
+
+    @Test
+    void 전송이_실패하면_같은_알람이_다시_들어올_때_재시도() throws Exception {
+        AlertRelayService service = relayWithMark(call -> call == 1 ? 500 : 200);
+        assertEquals("FAILED", service.relayAzure(metricAlert("Fired")));
+        assertEquals("SENT", service.relayAzure(metricAlert("Fired")));
+    }
+
+    @Test
+    void 전송_중_들어온_같은_알람은_앞선_전송이_실패하면_대신_전송() throws Exception {
+        assertEquals(List.of("FAILED", "SENT"), relayConcurrently(500));
+    }
+
+    @Test
+    void 전송_중_들어온_같은_알람은_앞선_전송이_성공하면_중복() throws Exception {
+        assertEquals(List.of("DUPLICATE", "SENT"), relayConcurrently(200));
+    }
+
+    /** 첫 전송이 MARK에서 멈춘 사이 같은 알람이 들어온 상황. 결과를 정렬해 돌려준다 */
+    private List<String> relayConcurrently(int firstCode) throws Exception {
+        CountDownLatch firstArrived = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AlertRelayService service = relayWithMark(call -> {
+            if (call > 1) return 200;
+            firstArrived.countDown();
+            try {
+                assertTrue(release.await(10, TimeUnit.SECONDS));
+            } catch (InterruptedException e) {
+                throw new IllegalStateException(e);
+            }
+            return firstCode;
+        });
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<String> first = pool.submit(() -> service.relayAzure(metricAlert("Fired")));
+            assertTrue(firstArrived.await(10, TimeUnit.SECONDS));
+            Future<String> second = pool.submit(() -> service.relayAzure(metricAlert("Fired")));
+            // 두 번째 요청이 처리 순서를 기다리는 동안에는 결과가 나오지 않아야 한다
+            assertThrows(TimeoutException.class, () -> second.get(300, TimeUnit.MILLISECONDS));
+            release.countDown();
+            return Stream.of(first.get(20, TimeUnit.SECONDS), second.get(20, TimeUnit.SECONDS)).sorted().toList();
+        } finally {
+            release.countDown();
+            pool.shutdownNow();
+        }
     }
 }
