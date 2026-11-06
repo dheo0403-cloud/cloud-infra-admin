@@ -2,10 +2,14 @@ package com.example.infra.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.net.http.HttpTimeoutException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -19,6 +23,52 @@ class AlertRelayServiceTest {
     private static AzureAlertMapper.MarkAlert alert(String signalType) {
         return new AzureAlertMapper.MarkAlert(signalType, "sub", "id", "High", "open",
             "English title", "svc", "target", 1L, "English description", "", false);
+    }
+
+    @Test
+    void 서비스_헬스_중복은_고객사별로_판단() {
+        var a = alert("ServiceHealth");
+        assertNotEquals(AlertRelayService.dedupKey(a, "고객사 A"), AlertRelayService.dedupKey(a, "고객사 B"));
+        // 같은 고객사의 다른 구독이나 Azure 재전송은 계속 중복이다
+        assertEquals(AlertRelayService.dedupKey(a, "고객사 A"), AlertRelayService.dedupKey(a, "고객사 A"));
+    }
+
+    @Test
+    void 서비스_헬스가_아니면_중복_기준이_그대로() {
+        var a = alert("Platform");
+        assertEquals("id|open", AlertRelayService.dedupKey(a, "고객사 A"));
+        assertEquals(AlertRelayService.dedupKey(a, "고객사 A"), AlertRelayService.dedupKey(a, "고객사 B"));
+    }
+
+    @Test
+    void 시간_초과면_다시_보내_성공() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        String result = AlertRelayService.retryOnTimeout(() -> {
+            if (calls.incrementAndGet() < 3) throw new HttpTimeoutException("request timed out");
+            return "ok";
+        });
+        assertEquals("ok", result);
+        assertEquals(3, calls.get());
+    }
+
+    @Test
+    void 시간_초과가_계속되면_3회_후_실패() {
+        AtomicInteger calls = new AtomicInteger();
+        assertThrows(HttpTimeoutException.class, () -> AlertRelayService.retryOnTimeout(() -> {
+            calls.incrementAndGet();
+            throw new HttpTimeoutException("request timed out");
+        }));
+        assertEquals(3, calls.get());
+    }
+
+    @Test
+    void 시간_초과가_아닌_오류는_다시_보내지_않음() {
+        AtomicInteger calls = new AtomicInteger();
+        assertThrows(IllegalStateException.class, () -> AlertRelayService.retryOnTimeout(() -> {
+            calls.incrementAndGet();
+            throw new IllegalStateException("인증서 오류");
+        }));
+        assertEquals(1, calls.get());
     }
 
     @Test

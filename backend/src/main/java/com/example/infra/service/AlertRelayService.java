@@ -15,12 +15,14 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -39,6 +41,9 @@ public class AlertRelayService {
     private static final long DEDUP_WINDOW_MS = Duration.ofMinutes(10).toMillis();
     private static final long KST_OFFSET_MS = Duration.ofHours(9).toMillis();
     private static final long TRANSLATE_TIMEOUT_SEC = 20;
+    private static final long MARK_TIMEOUT_SEC = 15;
+    private static final int MARK_MAX_ATTEMPTS = 3;
+    private static final long MARK_RETRY_DELAY_MS = 1000;
 
     private final BigQuery bigQuery;
     private final InfraEnvironmentRepository environmentRepository;
@@ -131,22 +136,23 @@ public class AlertRelayService {
             markStatus = "SKIPPED"; // 상태 변화 없는 리소스 헬스 이벤트 (저장만)
         } else if (!markEnabled) {
             markStatus = "MARK_DISABLED";
-        } else if (!resend && isDuplicate(alert.alertId() + "|" + alert.status())) {
+        } else if (!resend && isDuplicate(dedupKey(alert, customer))) {
             markStatus = "DUPLICATE";
         } else {
-            sentServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
+            String targetServiceId = overrideServiceId.isBlank() ? alert.serviceId() : overrideServiceId.toLowerCase();
+            sentServiceId = targetServiceId;
             String sentCustomer = overrideCustomerName.isBlank() ? customer : overrideCustomerName;
             AzureAlertMapper.MarkAlert toSend = translated(alert);
             if (toSend != alert) translation = toSend;
             try {
                 String type = forceType.isBlank() ? markType(alert.signalType()) : forceType;
-                HttpResponse<String> res = sendToMark(toSend, sentServiceId, sentCustomer, type);
+                HttpResponse<String> res = retryOnTimeout(() -> sendToMark(toSend, targetServiceId, sentCustomer, type));
                 // 등록되지 않은 type은 거부된다 (MARK는 HTTP 200 + 본문 "type value is Not Found or Invalid"로 거부).
                 // 거부되면 etc로 한 번 더 보낸다 (누락 방지, 거부 기록은 남김)
                 if (!"etc".equals(type) && (res.statusCode() / 100 == 4 || res.body().contains("type value"))) {
                     error = truncate("type '" + type + "' 거부 HTTP " + res.statusCode() + " → etc로 재전송: " + res.body(), 1000);
                     log.warn("MARK {}", error);
-                    res = sendToMark(toSend, sentServiceId, sentCustomer, "etc");
+                    res = retryOnTimeout(() -> sendToMark(toSend, targetServiceId, sentCustomer, "etc"));
                 }
                 httpCode = res.statusCode();
                 response = truncate(res.body(), 1000);
@@ -161,7 +167,7 @@ public class AlertRelayService {
                 log.error("MARK 전송 실패: {} / {}", alert.alertName(), error);
             }
             // 실패 건은 같은 알람이 다시 들어오면 재시도되도록 중복 기록에서 뺀다
-            if ("FAILED".equals(markStatus) && !resend) recentlySent.remove(alert.alertId() + "|" + alert.status());
+            if ("FAILED".equals(markStatus) && !resend) recentlySent.remove(dedupKey(alert, customer));
             if (resend) markStatus = "SENT".equals(markStatus) ? "RESENT" : "RESENT_FAILED";
         }
         insert("AZURE", alert, customer, markStatus, httpCode, error, sentServiceId, response, payload, translation);
@@ -223,13 +229,35 @@ public class AlertRelayService {
         if (!a.currentValue().isBlank()) body.put("current_value", a.currentValue());
 
         HttpRequest req = HttpRequest.newBuilder(URI.create(markUrl))
-            .timeout(Duration.ofSeconds(5))
+            .timeout(Duration.ofSeconds(MARK_TIMEOUT_SEC))
             .header("Content-Type", "application/json")
             .header("x-api-key", markApiKey)
             .header("type", type)
             .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
             .build();
         return httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * 시간 초과일 때만 다시 보낸다. MARK가 이미 받은 알람은 "Already Alert"로 응답하므로 다시 보내도 알림이 겹치지 않는다.
+     * 다른 오류(인증서, 응답 거부 등)는 다시 보내도 같은 결과라 재시도하지 않는다
+     */
+    static <T> T retryOnTimeout(Callable<T> send) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                return send.call();
+            } catch (HttpTimeoutException e) {
+                if (attempt >= MARK_MAX_ATTEMPTS) throw e;
+                log.warn("MARK 응답 시간 초과, 다시 전송 ({}/{})", attempt, MARK_MAX_ATTEMPTS);
+                Thread.sleep(MARK_RETRY_DELAY_MS);
+            }
+        }
+    }
+
+    /** 서비스 헬스의 alert_id(trackingId)는 모든 고객사에 같으므로 고객사별로 중복을 판단한다. 다른 알람은 alert_id가 리소스별로 다르다 */
+    static String dedupKey(AzureAlertMapper.MarkAlert a, String customer) {
+        String key = a.alertId() + "|" + a.status();
+        return "ServiceHealth".equals(a.signalType()) ? key + "|" + customer : key;
     }
 
     private boolean isDuplicate(String key) {
